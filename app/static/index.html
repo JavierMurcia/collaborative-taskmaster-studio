@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Sentinel Taskmaster</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <div><p class="eyebrow">ALL THINGS AGENTIC HACKATHON · TASKMASTER</p><h1>Sentinel <span>Taskmaster</span></h1></div>
+        <div class="status"><span class="pulse"></span><span id="mission-status">Cargando…</span></div>
+      </header>
+      <section class="mission-bar"><div><span>INCIDENTE</span><strong>Degradación de ingestión de pedidos</strong></div><div><span>PRINCIPIO</span><strong>Autonomía controlada</strong></div><div><span>PRESUPUESTO</span><strong id="budget">—</strong></div><button class="ghost" data-action="reset">Reiniciar demo</button></section>
+
+      <section class="metrics" id="metrics"></section>
+
+      <section class="layout">
+        <div class="column wide">
+          <article class="panel">
+            <div class="panel-head"><div><p class="kicker">01 · MISIÓN</p><h2>Plan de recuperación</h2></div><button class="primary" data-action="investigate">Investigar incidente</button></div>
+            <div id="plan" class="plan"></div>
+            <div class="actions"><button class="primary" data-action="recover">Ejecutar plan conservador</button><button class="warning" data-action="scale">Proponer escalado global</button></div>
+          </article>
+          <article class="panel"><div class="panel-head"><div><p class="kicker">02 · TRAZABILIDAD</p><h2>Trayectoria de misión</h2></div><span class="muted">Decisiones y resultados</span></div><ol id="trajectory" class="trajectory"></ol></article>
+        </div>
+        <div class="column">
+          <article class="panel"><div class="panel-head"><div><p class="kicker">MEMORIA SEGURA</p><h2>Proveniencia</h2></div></div><div class="memory"><div><span class="memory-label good">VERIFICADA</span><strong id="stored-count">0</strong><p>Fuentes aceptadas</p></div><div><span class="memory-label bad">CUARENTENA</span><strong id="quarantined-count">0</strong><p>Entradas no confiables</p></div></div><div id="quarantine" class="quarantine"></div></article>
+          <article class="panel" id="approval-panel"><div class="panel-head"><div><p class="kicker">CONTROL HUMANO</p><h2>Aprobación de alto riesgo</h2></div></div><div id="approval-content" class="approval-empty">No hay acciones de alto riesgo pendientes.</div></article>
+        </div>
+      </section>
+    </main>
+    <template id="metric-template"><article class="metric"><span></span><strong></strong><small></small></article></template>
+    <script src="/app.js"></script>
+  </body>
+</html>

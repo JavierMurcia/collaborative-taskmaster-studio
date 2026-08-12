@@ -38,3 +38,13 @@ El fixture representa un servicio de pedidos degradado, incluye evidencia válid
 ## Orquestador Sentinel
 
 `agent/SentinelTaskmaster` ya une simulador, memoria validada y control de políticas. En el MVP crea el plan conservador, pone evidencia no confiable en cuarentena, ejecuta la recuperación reversible y la cierra con verificación independiente. También expone una ruta de demostración de acción alta que se pausa hasta recibir una decisión humana. El planificador determinista será el punto de reemplazo para Google ADK + Gemini.
+
+## Interfaz local de demo
+
+Inicia el panel local desde la raíz del proyecto:
+
+```bash
+python -m app.server
+```
+
+Abre `http://127.0.0.1:8000`. El panel permite investigar el incidente, ejecutar el plan conservador, mostrar la propuesta de escalado de alto riesgo, aprobarla o rechazarla, y reiniciar la demostración. No requiere dependencias externas.
