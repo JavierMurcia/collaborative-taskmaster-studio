@@ -30,3 +30,7 @@ python -m unittest discover -s tests -v
 ```
 
 El fixture representa un servicio de pedidos degradado, incluye evidencia válida y un log engañoso, y expone las herramientas de inspección, reinicio de worker, limpieza de lote corrupto, escalado de capacidad y verificación de recuperación.
+
+## Capa de control
+
+`policy/` es la ruta obligatoria para ejecutar una acción: compara la propuesta con el catálogo permitido, evalúa riesgo y presupuesto, crea aprobaciones humanas para acciones altas y conserva eventos de auditoría. Las herramientas del simulador no son el mecanismo de autorización.
