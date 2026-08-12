@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Environment and credentials
+.env
+.env.*
+!.env.example
+
+# Local tooling and generated document review artifacts
+docx_review/
+sentinel_render/
+*.docx
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
