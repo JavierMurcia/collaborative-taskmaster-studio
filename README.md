@@ -23,4 +23,10 @@ scripts/    Utilidades de desarrollo
 
 ## Próximo paso
 
-Definir el fixture del incidente: estado inicial, evidencias válidas y engañosas, catálogo de herramientas, políticas de riesgo y criterios de verificación.
+El simulador determinista de la primera demo está disponible. Desde la raíz del proyecto, ejecútalo así:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+El fixture representa un servicio de pedidos degradado, incluye evidencia válida y un log engañoso, y expone las herramientas de inspección, reinicio de worker, limpieza de lote corrupto, escalado de capacidad y verificación de recuperación.
