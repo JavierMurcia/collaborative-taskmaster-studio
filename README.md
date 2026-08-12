@@ -34,3 +34,7 @@ El fixture representa un servicio de pedidos degradado, incluye evidencia válid
 ## Capa de control
 
 `policy/` es la ruta obligatoria para ejecutar una acción: compara la propuesta con el catálogo permitido, evalúa riesgo y presupuesto, crea aprobaciones humanas para acciones altas y conserva eventos de auditoría. Las herramientas del simulador no son el mecanismo de autorización.
+
+## Orquestador Sentinel
+
+`agent/SentinelTaskmaster` ya une simulador, memoria validada y control de políticas. En el MVP crea el plan conservador, pone evidencia no confiable en cuarentena, ejecuta la recuperación reversible y la cierra con verificación independiente. También expone una ruta de demostración de acción alta que se pausa hasta recibir una decisión humana. El planificador determinista será el punto de reemplazo para Google ADK + Gemini.
