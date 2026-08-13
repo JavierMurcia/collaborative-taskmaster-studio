@@ -29,6 +29,6 @@ function render(data) {
   else approvalContent.textContent = "No hay acciones de alto riesgo pendientes.";
 }
 function pretty(value) { return value.replaceAll("_", " ").replace(/\b\w/g, c => c.toUpperCase()); }
-function describe(event) { if (event.result) return event.result.message; if (event.reason) return event.reason; if (event.approval) return `${event.approval.action} · ${event.approval.status}`; if (event.metrics) return "Objetivos de cola, latencia y errores alcanzados."; return "Evento registrado en la trayectoria auditable."; }
+function describe(event) { if (event.result) return event.result.message; if (event.event === "planner_selected") return event.mode === "vertex_gemini" ? `Plan generado por ${event.model} en Vertex AI.` : "Plan conservador determinista (modo local)."; if (event.event === "planner_fallback") return `Vertex no estuvo disponible; se aplicó fallback seguro: ${event.reason}`; if (event.reason) return event.reason; if (event.approval) return `${event.approval.action} · ${event.approval.status}`; if (event.metrics) return "Objetivos de cola, latencia y errores alcanzados."; return "Evento registrado en la trayectoria auditable."; }
 document.addEventListener("click", event => { const action = event.target.dataset.action; if (!action) return; const map = { reset: ["/api/reset"], investigate: ["/api/investigate"], recover: ["/api/recover"], scale: ["/api/request-scaling", { workers: 1 }], approve: ["/api/approval", { approved: true }], reject: ["/api/approval", { approved: false }] }; request(...map[action]); });
 load();
