@@ -17,7 +17,7 @@ class VertexSettingsTests(unittest.TestCase):
         values = {
             "GOOGLE_CLOUD_PROJECT": "sentinel-taskmaster-dev",
             "GOOGLE_CLOUD_LOCATION": "global",
-            "SENTINEL_GEMINI_MODEL": "gemini-2.5-flash",
+            "SENTINEL_GEMINI_MODEL": "gemini-3.5-flash",
             "SENTINEL_ENABLE_VERTEX_PLANNER": "true",
             "SENTINEL_MAX_OUTPUT_TOKENS": "350",
             "SENTINEL_MAX_PLAN_STEPS": "3",

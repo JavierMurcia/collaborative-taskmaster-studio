@@ -35,7 +35,7 @@ class VertexSettings:
         return cls(
             project_id=project_id,
             location=os.getenv("GOOGLE_CLOUD_LOCATION", "global"),
-            model=os.getenv("SENTINEL_GEMINI_MODEL", "gemini-2.5-flash"),
+            model=os.getenv("SENTINEL_GEMINI_MODEL", "gemini-3.5-flash"),
             max_output_tokens=int(os.getenv("SENTINEL_MAX_OUTPUT_TOKENS", "350")),
             max_plan_steps=int(os.getenv("SENTINEL_MAX_PLAN_STEPS", "3")),
         )

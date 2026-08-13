@@ -14,7 +14,7 @@ class VertexGeminiPlannerTests(unittest.TestCase):
         for evidence in initial_evidence():
             memory.ingest(evidence)
         self.records = memory.stored
-        self.settings = VertexSettings("sentinel-taskmaster-dev", "global", "gemini-2.5-flash", 350, 3)
+        self.settings = VertexSettings("sentinel-taskmaster-dev", "global", "gemini-3.5-flash", 350, 3)
 
     def test_valid_plan_is_parsed_with_allowed_actions_only(self) -> None:
         planner = VertexGeminiPlanner(self.settings, generate=lambda _: '''{
