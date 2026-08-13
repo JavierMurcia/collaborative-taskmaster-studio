@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -11,7 +12,7 @@ from urllib.parse import urlparse
 from .session import DemoSession
 
 HOST = "127.0.0.1"
-PORT = 8000
+PORT = int(os.getenv("SENTINEL_PORT", "8000"))
 STATIC_DIR = Path(__file__).parent / "static"
 SESSION = DemoSession()
 
