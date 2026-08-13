@@ -33,6 +33,13 @@ class VertexGeminiPlannerTests(unittest.TestCase):
         with self.assertRaises(PlannerConfigurationError):
             planner.propose(self.records)
 
+    def test_markdown_wrapped_json_plan_is_accepted(self) -> None:
+        planner = VertexGeminiPlanner(self.settings, generate=lambda _: '''```json
+        {"plan":[{"action":"restart_worker","arguments":{"worker_id":"orders-worker-2"},"purpose":"Recover worker."}]}
+        ```''')
+        plan = planner.propose(self.records)
+        self.assertEqual(plan[0].action, "restart_worker")
+
     def test_untrusted_evidence_is_not_sent_to_model_prompt(self) -> None:
         captured: list[str] = []
         planner = VertexGeminiPlanner(self.settings, generate=lambda prompt: captured.append(prompt) or '''{

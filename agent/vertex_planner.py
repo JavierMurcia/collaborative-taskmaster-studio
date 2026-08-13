@@ -84,7 +84,7 @@ class VertexGeminiPlanner:
 
     def _parse_plan(self, text: str) -> list[PlanStep]:
         try:
-            parsed: dict[str, Any] = json.loads(text)
+            parsed = self._decode_json_object(text)
             items = parsed["plan"]
         except (json.JSONDecodeError, KeyError, TypeError) as exc:
             raise PlannerConfigurationError("Gemini did not return the required plan JSON contract.") from exc
@@ -100,3 +100,19 @@ class VertexGeminiPlanner:
                 raise PlannerConfigurationError("Gemini proposed an action outside the validated plan contract.")
             plan.append(PlanStep(f"gemini-step-{index}", action, arguments, purpose))
         return plan
+
+    @staticmethod
+    def _decode_json_object(text: str) -> dict[str, Any]:
+        """Accept a JSON object even if a model wraps it in a Markdown fence."""
+        candidate = text.strip()
+        if candidate.startswith("```"):
+            candidate = candidate.split("\n", 1)[1] if "\n" in candidate else ""
+            if candidate.rstrip().endswith("```"):
+                candidate = candidate.rstrip()[:-3].rstrip()
+        try:
+            decoded, _ = json.JSONDecoder().raw_decode(candidate[candidate.index("{") :])
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise PlannerConfigurationError("Gemini did not return the required plan JSON contract.") from exc
+        if not isinstance(decoded, dict):
+            raise PlannerConfigurationError("Gemini did not return the required plan JSON contract.")
+        return decoded
