@@ -1,0 +1,13 @@
+.git
+.venv
+venv
+__pycache__
+*.py[cod]
+.env
+.env.*
+!.env.example
+docx_review
+sentinel_render
+*.docx
+.vscode
+.idea

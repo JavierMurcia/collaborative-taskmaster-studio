@@ -11,8 +11,9 @@ from urllib.parse import urlparse
 
 from .session import DemoSession
 
-HOST = "127.0.0.1"
-PORT = int(os.getenv("SENTINEL_PORT", "8000"))
+HOST = os.getenv("SENTINEL_HOST", "127.0.0.1")
+# Cloud Run supplies PORT; SENTINEL_PORT preserves the local demo override.
+PORT = int(os.getenv("PORT", os.getenv("SENTINEL_PORT", "8000")))
 STATIC_DIR = Path(__file__).parent / "static"
 SESSION = DemoSession()
 
