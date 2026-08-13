@@ -7,6 +7,7 @@ remains the sole authority that can invoke a tool or authorize high-risk work.
 from __future__ import annotations
 
 import json
+import sys
 from typing import Any, Callable
 
 from memory import MemoryRecord
@@ -87,10 +88,16 @@ class VertexGeminiPlanner:
         return self._parse_plan(text)
 
     def _generate_with_vertex(self, prompt: str) -> str:
-        try:
-            import truststore
+        if sys.platform == "win32":
+            try:
+                import truststore
 
-            truststore.inject_into_ssl()
+                truststore.inject_into_ssl()
+            except ImportError as exc:
+                raise PlannerConfigurationError(
+                    "Windows certificate integration is not installed. Install requirements.txt before enabling Vertex planning."
+                ) from exc
+        try:
             from google import genai
             from google.genai import types
         except ImportError as exc:
