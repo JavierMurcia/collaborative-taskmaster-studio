@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
-
 from memory import ValidatedMemory
 from policy import ActionRequest, DecisionType, PolicyDecision, SentinelControlPlane
 from simulator import OrdersIncidentTools, create_initial_state
@@ -11,17 +9,19 @@ from simulator.state import ServiceState
 from simulator.tools import ToolResult
 
 from .models import MissionReport, MissionStatus, PlanStep
+from .vertex_planner import PlannerConfigurationError, VertexGeminiPlanner
 
 
 class SentinelTaskmaster:
     """Coordinates evidence, policy, tools, memory, and independent verification."""
 
-    def __init__(self, state: ServiceState | None = None):
+    def __init__(self, state: ServiceState | None = None, planner: VertexGeminiPlanner | None = None):
         self.state = state or create_initial_state()
         self.tools = OrdersIncidentTools(self.state)
         self.control = SentinelControlPlane(self.state, self.tools)
         self.memory = ValidatedMemory()
-        self.report = MissionReport(self.state.incident_id, MissionStatus.READY, self._recovery_plan())
+        self.planner = planner
+        self.report = MissionReport(self.state.incident_id, MissionStatus.READY, [])
 
     def investigate(self) -> MissionReport:
         """Collect evidence once and quarantine entries that cannot become trusted memory."""
@@ -33,6 +33,7 @@ class SentinelTaskmaster:
 
                 record = self.memory.ingest(Evidence(**item))
                 self._event("memory_validated", record.as_dict())
+        self.report.plan = self._plan_recovery()
         self.report.status = MissionStatus.RUNNING
         return self.report
 
@@ -83,6 +84,18 @@ class SentinelTaskmaster:
             PlanStep("restart-stalled-worker", "restart_worker", {"worker_id": "orders-worker-2"}, "Restart the worker identified by verified logs."),
             PlanStep("remove-corrupt-batch", "clear_corrupt_batch", {"batch_id": "batch-2026-08-12-17"}, "Remove only the isolated corrupt batch identified by the approved runbook."),
         ]
+
+    def _plan_recovery(self) -> list[PlanStep]:
+        if self.planner is None:
+            self._event("planner_selected", {"mode": "deterministic_fallback"})
+            return self._recovery_plan()
+        try:
+            plan = self.planner.propose(self.memory.stored)
+        except PlannerConfigurationError as exc:
+            self._event("planner_fallback", {"reason": str(exc)})
+            return self._recovery_plan()
+        self._event("planner_selected", {"mode": "vertex_gemini", "model": self.planner.settings.model})
+        return plan
 
     def _execute(self, request: ActionRequest) -> ToolResult | PolicyDecision:
         result = self.control.execute(request)

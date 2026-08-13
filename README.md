@@ -48,3 +48,7 @@ python -m app.server
 ```
 
 Abre `http://127.0.0.1:8000`. El panel permite investigar el incidente, ejecutar el plan conservador, mostrar la propuesta de escalado de alto riesgo, aprobarla o rechazarla, y reiniciar la demostración. No requiere dependencias externas.
+
+## Gemini + Vertex AI (modo con límite de coste)
+
+La integración está preparada, pero permanece desactivada por defecto. Copia `.env.example` a `.env`, instala `requirements.txt` y autentica tu sesión con Application Default Credentials. El adaptador limita cada planificación a tres pasos y 350 tokens; solamente recibe evidencia con procedencia verificada. Cualquier propuesta de Gemini queda validada contra el catálogo de acciones antes de alcanzar la política o las herramientas. Si Vertex AI no está configurado o falla, Sentinel vuelve al plan determinista.

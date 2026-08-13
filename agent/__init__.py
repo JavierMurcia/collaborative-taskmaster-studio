@@ -2,5 +2,6 @@
 
 from .models import MissionReport, MissionStatus, PlanStep
 from .sentinel import SentinelTaskmaster
+from .vertex_planner import VertexGeminiPlanner
 
-__all__ = ["MissionReport", "MissionStatus", "PlanStep", "SentinelTaskmaster"]
+__all__ = ["MissionReport", "MissionStatus", "PlanStep", "SentinelTaskmaster", "VertexGeminiPlanner"]
