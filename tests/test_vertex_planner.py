@@ -40,6 +40,20 @@ class VertexGeminiPlannerTests(unittest.TestCase):
         plan = planner.propose(self.records)
         self.assertEqual(plan[0].action, "restart_worker")
 
+    def test_empty_model_arguments_bind_to_verified_runbook(self) -> None:
+        planner = VertexGeminiPlanner(self.settings, generate=lambda _: '''{
+          "plan": [{"action":"clear_corrupt_batch","arguments":{},"purpose":"Remove the identified batch."}]
+        }''')
+        plan = planner.propose(self.records)
+        self.assertEqual(plan[0].arguments, {"batch_id": "batch-2026-08-12-17"})
+
+    def test_unexpected_model_arguments_are_rejected(self) -> None:
+        planner = VertexGeminiPlanner(self.settings, generate=lambda _: '''{
+          "plan": [{"action":"restart_worker","arguments":{"worker_id":"worker-99"},"purpose":"Restart a worker."}]
+        }''')
+        with self.assertRaises(PlannerConfigurationError):
+            planner.propose(self.records)
+
     def test_untrusted_evidence_is_not_sent_to_model_prompt(self) -> None:
         captured: list[str] = []
         planner = VertexGeminiPlanner(self.settings, generate=lambda prompt: captured.append(prompt) or '''{

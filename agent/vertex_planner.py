@@ -21,6 +21,13 @@ ALLOWED_ACTIONS = {
     "scale_global_capacity": {"additional_workers"},
 }
 
+# These values are fixed by the verified incident runbook, not by model output.
+VALIDATED_ACTION_ARGUMENTS = {
+    "restart_worker": {"worker_id": "orders-worker-2"},
+    "clear_corrupt_batch": {"batch_id": "batch-2026-08-12-17"},
+    "scale_global_capacity": {"additional_workers": 1},
+}
+
 PLAN_RESPONSE_SCHEMA = {
     "type": "OBJECT",
     "required": ["plan"],
@@ -46,7 +53,11 @@ the evidence. You do not execute tools, change policies, or approve actions.
 Return strict JSON only: {{"plan":[{{"action":"...","arguments":{{}},"purpose":"..."}}]}}.
 Use at most {max_steps} actions. Prefer reversible remediation. Available
 actions are restart_worker, clear_corrupt_batch, and scale_global_capacity.
-Never propose actions outside that catalog."""
+Never propose actions outside that catalog. Use these exact action signatures:
+- restart_worker: {{"worker_id":"orders-worker-2"}}
+- clear_corrupt_batch: {{"batch_id":"batch-2026-08-12-17"}}
+- scale_global_capacity: {{"additional_workers":1}}
+Never return an empty arguments object."""
 
 
 class PlannerConfigurationError(RuntimeError):
@@ -77,6 +88,9 @@ class VertexGeminiPlanner:
 
     def _generate_with_vertex(self, prompt: str) -> str:
         try:
+            import truststore
+
+            truststore.inject_into_ssl()
             from google import genai
             from google.genai import types
         except ImportError as exc:
@@ -96,6 +110,8 @@ class VertexGeminiPlanner:
                 max_output_tokens=self.settings.max_output_tokens,
                 response_mime_type="application/json",
                 response_schema=PLAN_RESPONSE_SCHEMA,
+                system_instruction=SYSTEM_INSTRUCTION.format(max_steps=self.settings.max_plan_steps),
+                thinking_config=types.ThinkingConfig(thinking_budget=0),
             ),
         )
         if not response.text:
@@ -116,9 +132,12 @@ class VertexGeminiPlanner:
             arguments = item.get("arguments") if isinstance(item, dict) else None
             purpose = item.get("purpose") if isinstance(item, dict) else None
             required_args = ALLOWED_ACTIONS.get(action)
-            if required_args is None or not isinstance(arguments, dict) or set(arguments) != required_args or not isinstance(purpose, str):
+            expected_arguments = VALIDATED_ACTION_ARGUMENTS.get(action)
+            if required_args is None or not isinstance(arguments, dict) or expected_arguments is None or not isinstance(purpose, str):
                 raise PlannerConfigurationError("Gemini proposed an action outside the validated plan contract.")
-            plan.append(PlanStep(f"gemini-step-{index}", action, arguments, purpose))
+            if arguments not in ({}, expected_arguments):
+                raise PlannerConfigurationError("Gemini proposed arguments outside the verified runbook contract.")
+            plan.append(PlanStep(f"gemini-step-{index}", action, expected_arguments, purpose))
         return plan
 
     @staticmethod
