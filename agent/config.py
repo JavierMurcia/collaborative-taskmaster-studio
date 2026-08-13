@@ -4,6 +4,16 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
+
+
+def load_local_environment() -> None:
+    """Load the ignored project .env file when python-dotenv is available."""
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 
 @dataclass(frozen=True)
@@ -16,6 +26,9 @@ class VertexSettings:
 
     @classmethod
     def from_environment(cls) -> "VertexSettings | None":
+        load_local_environment()
+        if os.getenv("SENTINEL_ENABLE_VERTEX_PLANNER", "false").lower() != "true":
+            return None
         project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "").strip()
         if not project_id:
             return None

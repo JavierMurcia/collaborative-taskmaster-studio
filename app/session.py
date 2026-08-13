@@ -4,16 +4,21 @@ from __future__ import annotations
 
 from typing import Any
 
-from agent import SentinelTaskmaster
+from agent import SentinelTaskmaster, VertexGeminiPlanner
 
 
 class DemoSession:
     def __init__(self) -> None:
-        self.agent = SentinelTaskmaster()
+        self.agent = self._new_agent()
 
     def reset(self) -> dict[str, Any]:
-        self.agent = SentinelTaskmaster()
+        self.agent = self._new_agent()
         return self.snapshot()
+
+    @staticmethod
+    def _new_agent() -> SentinelTaskmaster:
+        """Use Vertex planning only when the local environment opts into it."""
+        return SentinelTaskmaster(planner=VertexGeminiPlanner.from_environment())
 
     def investigate(self) -> dict[str, Any]:
         self.agent.investigate()
