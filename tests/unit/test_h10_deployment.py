@@ -56,6 +56,7 @@ def test_plan_uses_an_exact_digest_runtime_identity_and_service_minimum() -> Non
     assert "--port=8080" in command
     assert "--concurrency=1" in command
     assert any(item.startswith("--set-env-vars=") for item in command)
+    assert any(item.startswith("--set-secrets=") for item in command)
     assert result.cloud_verified is False
     assert result.deployment_executed is False
     assert result.service_ready is False

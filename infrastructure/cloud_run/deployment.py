@@ -245,7 +245,11 @@ def _result(
         f"--concurrency={definition.container_concurrency}",
         f"--labels={labels}",
         f"--description={definition.description}",
-        *runtime_configuration.deployment_arguments[:1],
+        *(
+            argument
+            for argument in runtime_configuration.deployment_arguments
+            if not argument.startswith("--service-account=")
+        ),
         f"--project={project_id}",
         "--quiet",
     )
