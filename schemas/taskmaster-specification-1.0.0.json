@@ -1,0 +1,464 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://taskmaster.studio/schemas/taskmaster-specification-1.0.0.json",
+  "title": "TaskmasterSpecification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "revision",
+    "metadata",
+    "mission",
+    "actors",
+    "inputs",
+    "outputs",
+    "workflow",
+    "tools",
+    "memory",
+    "autonomy",
+    "policies",
+    "verification",
+    "failure_handling",
+    "test_scenarios",
+    "generation",
+    "deployment",
+    "approval"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "metadata": {
+      "$ref": "#/$defs/metadata"
+    },
+    "mission": {
+      "$ref": "#/$defs/mission"
+    },
+    "actors": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/actor" }
+    },
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/ioItem" }
+    },
+    "outputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/ioItem" }
+    },
+    "workflow": {
+      "$ref": "#/$defs/workflow"
+    },
+    "tools": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/tool" }
+    },
+    "memory": {
+      "$ref": "#/$defs/memory"
+    },
+    "autonomy": {
+      "$ref": "#/$defs/autonomy"
+    },
+    "policies": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/policy" }
+    },
+    "verification": {
+      "$ref": "#/$defs/verification"
+    },
+    "failure_handling": {
+      "$ref": "#/$defs/failureHandling"
+    },
+    "test_scenarios": {
+      "type": "array",
+      "minItems": 3,
+      "items": { "$ref": "#/$defs/testScenario" }
+    },
+    "generation": {
+      "$ref": "#/$defs/generation"
+    },
+    "deployment": {
+      "$ref": "#/$defs/deployment"
+    },
+    "approval": {
+      "$ref": "#/$defs/approval"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{2,63}$"
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "summary",
+        "language",
+        "created_at",
+        "updated_at",
+        "created_by",
+        "source_project_id"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "name": { "type": "string", "minLength": 3, "maxLength": 100 },
+        "summary": { "type": "string", "minLength": 10, "maxLength": 500 },
+        "language": { "type": "string", "pattern": "^[a-z]{2}(-[A-Z]{2})?$" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "created_by": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "source_project_id": { "$ref": "#/$defs/identifier" },
+        "tags": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 10,
+          "items": { "type": "string", "minLength": 1, "maxLength": 30 }
+        }
+      }
+    },
+    "mission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "problem",
+        "goal",
+        "scope_in",
+        "scope_out",
+        "trigger",
+        "completion_definition"
+      ],
+      "properties": {
+        "problem": { "$ref": "#/$defs/nonEmptyString" },
+        "goal": { "$ref": "#/$defs/nonEmptyString" },
+        "scope_in": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/nonEmptyString" }
+        },
+        "scope_out": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmptyString" }
+        },
+        "trigger": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "description"],
+          "properties": {
+            "type": {
+              "enum": ["manual", "schedule", "event", "api"]
+            },
+            "description": { "$ref": "#/$defs/nonEmptyString" }
+          }
+        },
+        "completion_definition": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "name", "responsibilities"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "type": { "enum": ["human", "agent", "system"] },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "responsibilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/nonEmptyString" }
+        }
+      }
+    },
+    "ioItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "description", "data_type", "required", "sensitivity"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "description": { "$ref": "#/$defs/nonEmptyString" },
+        "data_type": { "enum": ["text", "number", "boolean", "date", "object", "array", "file", "url"] },
+        "required": { "type": "boolean" },
+        "sensitivity": { "enum": ["public", "internal", "confidential", "restricted"] },
+        "source": { "type": ["string", "null"], "maxLength": 200 }
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["initial_state", "terminal_states", "steps", "transitions"],
+      "properties": {
+        "initial_state": { "$ref": "#/$defs/identifier" },
+        "terminal_states": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 30,
+          "items": { "$ref": "#/$defs/workflowStep" }
+        },
+        "transitions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/transition" }
+        }
+      }
+    },
+    "workflowStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "description",
+        "actor_id",
+        "action_type",
+        "tool_ids",
+        "input_ids",
+        "output_ids",
+        "risk",
+        "timeout_seconds"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "description": { "$ref": "#/$defs/nonEmptyString" },
+        "actor_id": { "$ref": "#/$defs/identifier" },
+        "action_type": { "enum": ["reason", "tool", "human", "verify"] },
+        "tool_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "input_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "output_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "risk": { "enum": ["low", "medium", "high", "critical"] },
+        "approval_policy_id": {
+          "anyOf": [
+            { "$ref": "#/$defs/identifier" },
+            { "type": "null" }
+          ]
+        },
+        "timeout_seconds": { "type": "integer", "minimum": 1, "maximum": 3600 }
+      }
+    },
+    "transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "condition"],
+      "properties": {
+        "from": { "$ref": "#/$defs/identifier" },
+        "to": { "$ref": "#/$defs/identifier" },
+        "condition": { "$ref": "#/$defs/nonEmptyString" },
+        "priority": { "type": "integer", "minimum": 1, "default": 100 }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "description",
+        "mode",
+        "risk",
+        "input_schema",
+        "output_schema",
+        "side_effects"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "description": { "$ref": "#/$defs/nonEmptyString" },
+        "mode": { "enum": ["simulated", "read_only", "write"] },
+        "risk": { "enum": ["low", "medium", "high", "critical"] },
+        "input_schema": { "type": "object" },
+        "output_schema": { "type": "object" },
+        "side_effects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonEmptyString" }
+        },
+        "required_secret_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{2,127}$" }
+        }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session", "persistent", "retention_days", "allowed_fields", "forbidden_fields"],
+      "properties": {
+        "session": { "type": "boolean" },
+        "persistent": { "type": "boolean" },
+        "provider": { "enum": ["local", "firestore", "memory_bank", "none"] },
+        "retention_days": { "type": "integer", "minimum": 0, "maximum": 3650 },
+        "allowed_fields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "forbidden_fields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        }
+      }
+    },
+    "autonomy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "max_steps", "max_tool_calls", "max_runtime_seconds", "human_interruptible"],
+      "properties": {
+        "level": { "enum": ["assist", "supervised", "bounded_autonomous"] },
+        "max_steps": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "max_tool_calls": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "max_runtime_seconds": { "type": "integer", "minimum": 1, "maximum": 86400 },
+        "human_interruptible": { "type": "boolean" }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "type", "rule", "effect"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "type": { "enum": ["allow", "deny", "require_approval", "budget", "data"] },
+        "rule": { "$ref": "#/$defs/nonEmptyString" },
+        "effect": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strategy", "criteria", "verified_by"],
+      "properties": {
+        "strategy": { "enum": ["deterministic", "tool_assisted", "human", "hybrid"] },
+        "criteria": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/criterion" }
+        },
+        "verified_by": { "$ref": "#/$defs/identifier" }
+      }
+    },
+    "criterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "measurement", "expected"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "description": { "$ref": "#/$defs/nonEmptyString" },
+        "measurement": { "$ref": "#/$defs/nonEmptyString" },
+        "expected": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "failureHandling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_retries", "retry_strategy", "fallback", "on_exhausted"],
+      "properties": {
+        "max_retries": { "type": "integer", "minimum": 0, "maximum": 10 },
+        "retry_strategy": { "enum": ["none", "fixed", "exponential"] },
+        "fallback": { "$ref": "#/$defs/nonEmptyString" },
+        "on_exhausted": { "enum": ["fail_safe", "request_human", "pause"] }
+      }
+    },
+    "testScenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "category", "given", "when", "then"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "category": { "enum": ["happy_path", "edge_case", "failure", "security"] },
+        "given": { "$ref": "#/$defs/nonEmptyString" },
+        "when": { "$ref": "#/$defs/nonEmptyString" },
+        "then": { "$ref": "#/$defs/nonEmptyString" }
+      }
+    },
+    "generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target_framework", "language", "template_version", "required_artifacts"],
+      "properties": {
+        "target_framework": { "enum": ["google_adk", "genai_sdk", "genkit", "antigravity"] },
+        "language": { "enum": ["python", "typescript"] },
+        "template_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "required_artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "source",
+              "tests",
+              "readme",
+              "env_example",
+              "dockerfile",
+              "architecture",
+              "manifest"
+            ]
+          }
+        }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "region", "public_access", "min_instances", "max_instances"],
+      "properties": {
+        "target": { "enum": ["local", "cloud_run"] },
+        "region": { "type": "string", "minLength": 1, "maxLength": 50 },
+        "public_access": { "type": "boolean" },
+        "min_instances": { "type": "integer", "minimum": 0, "maximum": 10 },
+        "max_instances": { "type": "integer", "minimum": 1, "maximum": 100 }
+      }
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "decided_by", "decided_at", "note"],
+      "properties": {
+        "status": { "enum": ["draft", "changes_requested", "approved", "rejected"] },
+        "decided_by": { "type": ["string", "null"], "maxLength": 100 },
+        "decided_at": { "type": ["string", "null"], "format": "date-time" },
+        "note": { "type": "string", "maxLength": 1000 }
+      }
+    }
+  }
+}

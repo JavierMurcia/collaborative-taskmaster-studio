@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0.0",
+  "milestone": "H11-05",
+  "status": "complete",
+  "scope": "session_owned_active_project",
+  "confirmation_phrase": "REINICIAR_DEMO",
+  "restored_state": "idea",
+  "restored_version": 1,
+  "visible_events_after_reset": 0,
+  "removes": [
+    "revisions",
+    "approvals",
+    "events",
+    "artifact_metadata",
+    "generated_project_directory"
+  ],
+  "other_projects_affected": false,
+  "idempotent": true,
+  "firestore_recursive_delete": true,
+  "administrative_audit_outside_visible_timeline": true,
+  "automated_tests_passed": 426,
+  "clean_install_tests_passed": 421,
+  "clean_install_optional_tests_skipped": 5,
+  "visual_dialog_verified": true,
+  "external_actions": 0,
+  "cloud_calls_required_for_local_verification": false
+}

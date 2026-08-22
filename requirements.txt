@@ -1,4 +1,0 @@
-# Installed only when enabling the live Google Cloud planning path.
-google-genai>=1.0.0,<2.0.0
-google-adk[gcp]>=2.0.0,<3.0.0
-truststore>=0.10,<1.0; platform_system == "Windows"

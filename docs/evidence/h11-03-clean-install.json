@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0.0",
+  "verified_on": "2026-08-20",
+  "status": "passed",
+  "platform": "windows",
+  "python": "3.13.1",
+  "installation": "python -m pip install --no-input -e .[dev]",
+  "package_import": "passed",
+  "journey_tests_passed": 1,
+  "full_tests": {
+    "passed": 421,
+    "skipped_optional": 5
+  },
+  "http": {
+    "/": 200,
+    "/health/live": 200,
+    "/health/ready": 200,
+    "/openapi.json": 200
+  },
+  "cloud_integrations_enabled": false,
+  "credentials_copied": false,
+  "temporary_directory_removed": true
+}

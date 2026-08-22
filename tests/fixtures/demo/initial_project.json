@@ -1,0 +1,14 @@
+{
+  "project_id": "academic_delivery_project",
+  "name": "Coordinador de entrega académica",
+  "description": "Necesito un agente que me ayude a organizar cada semana los requisitos de mi proyecto final y compruebe que no olvide ninguna evidencia.",
+  "owner_session_id": "demo_user",
+  "missing_fields": [
+    "deadline",
+    "available_hours",
+    "input_format",
+    "external_actions",
+    "approval_owner",
+    "success_criteria"
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0.0",
+  "service_name": "collaborative-taskmaster-studio",
+  "region": "us-central1",
+  "required_service": "run.googleapis.com",
+  "platform": "managed",
+  "repository_id": "collaborative-taskmaster",
+  "image_name": "studio",
+  "require_image_digest": true,
+  "service_min_instances": 0,
+  "service_max_instances": 1,
+  "revision_min_instances": null,
+  "scaling_scope": "service",
+  "execution_environment": "gen2",
+  "ingress": "all",
+  "allow_unauthenticated": true,
+  "container_port": 8080,
+  "container_concurrency": 1,
+  "traffic_percent": 100,
+  "labels": {
+    "app": "collaborative-taskmaster-studio",
+    "managed-by": "declarative-plan",
+    "stage": "h10-10"
+  },
+  "description": "Collaborative Partner for designing auditable Taskmaster agents."
+}

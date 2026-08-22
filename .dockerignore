@@ -1,13 +1,48 @@
-.git
-.venv
-venv
-__pycache__
-*.py[cod]
+# Version control and editor state
+.git/
+.github/
+.idea/
+.vscode/
+.agents/
+.codex/
+
+# Secrets and local credentials
 .env
 .env.*
-!.env.example
-docx_review
-sentinel_render
+*.pem
+*.key
+*credentials*.json
+application_default_credentials.json
+
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Tests, documentation and development-only material
+tests/
+docs/
+examples/
+scripts/
 *.docx
-.vscode
-.idea
+*.pdf
+
+# Mutable runtime output
+.studio-data/
+generated/
+
+# Operating-system noise
+.DS_Store
+Thumbs.db
+
+# Local logs and temporary files
+*.log
+*.tmp
+*.bak

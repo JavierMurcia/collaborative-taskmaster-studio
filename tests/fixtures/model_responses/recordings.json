@@ -1,0 +1,95 @@
+{
+  "schema_version": "1.0.0",
+  "sanitized": true,
+  "source": "synthetic_vertex_recording",
+  "recordings": [
+    {
+      "id": "interview-question-valid-v1",
+      "purpose": "interview_question",
+      "expected": "valid",
+      "payload": {
+        "question_id": "ask_deadline_and_hours",
+        "question": "¿Cuál es tu fecha límite y cuántas horas tienes disponibles?",
+        "reason": "Estos datos permiten dimensionar un plan realista.",
+        "target_fields": ["deadline", "available_hours"],
+        "answer_type": "free_text"
+      },
+      "metadata": {
+        "model_version": "gemini-3.5-flash-recorded-001",
+        "response_id": "recorded-question-001",
+        "latency_ms": 118.0,
+        "prompt_tokens": 140,
+        "output_tokens": 52,
+        "total_tokens": 192
+      }
+    },
+    {
+      "id": "briefing-deadline-valid-v1",
+      "purpose": "briefing_ask_deadline_and_hours",
+      "expected": "valid",
+      "payload": {
+        "deadline": "Viernes 18:00",
+        "available_hours": 6
+      },
+      "metadata": {
+        "model_version": "gemini-3.5-flash-recorded-001",
+        "response_id": "recorded-briefing-001",
+        "latency_ms": 164.0,
+        "prompt_tokens": 175,
+        "output_tokens": 24,
+        "total_tokens": 199
+      }
+    },
+    {
+      "id": "specification-valid-v1",
+      "purpose": "taskmaster_specification",
+      "expected": "valid",
+      "payload_fixture": "../academic_delivery_specification.json",
+      "payload_projection": "specification_proposal",
+      "metadata": {
+        "model_version": "gemini-3.5-flash-recorded-001",
+        "response_id": "recorded-specification-001",
+        "latency_ms": 2380.0,
+        "prompt_tokens": 1240,
+        "output_tokens": 3180,
+        "total_tokens": 4420
+      }
+    },
+    {
+      "id": "revision-valid-v1",
+      "purpose": "taskmaster_revision",
+      "expected": "valid",
+      "payload_fixture": "../academic_delivery_specification.json",
+      "payload_projection": "specification_proposal",
+      "metadata": {
+        "model_version": "gemini-3.5-flash-recorded-001",
+        "response_id": "recorded-revision-001",
+        "latency_ms": 2475.0,
+        "prompt_tokens": 1910,
+        "output_tokens": 3195,
+        "total_tokens": 5105
+      }
+    },
+    {
+      "id": "interview-question-extra-field-invalid-v1",
+      "purpose": "interview_question",
+      "expected": "invalid",
+      "payload": {
+        "question_id": "ask_deadline_and_hours",
+        "question": "¿Cuál es tu fecha límite?",
+        "reason": "Permite ordenar el trabajo.",
+        "target_fields": ["deadline", "available_hours"],
+        "answer_type": "free_text",
+        "approve_without_human": true
+      },
+      "metadata": {
+        "model_version": "gemini-3.5-flash-recorded-001",
+        "response_id": "recorded-invalid-001",
+        "latency_ms": 121.0,
+        "prompt_tokens": 140,
+        "output_tokens": 57,
+        "total_tokens": 197
+      }
+    }
+  ]
+}

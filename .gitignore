@@ -2,21 +2,26 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments and local configuration
 .venv/
 venv/
-
-# Environment and credentials
 .env
 .env.*
 !.env.example
 
-# Local tooling and generated document review artifacts
-docx_review/
-sentinel_render/
-*.docx
+# Generated Taskmasters and local state
+generated/*
+!generated/.gitkeep
+.studio-data/
 
-# Editor / OS
-.vscode/
+# Editors and operating systems
 .idea/
+.vscode/
 .DS_Store
 Thumbs.db
+

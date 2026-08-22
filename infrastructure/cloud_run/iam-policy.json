@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0.0",
+  "exact_project_roles": true,
+  "bindings": [
+    {
+      "role": "roles/aiplatform.user",
+      "purpose": "Invoke Gemini models through Vertex AI.",
+      "condition": null
+    },
+    {
+      "role": "roles/datastore.user",
+      "purpose": "Read and write application documents in the named Firestore database.",
+      "condition": {
+        "title": "firestore_collaborative_taskmaster_only",
+        "description": "Restrict runtime data access to the Collaborative Taskmaster database.",
+        "expression_template": "resource.name == \"projects/{project_id}/databases/collaborative-taskmaster\""
+      }
+    },
+    {
+      "role": "roles/secretmanager.secretAccessor",
+      "purpose": "Read only the six runtime secrets declared for identity and OAuth.",
+      "condition": {
+        "title": "collaborative_studio_runtime_secrets_only",
+        "description": "Restrict secret access to the exact Collaborative Studio runtime secret set.",
+        "expression_template": "resource.name == \"projects/{project_id}/secrets/studio-firebase-api-key\" || resource.name == \"projects/{project_id}/secrets/studio-firebase-app-id\" || resource.name == \"projects/{project_id}/secrets/studio-google-oauth-client-id\" || resource.name == \"projects/{project_id}/secrets/studio-google-oauth-client-secret\" || resource.name == \"projects/{project_id}/secrets/studio-oauth-state-secret\" || resource.name == \"projects/{project_id}/secrets/studio-oauth-encryption-key\""
+      }
+    }
+  ],
+  "forbidden_roles": [
+    "roles/owner",
+    "roles/editor",
+    "roles/viewer",
+    "roles/aiplatform.admin",
+    "roles/datastore.owner",
+    "roles/datastore.indexAdmin",
+    "roles/iam.securityAdmin",
+    "roles/iam.serviceAccountAdmin",
+    "roles/iam.serviceAccountKeyAdmin",
+    "roles/resourcemanager.projectIamAdmin",
+    "roles/secretmanager.admin"
+  ]
+}

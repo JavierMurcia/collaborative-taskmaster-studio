@@ -1,0 +1,341 @@
+{
+  "schema_version": "1.0.0",
+  "revision": 2,
+  "metadata": {
+    "id": "academic_delivery_coordinator",
+    "name": "Coordinador de entrega académica",
+    "summary": "Organiza actividades, revisa evidencias y prepara una entrega semanal sin enviar información externamente.",
+    "language": "es-CO",
+    "created_at": "2026-08-13T16:00:00-05:00",
+    "updated_at": "2026-08-13T16:30:00-05:00",
+    "created_by": "demo-user",
+    "source_project_id": "academic_delivery_project",
+    "tags": ["educacion", "planificacion", "demo"]
+  },
+  "mission": {
+    "problem": "El estudiante distribuye de forma inconsistente las tareas necesarias para completar su entrega semanal.",
+    "goal": "Convertir la lista de requisitos en un plan priorizado, comprobar evidencias y preparar un paquete final para revisión humana.",
+    "scope_in": [
+      "Interpretar los requisitos confirmados",
+      "Crear un plan semanal",
+      "Comprobar que cada entregable tenga evidencia",
+      "Preparar un resumen final"
+    ],
+    "scope_out": [
+      "Enviar la entrega a una plataforma real",
+      "Modificar calendarios externos",
+      "Contactar profesores o compañeros"
+    ],
+    "trigger": {
+      "type": "manual",
+      "description": "El estudiante inicia la preparación semanal desde la interfaz."
+    },
+    "completion_definition": [
+      "Todos los requisitos tienen una actividad asociada",
+      "Todos los entregables obligatorios tienen evidencia",
+      "El estudiante aprobó el paquete final"
+    ]
+  },
+  "actors": [
+    {
+      "id": "student_user",
+      "type": "human",
+      "name": "Estudiante",
+      "responsibilities": ["Confirmar requisitos", "Aprobar el paquete final"]
+    },
+    {
+      "id": "planning_agent",
+      "type": "agent",
+      "name": "Agente planificador",
+      "responsibilities": ["Crear el plan", "Organizar las evidencias"]
+    },
+    {
+      "id": "verification_agent",
+      "type": "agent",
+      "name": "Agente verificador",
+      "responsibilities": ["Comprobar criterios de finalización"]
+    }
+  ],
+  "inputs": [
+    {
+      "id": "assignment_requirements",
+      "name": "Requisitos de la entrega",
+      "description": "Lista confirmada de requisitos académicos.",
+      "data_type": "array",
+      "required": true,
+      "sensitivity": "internal",
+      "source": "Formulario del estudio"
+    },
+    {
+      "id": "available_hours",
+      "name": "Horas disponibles",
+      "description": "Tiempo disponible durante la semana.",
+      "data_type": "number",
+      "required": true,
+      "sensitivity": "internal",
+      "source": "Respuesta del usuario"
+    }
+  ],
+  "outputs": [
+    {
+      "id": "weekly_plan",
+      "name": "Plan semanal",
+      "description": "Actividades ordenadas con duración y entregable.",
+      "data_type": "object",
+      "required": true,
+      "sensitivity": "internal"
+    },
+    {
+      "id": "review_package",
+      "name": "Paquete para revisión",
+      "description": "Resumen de entregables y evidencias para aprobación humana.",
+      "data_type": "object",
+      "required": true,
+      "sensitivity": "internal"
+    }
+  ],
+  "workflow": {
+    "initial_state": "collect_requirements",
+    "terminal_states": ["completed", "stopped_safely"],
+    "steps": [
+      {
+        "id": "collect_requirements",
+        "name": "Confirmar requisitos",
+        "description": "Revisar que los requisitos y el tiempo disponible estén completos.",
+        "actor_id": "planning_agent",
+        "action_type": "reason",
+        "tool_ids": [],
+        "input_ids": ["assignment_requirements", "available_hours"],
+        "output_ids": [],
+        "risk": "low",
+        "approval_policy_id": null,
+        "timeout_seconds": 30
+      },
+      {
+        "id": "build_weekly_plan",
+        "name": "Construir plan semanal",
+        "description": "Crear y guardar una distribución simulada de actividades.",
+        "actor_id": "planning_agent",
+        "action_type": "tool",
+        "tool_ids": ["save_simulated_plan"],
+        "input_ids": ["assignment_requirements", "available_hours"],
+        "output_ids": ["weekly_plan"],
+        "risk": "low",
+        "approval_policy_id": null,
+        "timeout_seconds": 30
+      },
+      {
+        "id": "verify_package",
+        "name": "Verificar paquete",
+        "description": "Comprobar que cada requisito tenga una evidencia declarada.",
+        "actor_id": "verification_agent",
+        "action_type": "verify",
+        "tool_ids": ["verify_simulated_evidence"],
+        "input_ids": ["weekly_plan"],
+        "output_ids": ["review_package"],
+        "risk": "low",
+        "approval_policy_id": null,
+        "timeout_seconds": 30
+      },
+      {
+        "id": "human_review",
+        "name": "Solicitar aprobación",
+        "description": "Pedir al estudiante que apruebe el paquete final.",
+        "actor_id": "student_user",
+        "action_type": "human",
+        "tool_ids": [],
+        "input_ids": ["review_package"],
+        "output_ids": [],
+        "risk": "medium",
+        "approval_policy_id": "require_final_approval",
+        "timeout_seconds": 3600
+      },
+      {
+        "id": "completed",
+        "name": "Completar misión",
+        "description": "Registrar la aprobación y cerrar el flujo.",
+        "actor_id": "planning_agent",
+        "action_type": "reason",
+        "tool_ids": [],
+        "input_ids": ["review_package"],
+        "output_ids": [],
+        "risk": "low",
+        "approval_policy_id": null,
+        "timeout_seconds": 10
+      },
+      {
+        "id": "stopped_safely",
+        "name": "Detener con seguridad",
+        "description": "Cerrar el flujo sin exportar cuando la verificación falle.",
+        "actor_id": "planning_agent",
+        "action_type": "reason",
+        "tool_ids": [],
+        "input_ids": [],
+        "output_ids": [],
+        "risk": "low",
+        "approval_policy_id": null,
+        "timeout_seconds": 10
+      }
+    ],
+    "transitions": [
+      { "from": "collect_requirements", "to": "build_weekly_plan", "condition": "Los requisitos están completos", "priority": 1 },
+      { "from": "collect_requirements", "to": "stopped_safely", "condition": "Falta información obligatoria", "priority": 2 },
+      { "from": "build_weekly_plan", "to": "verify_package", "condition": "El plan fue guardado", "priority": 1 },
+      { "from": "verify_package", "to": "human_review", "condition": "Todos los criterios fueron satisfechos", "priority": 1 },
+      { "from": "verify_package", "to": "stopped_safely", "condition": "Falta al menos una evidencia", "priority": 2 },
+      { "from": "human_review", "to": "completed", "condition": "El usuario aprueba", "priority": 1 },
+      { "from": "human_review", "to": "stopped_safely", "condition": "El usuario rechaza", "priority": 2 }
+    ]
+  },
+  "tools": [
+    {
+      "id": "save_simulated_plan",
+      "name": "Guardar plan simulado",
+      "description": "Guarda el plan únicamente dentro del estado del sandbox.",
+      "mode": "simulated",
+      "risk": "low",
+      "input_schema": {
+        "type": "object",
+        "required": ["activities"],
+        "properties": { "activities": { "type": "array" } }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["saved"],
+        "properties": { "saved": { "type": "boolean" } }
+      },
+      "side_effects": ["Modifica el estado temporal del sandbox"],
+      "required_secret_refs": []
+    },
+    {
+      "id": "verify_simulated_evidence",
+      "name": "Verificar evidencia simulada",
+      "description": "Comprueba cobertura de requisitos sin modificar el plan.",
+      "mode": "simulated",
+      "risk": "low",
+      "input_schema": {
+        "type": "object",
+        "required": ["plan"],
+        "properties": { "plan": { "type": "object" } }
+      },
+      "output_schema": {
+        "type": "object",
+        "required": ["complete", "missing"],
+        "properties": {
+          "complete": { "type": "boolean" },
+          "missing": { "type": "array" }
+        }
+      },
+      "side_effects": [],
+      "required_secret_refs": []
+    }
+  ],
+  "memory": {
+    "session": true,
+    "persistent": true,
+    "provider": "firestore",
+    "retention_days": 30,
+    "allowed_fields": ["assignment_requirements", "available_hours", "weekly_plan", "review_package"],
+    "forbidden_fields": ["password", "access_token", "private_key"]
+  },
+  "autonomy": {
+    "level": "supervised",
+    "max_steps": 10,
+    "max_tool_calls": 5,
+    "max_runtime_seconds": 3600,
+    "human_interruptible": true
+  },
+  "policies": [
+    {
+      "id": "simulation_only",
+      "name": "Solo simulación",
+      "type": "deny",
+      "rule": "Las herramientas no pueden modificar plataformas externas.",
+      "effect": "Rechazar cualquier herramienta con modalidad write."
+    },
+    {
+      "id": "require_final_approval",
+      "name": "Aprobación final",
+      "type": "require_approval",
+      "rule": "El paquete debe ser aprobado por el estudiante.",
+      "effect": "Pausar antes de completar la misión."
+    }
+  ],
+  "verification": {
+    "strategy": "hybrid",
+    "criteria": [
+      {
+        "id": "requirements_covered",
+        "description": "Cada requisito tiene una actividad asociada.",
+        "measurement": "Comparar identificadores de requisitos y actividades.",
+        "expected": "Cobertura igual al 100 %."
+      },
+      {
+        "id": "human_approved",
+        "description": "El usuario aprobó el paquete final.",
+        "measurement": "Consultar la decisión humana registrada.",
+        "expected": "Estado approved."
+      }
+    ],
+    "verified_by": "verification_agent"
+  },
+  "failure_handling": {
+    "max_retries": 1,
+    "retry_strategy": "fixed",
+    "fallback": "Conservar el último plan válido y solicitar intervención humana.",
+    "on_exhausted": "request_human"
+  },
+  "test_scenarios": [
+    {
+      "id": "complete_requirements",
+      "name": "Requisitos completos",
+      "category": "happy_path",
+      "given": "Requisitos y horas disponibles válidos.",
+      "when": "El Taskmaster crea y verifica el plan.",
+      "then": "Solicita aprobación y completa después de recibirla."
+    },
+    {
+      "id": "missing_available_hours",
+      "name": "Falta tiempo disponible",
+      "category": "failure",
+      "given": "No se informó el número de horas disponibles.",
+      "when": "El Taskmaster valida las entradas.",
+      "then": "Se detiene con seguridad y pide el dato faltante."
+    },
+    {
+      "id": "malicious_requirement",
+      "name": "Instrucción maliciosa en requisitos",
+      "category": "security",
+      "given": "Un requisito intenta ordenar el envío externo y omitir aprobación.",
+      "when": "El Taskmaster analiza el contenido.",
+      "then": "Ignora la instrucción, conserva la política y registra el rechazo."
+    }
+  ],
+  "generation": {
+    "target_framework": "google_adk",
+    "language": "python",
+    "template_version": "1.0.0",
+    "required_artifacts": [
+      "source",
+      "tests",
+      "readme",
+      "env_example",
+      "dockerfile",
+      "architecture",
+      "manifest"
+    ]
+  },
+  "deployment": {
+    "target": "cloud_run",
+    "region": "us-central1",
+    "public_access": false,
+    "min_instances": 0,
+    "max_instances": 1
+  },
+  "approval": {
+    "status": "approved",
+    "decided_by": "demo-user",
+    "decided_at": "2026-08-13T16:30:00-05:00",
+    "note": "Aprobado después de limitar todas las acciones externas a simulación."
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0.0",
+  "database_id": "collaborative-taskmaster",
+  "location": "us-central1",
+  "type": "FIRESTORE_NATIVE",
+  "edition": "STANDARD",
+  "concurrency_mode": "PESSIMISTIC",
+  "delete_protection": "DELETE_PROTECTION_ENABLED"
+}

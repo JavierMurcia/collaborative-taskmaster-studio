@@ -1,1 +1,1 @@
-"""Deterministic tests for Sentinel Taskmaster."""
+"""Project test suite."""

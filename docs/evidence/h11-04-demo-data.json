@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0.0",
+  "verified_on": "2026-08-20",
+  "status": "ready",
+  "fixture_id": "academic_delivery_official_demo",
+  "fixture_path": "studio/application/fixtures/official_demo.json",
+  "fixture_sha256": "1b2263b278ac4b8478d273fc3e481a0e0025fa8d53b0dd50eb068cad41591f4d",
+  "specification_path": "studio/application/fixtures/academic_delivery_base.json",
+  "specification_sha256": "91f1bbf607e1c24a83638f334883c7219e0e677a70ff3fa8ae6f8137f31f3867",
+  "interview_turns": 3,
+  "academic_requirements": 4,
+  "available_minutes": 360,
+  "approved_revision": 2,
+  "target_framework": "google_adk",
+  "required_scenarios": ["happy_path", "failure", "security"],
+  "expected_decision": "ready",
+  "fictional_data": true,
+  "contains_personal_data": false,
+  "contains_secrets": false,
+  "external_actions_allowed": false,
+  "cloud_calls_performed": 0
+}

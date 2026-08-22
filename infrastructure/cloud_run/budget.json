@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0.0",
+  "required_service": "billingbudgets.googleapis.com",
+  "display_name": "sentinel-mvp-20k-cop",
+  "calendar_period": "month",
+  "amount": {
+    "units": 20000,
+    "currency_code": "COP"
+  },
+  "credit_types_treatment": "exclude-all-credits",
+  "ownership_scope": "all-users",
+  "project_scope": true,
+  "threshold_rules": [
+    {
+      "percent": 0.5,
+      "basis": "current-spend"
+    },
+    {
+      "percent": 0.8,
+      "basis": "current-spend"
+    },
+    {
+      "percent": 1.0,
+      "basis": "current-spend"
+    }
+  ],
+  "default_iam_recipients": true,
+  "project_owner_recipients": true,
+  "monitoring_notification_channels": [],
+  "pubsub_topic": null,
+  "automatic_spend_actions": false
+}

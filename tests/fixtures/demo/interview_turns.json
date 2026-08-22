@@ -1,0 +1,23 @@
+[
+  {
+    "question_id": "ask_deadline_and_hours",
+    "question": "¿Cuándo debe estar listo el resultado y cuánto tiempo puedes dedicar al proceso?",
+    "reason": "Necesito distribuir el trabajo sin superar tu tiempo disponible.",
+    "answer": "Debe quedar listo el viernes a las 6:00 p. m. y puedo dedicar seis horas durante la semana.",
+    "target_fields": ["deadline", "available_hours"]
+  },
+  {
+    "question_id": "ask_input_and_result",
+    "question": "¿Qué información recibirá el agente y qué resultado exacto debe preparar?",
+    "reason": "Esto define las entradas y los entregables verificables.",
+    "answer": "Los escribiré en una lista. El agente debe producir un plan semanal y un paquete que relacione cada requisito con su evidencia.",
+    "target_fields": ["input_format", "success_criteria"]
+  },
+  {
+    "question_id": "ask_autonomy_and_approval",
+    "question": "¿Puede enviar información o modificar otras aplicaciones? ¿Quién aprueba el resultado final?",
+    "reason": "Estas decisiones establecen los límites de autonomía y las acciones que deben esperar confirmación.",
+    "answer": "Puede organizar la información y proponer el plan. Yo revisaré el resultado final.",
+    "target_fields": ["external_actions", "approval_owner"]
+  }
+]

@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0.0",
+  "region": "us-central1",
+  "required_services": [
+    "artifactregistry.googleapis.com",
+    "cloudbuild.googleapis.com"
+  ],
+  "repository": {
+    "repository_id": "collaborative-taskmaster",
+    "format": "DOCKER",
+    "mode": "STANDARD_REPOSITORY",
+    "description": "Immutable container images for Collaborative Taskmaster Studio.",
+    "immutable_tags": true,
+    "vulnerability_scanning": false
+  },
+  "builder_identity": {
+    "account_id": "taskmaster-studio-builder",
+    "display_name": "Collaborative Taskmaster Studio Builder",
+    "description": "Cloud Build identity for tests and Artifact Registry publication.",
+    "user_managed_keys_allowed": false
+  },
+  "builder_bindings": [
+    {
+      "scope": "repository",
+      "role": "roles/artifactregistry.writer"
+    },
+    {
+      "scope": "project",
+      "role": "roles/logging.logWriter"
+    },
+    {
+      "scope": "source_bucket",
+      "role": "roles/storage.objectViewer"
+    }
+  ],
+  "cloudbuild_config": "cloudbuild.yaml",
+  "cloudbuild_config_sha256": "d400e22bba4795ef13a37df0671911ea66976354eb91f860b1c359a324ceaa08",
+  "logging": "CLOUD_LOGGING_ONLY",
+  "require_explicit_image_tag": true,
+  "forbidden_image_tags": [
+    "latest",
+    "dev",
+    "main",
+    "master"
+  ]
+}

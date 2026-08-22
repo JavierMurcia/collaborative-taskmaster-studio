@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0.0",
+  "service_name": "collaborative-taskmaster-studio",
+  "region": "us-central1",
+  "environment_variables": [
+    {"name": "STUDIO_ENV", "value_template": "production", "purpose": "Select production behavior."},
+    {"name": "GOOGLE_CLOUD_PROJECT", "value_template": "{project_id}", "purpose": "Select the Google Cloud project."},
+    {"name": "GOOGLE_CLOUD_LOCATION", "value_template": "global", "purpose": "Use the supported global Vertex AI endpoint."},
+    {"name": "GOOGLE_GENAI_USE_VERTEXAI", "value_template": "true", "purpose": "Require Vertex AI instead of API-key mode."},
+    {"name": "STUDIO_ENABLE_VERTEX", "value_template": "true", "purpose": "Enable the bounded Vertex AI gateway."},
+    {"name": "STUDIO_ENABLE_MODEL_QUESTIONS", "value_template": "true", "purpose": "Enable model-assisted interview questions."},
+    {"name": "STUDIO_ENABLE_MODEL_BRIEFING", "value_template": "true", "purpose": "Enable model-assisted briefing synthesis."},
+    {"name": "STUDIO_ENABLE_MODEL_SPECIFICATION", "value_template": "true", "purpose": "Enable model-assisted specification drafting."},
+    {"name": "STUDIO_ENABLE_MODEL_REVISION", "value_template": "true", "purpose": "Enable feedback-based model revisions."},
+    {"name": "STUDIO_GEMINI_MODEL", "value_template": "gemini-3.7-flash", "purpose": "Pin the stable Gemini 3.7 agentic model name."},
+    {"name": "STUDIO_VERTEX_API_VERSION", "value_template": "v1", "purpose": "Use the stable Vertex AI API."},
+    {"name": "STUDIO_MAX_MODEL_OUTPUT_TOKENS", "value_template": "8192", "purpose": "Bound output cost and latency while allowing the complete specification contract."},
+    {"name": "STUDIO_MAX_MODEL_QUESTIONS_PER_PROJECT", "value_template": "3", "purpose": "Bound model-assisted interview calls."},
+    {"name": "STUDIO_ENABLE_FIRESTORE", "value_template": "true", "purpose": "Enable Firestore persistence."},
+    {"name": "STUDIO_FIRESTORE_DATABASE", "value_template": "collaborative-taskmaster", "purpose": "Select the declared Firestore database."},
+    {"name": "STUDIO_FIRESTORE_LOCATION", "value_template": "us-central1", "purpose": "Match the declared database location."},
+    {"name": "STUDIO_FIRESTORE_TRANSACTION_MAX_ATTEMPTS", "value_template": "5", "purpose": "Bound transaction retries."},
+    {"name": "STUDIO_FIRESTORE_DEMO_RETENTION_DAYS", "value_template": "7", "purpose": "Bound demo-data retention."},
+    {"name": "STUDIO_AUTH_MODE", "value_template": "identity_platform", "purpose": "Require a server-verified multi-user identity."},
+    {"name": "STUDIO_IDENTITY_PROJECT", "value_template": "{project_id}", "purpose": "Verify Firebase ID tokens against this project."},
+    {"name": "STUDIO_FIREBASE_AUTH_DOMAIN", "value_template": "{project_id}.firebaseapp.com", "purpose": "Select the public Firebase authentication domain."},
+    {"name": "STUDIO_PUBLIC_BASE_URL", "value_template": "https://collaborative-taskmaster-studio-760216344589.us-central1.run.app", "purpose": "Use the exact registered OAuth redirect origin."},
+    {"name": "STUDIO_ADK_ROOT_NAME", "value_template": "studio_root_agent", "purpose": "Select the validated ADK root name."},
+    {"name": "STUDIO_ADK_APP_NAME", "value_template": "agents", "purpose": "Select the validated ADK application name."},
+    {"name": "STUDIO_DATA_DIRECTORY", "value_template": "/tmp/studio-data", "purpose": "Keep fallback state in writable ephemeral storage."},
+    {"name": "STUDIO_GENERATED_ROOT", "value_template": "/tmp/generated", "purpose": "Keep generated artifacts in writable ephemeral storage."},
+    {"name": "STUDIO_SANDBOX_TIMEOUT", "value_template": "8", "purpose": "Bound local sandbox execution."}
+  ],
+  "secrets": [
+    {"environment_variable": "STUDIO_FIREBASE_API_KEY", "secret_id": "studio-firebase-api-key", "version": "1", "purpose": "Initialize the Identity Platform web client."},
+    {"environment_variable": "STUDIO_FIREBASE_APP_ID", "secret_id": "studio-firebase-app-id", "version": "1", "purpose": "Identify the registered Firebase web application."},
+    {"environment_variable": "STUDIO_GOOGLE_OAUTH_CLIENT_ID", "secret_id": "studio-google-oauth-client-id", "version": "1", "purpose": "Identify the Google OAuth web client."},
+    {"environment_variable": "STUDIO_GOOGLE_OAUTH_CLIENT_SECRET", "secret_id": "studio-google-oauth-client-secret", "version": "1", "purpose": "Authenticate the OAuth code exchange on the server."},
+    {"environment_variable": "STUDIO_OAUTH_STATE_SECRET", "secret_id": "studio-oauth-state-secret", "version": "1", "purpose": "Sign short-lived OAuth state tokens."},
+    {"environment_variable": "STUDIO_OAUTH_ENCRYPTION_KEY", "secret_id": "studio-oauth-encryption-key", "version": "1", "purpose": "Encrypt per-user OAuth grants before Firestore persistence."}
+  ],
+  "secret_policy": {
+    "provider": "google_secret_manager",
+    "allow_plaintext_values": false,
+    "require_numeric_version": true,
+    "latest_alias_allowed": false,
+    "delivery": "environment"
+  },
+  "forbidden_environment_variables": [
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "GOOGLE_API_KEY",
+    "GEMINI_API_KEY"
+  ],
+  "cloud_run_reserved_variables": [
+    "PORT",
+    "K_SERVICE",
+    "K_REVISION",
+    "K_CONFIGURATION"
+  ],
+  "runtime_secret_accessor_required": true
+}

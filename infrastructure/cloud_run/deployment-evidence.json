@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0.0",
+  "milestone": "H10-10",
+  "verified_on": "2026-08-20",
+  "project_id": "sentinel-taskmaster-dev",
+  "region": "us-central1",
+  "service": "collaborative-taskmaster-studio",
+  "service_url": "https://collaborative-taskmaster-studio-760216344589.us-central1.run.app",
+  "revision": "collaborative-taskmaster-studio-00004-fqp",
+  "traffic_percent": 100,
+  "service_min_instances": 0,
+  "service_max_instances": 1,
+  "container_concurrency": 1,
+  "runtime_service_account": "taskmaster-studio-runtime@sentinel-taskmaster-dev.iam.gserviceaccount.com",
+  "public_invoker": "allUsers",
+  "build_id": "6fbd6f25-df34-4183-a530-08ef2a5c6e34",
+  "image": "us-central1-docker.pkg.dev/sentinel-taskmaster-dev/collaborative-taskmaster/studio",
+  "image_digest": "sha256:3cedab2f2a07e62a2ae593d7b6f1cd78368c7528fd91f58723cc5363cf29c1a5",
+  "enabled_services": [
+    "aiplatform.googleapis.com",
+    "artifactregistry.googleapis.com",
+    "cloudbuild.googleapis.com",
+    "firestore.googleapis.com",
+    "run.googleapis.com"
+  ],
+  "http_checks": [
+    {"path": "/health/live", "status_code": 200, "status": "alive"},
+    {"path": "/health/startup", "status_code": 200, "status": "started"},
+    {"path": "/health/ready", "status_code": 200, "status": "ready"},
+    {
+      "path": "/api/v1/meta",
+      "status_code": 200,
+      "status": "H10-10"
+    }
+  ],
+  "full_journey": {
+    "project_id": "project_1c230bd56cfdc1de",
+    "approved_revision": 2,
+    "artifact_id": "artifact_544fe7290e4d7ca3",
+    "evaluation_decision": "ready",
+    "model_completed_events": 3,
+    "model_fallback_events": 5,
+    "audit_event_count": 27,
+    "http_steps": 13,
+    "fallback_reasons": {
+      "INTERVIEW_QUESTION_SCOPE_CHANGED": 3,
+      "MODEL_UNAVAILABLE": 2
+    }
+  },
+  "result": "passed"
+}

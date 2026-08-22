@@ -1,0 +1,42 @@
+name: collaborative-taskmaster-studio
+version: 0.1.0
+description: Collaborative Partner for designing auditable Taskmaster agents.
+entrypoint: agents.agent:root_agent
+agent_directory: agents
+contract: schemas/taskmaster-specification-1.0.0.json
+capabilities:
+  - guided_interview
+  - adk_specialist_delegation
+  - model_telemetry
+  - bounded_model_usage
+  - deterministic_local_fallback
+  - recorded_model_contracts
+  - firestore_native_provisioning
+  - firestore_client_initialization
+  - firestore_project_repository
+  - firestore_briefing_history
+  - firestore_immutable_revisions
+  - firestore_human_approvals
+  - firestore_ordered_audit_events
+  - firestore_artifact_metadata
+  - firestore_bounded_transactions
+  - firestore_verified_indexes
+  - firestore_demo_ttl_retention
+  - firestore_repository_contract_tests
+  - hardened_production_container
+  - cloud_run_port_binding
+  - cloud_run_health_probes
+  - declared_keyless_runtime_identity
+  - exact_least_privilege_runtime_iam
+  - reproducible_cloud_build_pipeline
+  - zero_secret_cloud_run_configuration
+  - declarative_scale_to_zero_cloud_run
+  - structured_briefing
+  - taskmaster_design
+  - feedback_and_revision
+  - explicit_approval
+  - artifact_generation
+  - sandbox_evaluation
+create_params:
+  deployment_target: none
+  session_type: in_memory

@@ -1,0 +1,35 @@
+steps:
+  - id: unit-tests
+    name: python:3.13-slim
+    entrypoint: /bin/sh
+    args:
+      - -ceu
+      - |
+        python -m pip install --disable-pip-version-check '.[dev,vertex,firestore]'
+        python -m pytest -q
+  - id: build-image
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --tag
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:${_IMAGE_TAG}
+      - .
+  - id: push-image
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:${_IMAGE_TAG}
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/${_IMAGE}:${_IMAGE_TAG}
+substitutions:
+  _REGION: us-central1
+  _REPOSITORY: collaborative-taskmaster
+  _IMAGE: studio
+options:
+  logging: CLOUD_LOGGING_ONLY
+  substitutionOption: MUST_MATCH
+serviceAccount: projects/$PROJECT_ID/serviceAccounts/taskmaster-studio-builder@$PROJECT_ID.iam.gserviceaccount.com
+timeout: 900s
+tags:
+  - collaborative-taskmaster
+  - h10-06

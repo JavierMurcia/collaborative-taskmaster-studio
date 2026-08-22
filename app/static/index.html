@@ -1,37 +1,121 @@
 <!doctype html>
 <html lang="es">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Sentinel Taskmaster</title>
-    <link rel="stylesheet" href="/styles.css">
-  </head>
-  <body>
-    <main class="shell">
-      <header>
-        <div><p class="eyebrow">ALL THINGS AGENTIC HACKATHON · TASKMASTER</p><h1>Sentinel <span>Taskmaster</span></h1></div>
-        <div class="status"><span class="pulse"></span><span id="mission-status">Cargando…</span></div>
-      </header>
-      <section class="mission-bar"><div><span>INCIDENTE</span><strong>Degradación de ingestión de pedidos</strong></div><div><span>PRINCIPIO</span><strong>Autonomía controlada</strong></div><div><span>PRESUPUESTO</span><strong id="budget">—</strong></div><button class="ghost" data-action="reset">Reiniciar demo</button></section>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Entrevista, diseña y aprueba Taskmasters auditables.">
+  <title>Collaborative Taskmaster Studio</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Saltar al contenido</a>
+  <header class="topbar shell">
+    <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-label="Abrir historial">☰</button>
+    <button class="brand" id="home-button" type="button" aria-label="Ir al inicio">
+      <span class="brand-mark" aria-hidden="true">✦</span>
+      <span>Collaborative Studio</span>
+    </button>
+    <div class="header-actions">
+      <button id="identity-action" class="identity-action" type="button" hidden>Iniciar sesión</button>
+      <button id="header-new-chat" class="header-new-chat" type="button"><span aria-hidden="true">＋</span> Nuevo chat</button>
+      <div class="local-badge" id="runtime-badge"><span></span><strong data-runtime-model>Gemini 3.7 Flash</strong><small data-runtime-provider> · Vertex AI</small></div>
+    </div>
+  </header>
 
-      <section class="metrics" id="metrics"></section>
+  <aside id="conversation-sidebar" class="conversation-sidebar" aria-label="Historial de conversaciones">
+    <div class="sidebar-heading">
+      <strong>Conversaciones</strong>
+      <div><button id="sidebar-new-chat" class="sidebar-new-chat" type="button" aria-label="Crear una conversación nueva">＋</button><button id="sidebar-close" class="sidebar-close" type="button" aria-label="Cerrar historial">×</button></div>
+    </div>
+    <nav id="conversation-history" class="conversation-history" aria-label="Conversaciones guardadas"></nav>
+    <p id="history-empty" class="history-empty">Todavía no hay conversaciones guardadas.</p>
+    <section class="agent-library" aria-labelledby="agent-library-title">
+      <div class="agent-library-heading"><strong id="agent-library-title">Agentes</strong><span id="agent-count">0</span></div>
+      <div id="agent-catalog" class="agent-catalog"></div>
+      <p id="agent-catalog-empty" class="history-empty">Los agentes aprobados aparecerán aquí.</p>
+    </section>
+    <section class="connection-library" aria-labelledby="connection-library-title">
+      <div class="agent-library-heading"><strong id="connection-library-title">Conexiones</strong></div>
+      <div id="connection-catalog" class="connection-catalog"></div>
+      <p id="connection-empty" class="history-empty">Selecciona un servicio para conectarlo.</p>
+    </section>
+    <div class="capability-status">
+      <p>DISPONIBILIDAD</p>
+      <div><span class="status-dot active builder"></span><strong id="identity-label">Comprobando identidad</strong><small id="identity-detail">Aislando espacio personal</small></div>
+      <div><span class="status-dot active"></span><strong>Gemini 3.7 Flash</strong><small>Socio de diseño activo</small></div>
+      <div><span class="status-dot active"></span><strong>Selector de frameworks</strong><small>ADK · GenAI SDK · Genkit · Antigravity</small></div>
+      <div><span class="status-dot active builder"></span><strong>Ingeniero de agentes</strong><small>Constructor seguro con aprobación humana</small></div>
+      <div><span class="status-dot active"></span><strong>Investigación del Studio</strong><small>Leer · buscar · mapear · relacionar</small></div>
+      <div><span class="status-dot active"></span><strong>Investigación web</strong><small>Google Search grounding · fuentes visibles</small></div>
+      <div><span class="status-dot active"></span><strong>Documentos</strong><small>PDF · DOCX · TXT · MD · CSV · JSON</small></div>
+      <div><span class="status-dot active"></span><strong>Memoria avanzada</strong><small>Recuperación relevante por sesión</small></div>
+      <div><span class="status-dot active"></span><strong>Mapa del proyecto</strong><small>Estructura · importaciones · referencias</small></div>
+      <div><span class="status-dot"></span><strong>Efectos externos</strong><small>Solo con conexión y aprobación</small></div>
+    </div>
+  </aside>
 
-      <section class="layout">
-        <div class="column wide">
-          <article class="panel">
-            <div class="panel-head"><div><p class="kicker">01 · MISIÓN</p><h2>Plan de recuperación</h2></div><button class="primary" data-action="investigate">Investigar incidente</button></div>
-            <div id="plan" class="plan"></div>
-            <div class="actions"><button class="primary" data-action="recover">Ejecutar plan conservador</button><button class="warning" data-action="scale">Proponer escalado global</button></div>
-          </article>
-          <article class="panel"><div class="panel-head"><div><p class="kicker">02 · TRAZABILIDAD</p><h2>Trayectoria de misión</h2></div><span class="muted">Decisiones y resultados</span></div><ol id="trajectory" class="trajectory"></ol></article>
+  <main id="main-content" class="shell" tabindex="-1">
+    <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+    <div id="runtime-gate" class="notice runtime-gate" role="alert" hidden></div>
+
+    <section id="welcome-view" class="hero view">
+      <div class="welcome-orb" aria-hidden="true">✦</div>
+      <p class="eyebrow">SOCIO COLABORATIVO</p>
+      <h1>¿Qué quieres resolver?</h1>
+      <p class="lead">Piensa en voz alta con Gemini. Te ayudará a explorar la idea y a convertir la ambigüedad en decisiones claras.</p>
+      <form id="project-form" class="composer">
+        <label class="sr-only" for="project-description">Escribe tu mensaje para Gemini</label>
+        <textarea id="project-description" rows="1" minlength="2" maxlength="6000" required disabled placeholder="Comprobando conexión con Gemini…"></textarea>
+        <div class="composer-footer">
+          <span id="char-count">0 / 6000</span>
+          <div class="composer-controls">
+            <label class="attach-button" for="welcome-document-input" title="Adjuntar documento">＋<span>Documento</span></label>
+            <input id="welcome-document-input" class="sr-only" type="file" accept=".pdf,.docx,.txt,.md,.csv,.json,.yaml,.yml" multiple>
+            <span class="composer-hint">Enter para enviar · Shift + Enter para nueva línea</span>
+            <button class="send-button" type="submit" disabled aria-label="Enviar mensaje"><span aria-hidden="true">↑</span></button>
+          </div>
         </div>
-        <div class="column">
-          <article class="panel"><div class="panel-head"><div><p class="kicker">MEMORIA SEGURA</p><h2>Proveniencia</h2></div></div><div class="memory"><div><span class="memory-label good">VERIFICADA</span><strong id="stored-count">0</strong><p>Fuentes aceptadas</p></div><div><span class="memory-label bad">CUARENTENA</span><strong id="quarantined-count">0</strong><p>Entradas no confiables</p></div></div><div id="quarantine" class="quarantine"></div></article>
-          <article class="panel" id="approval-panel"><div class="panel-head"><div><p class="kicker">CONTROL HUMANO</p><h2>Aprobación de alto riesgo</h2></div></div><div id="approval-content" class="approval-empty">No hay acciones de alto riesgo pendientes.</div></article>
+      </form>
+      <div id="welcome-attachments" class="attachment-list" aria-live="polite"></div>
+      <div class="examples" aria-label="Ideas para comenzar">
+        <button type="button" data-example="Ayúdame a ordenar una idea que todavía no tengo clara."><span>◇</span> Aclarar una idea</button>
+        <button type="button" data-example="Quiero analizar un problema complejo antes de decidir qué hacer."><span>◎</span> Analizar un problema</button>
+        <button type="button" data-example="Necesito convertir un proceso desordenado en pasos claros."><span>⌁</span> Diseñar un proceso</button>
+      </div>
+      <p class="trust-line">Gemini puede diseñar el agente contigo. Ningún proyecto se crea sin tu confirmación.</p>
+    </section>
+
+    <section id="partner-chat-view" class="partner-chat-view view" hidden>
+      <div class="partner-chat-heading">
+        <div><p class="chat-context-label">Conversación</p><h1 id="conversation-title">Nueva conversación</h1></div>
+        <div class="chat-model-chip"><span></span><strong data-runtime-model>Gemini 3.7 Flash</strong></div>
+      </div>
+      <div id="partner-conversation" class="partner-conversation" aria-live="polite"></div>
+      <div id="partner-typing" class="partner-turn assistant-turn typing-turn" hidden>
+        <div class="partner-avatar" aria-hidden="true">✦</div>
+        <div><div class="turn-label">Gemini</div><div class="typing-dots" aria-label="Gemini está respondiendo"><span></span><span></span><span></span></div></div>
+      </div>
+      <form id="partner-message-form" class="composer partner-composer">
+        <label class="sr-only" for="partner-message-input">Responder a Gemini</label>
+        <textarea id="partner-message-input" rows="1" maxlength="6000" required disabled placeholder="Comprobando conexión con Gemini…"></textarea>
+        <div class="composer-footer">
+          <span id="partner-char-count">0 / 6000</span>
+          <div class="composer-controls">
+            <label class="attach-button" for="chat-document-input" title="Adjuntar documento">＋<span>Documento</span></label>
+            <input id="chat-document-input" class="sr-only" type="file" accept=".pdf,.docx,.txt,.md,.csv,.json,.yaml,.yml" multiple>
+            <span class="composer-hint">Enter para enviar · Shift + Enter para nueva línea</span>
+            <button class="send-button" type="submit" disabled aria-label="Enviar a Gemini"><span aria-hidden="true">↑</span></button>
+          </div>
         </div>
-      </section>
-    </main>
-    <template id="metric-template"><article class="metric"><span></span><strong></strong><small></small></article></template>
-    <script src="/app.js"></script>
-  </body>
+      </form>
+      <div id="chat-attachments" class="attachment-list" aria-live="polite"></div>
+      <p class="trust-line">Gemini diseña contigo. El Ingeniero construye solo tras tu confirmación y pide permiso antes de probar.</p>
+    </section>
+
+  </main>
+
+  <div id="loading" class="loading" role="status" aria-live="assertive" hidden><span></span><strong>Trabajando…</strong></div>
+  <footer class="shell">Gemini 3.7 Flash diseña · El Ingeniero construye con aprobación · Sin efectos externos</footer>
+  <script src="/static/app.js" defer></script>
+</body>
 </html>
