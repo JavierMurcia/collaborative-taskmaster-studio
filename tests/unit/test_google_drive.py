@@ -56,6 +56,8 @@ def test_list_folders_filters_by_folder_mime_type_and_returns_parents() -> None:
     assert "mimeType = 'application/vnd.google-apps.folder'" in query["q"][0]
     assert "parents" in query["fields"][0]
     assert result["count"] == 1
+    assert result["shown"] == 1
+    assert result["truncated"] is False
     assert result["folders"][0]["parents"] == ["root"]  # type: ignore[index]
 
 
@@ -71,3 +73,16 @@ def test_list_folders_follows_drive_pagination_with_a_bounded_limit() -> None:
 
     assert result["count"] == 2
     assert parse_qs(urlsplit(reader.urls[1]).query)["pageToken"] == ["next"]
+
+
+def test_list_folders_counts_all_scanned_items_but_bounds_prompt_payload() -> None:
+    reader = RecordingDriveReader(
+        [{"files": [{"id": f"folder-{index}", "name": f"Folder {index}"} for index in range(80)]}]
+    )
+
+    result = reader.list_folders(identity(), limit=100, display_limit=25)
+
+    assert result["count"] == 80
+    assert result["shown"] == 25
+    assert result["truncated"] is True
+    assert len(result["folders"]) == 25  # type: ignore[arg-type]

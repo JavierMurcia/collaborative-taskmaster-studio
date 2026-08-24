@@ -59,7 +59,8 @@ class GoogleDriveReader:
         identity: IdentityContext,
         query: str = "",
         *,
-        limit: int = 100,
+        limit: int = 500,
+        display_limit: int = 75,
     ) -> dict[str, object]:
         """List folders across My Drive, including nested folders and parent references."""
 
@@ -69,15 +70,17 @@ class GoogleDriveReader:
         if safe_query:
             filters.append(f"name contains '{safe_query}'")
 
-        bounded_limit = max(1, min(limit, 200))
+        bounded_limit = max(1, min(limit, 1_000))
+        bounded_display_limit = max(1, min(display_limit, 100))
         folders: list[object] = []
+        total_scanned = 0
         page_token = ""
-        while len(folders) < bounded_limit:
+        while total_scanned < bounded_limit:
             parameters: dict[str, object] = {
                 "q": " and ".join(filters),
-                "pageSize": min(100, bounded_limit - len(folders)),
+                "pageSize": min(100, bounded_limit - total_scanned),
                 "orderBy": "name_natural",
-                "fields": "nextPageToken,files(id,name,mimeType,modifiedTime,webViewLink,parents)",
+                "fields": "nextPageToken,files(id,name,modifiedTime,parents)",
                 "spaces": "drive",
             }
             if page_token:
@@ -85,7 +88,11 @@ class GoogleDriveReader:
             payload = self._json_request(f"{_FILES_ENDPOINT}?{urlencode(parameters)}", token)
             page = payload.get("files", [])
             if isinstance(page, list):
-                folders.extend(page[: bounded_limit - len(folders)])
+                accepted = page[: bounded_limit - total_scanned]
+                total_scanned += len(accepted)
+                remaining_display = bounded_display_limit - len(folders)
+                if remaining_display > 0:
+                    folders.extend(accepted[:remaining_display])
             page_token = str(payload.get("nextPageToken") or "")
             if not page_token or not page:
                 break
@@ -94,7 +101,10 @@ class GoogleDriveReader:
             "kind": "google_drive_folders",
             "query": query,
             "folders": folders,
-            "count": len(folders),
+            "count": total_scanned,
+            "shown": len(folders),
+            "truncated": total_scanned > len(folders) or bool(page_token),
+            "scan_limit_reached": bool(page_token) and total_scanned >= bounded_limit,
             "read_only": True,
         }
 

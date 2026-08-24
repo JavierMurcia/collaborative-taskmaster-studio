@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from time import perf_counter
@@ -83,6 +84,7 @@ from studio.security.credential_vault import build_credential_vault
 
 ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
+LOGGER = logging.getLogger("collaborative-taskmaster-studio")
 MAX_REQUEST_BYTES = 32_768
 MAX_DOCUMENT_REQUEST_BYTES = 8_500_000
 def _workspace_read_limit() -> int:
@@ -375,6 +377,21 @@ def create_app(
             "REQUEST_VALIDATION_FAILED",
             "La solicitud contiene campos inválidos.",
             context={"issues": error.errors()},
+        )
+
+    @app.exception_handler(Exception)
+    async def unexpected_error(request: Request, error: Exception) -> JSONResponse:
+        LOGGER.exception(
+            "Unhandled request error request_id=%s path=%s",
+            getattr(request.state, "request_id", "unknown"),
+            request.url.path,
+            exc_info=error,
+        )
+        return _error_response(
+            request,
+            500,
+            "INTERNAL_ERROR",
+            "El servidor no pudo completar la solicitud. Inténtalo nuevamente.",
         )
 
     @app.get("/health", tags=["system"])

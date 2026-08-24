@@ -40,7 +40,13 @@ async function api(path, options = {}) {
   try {
     const response = await fetch(path, { ...requestOptions, headers });
     if (response.status === 204) return {};
-    const payload = await response.json();
+    const raw = await response.text();
+    let payload = {};
+    try { payload = raw ? JSON.parse(raw) : {}; }
+    catch {
+      if (!response.ok) throw new Error("El servidor no pudo completar la solicitud. Inténtalo nuevamente.");
+      throw new Error("El servidor devolvió una respuesta inesperada.");
+    }
     if (!response.ok) throw new Error(payload.error?.message || "No se pudo completar la acción.");
     return payload;
   } finally { if (!background) setLoading(false); }
