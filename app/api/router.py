@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Annotated, Any
 
 from fastapi import APIRouter, File, Header, Query, Request, Response, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.api.schemas import (
     AgentDecisionRequest,
@@ -60,6 +60,7 @@ from studio.domain.models import AuditEvent, ProjectSnapshot
 from studio.ports.clock import Clock
 from studio.ports.repositories import EventRepository, ProjectRepository
 from studio.security import IdentityContext
+from studio.security.browser_oauth import BrowserOAuthService
 
 SessionHeader = Annotated[
     str,
@@ -180,6 +181,7 @@ class ServiceContainer:
 
 def create_router(services: ServiceContainer) -> APIRouter:
     router = APIRouter(prefix="/api/v1")
+    browser_oauth = BrowserOAuthService()
 
     @router.post("/collaborative/messages")
     def collaborative_message(
@@ -346,6 +348,23 @@ def create_router(services: ServiceContainer) -> APIRouter:
         del session_id
         return _identity(request).model_dump(mode="json")
 
+    @router.get("/collaborative/auth/google/start", include_in_schema=False)
+    def start_browser_identity() -> RedirectResponse:
+        started = browser_oauth.begin()
+        response = RedirectResponse(started.authorization_url, status_code=303)
+        response.set_cookie(
+            "studio_identity_pkce",
+            started.verifier,
+            max_age=600,
+            httponly=True,
+            secure=browser_oauth.settings.public_base_url.startswith("https://"),
+            samesite="lax",
+            path="/api/v1/collaborative/connections/oauth/callback",
+        )
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
+
     @router.get("/collaborative/connections")
     def list_collaborative_connections(
         request: Request,
@@ -375,6 +394,38 @@ def create_router(services: ServiceContainer) -> APIRouter:
         code: Annotated[str | None, Query(max_length=4_000)] = None,
         error: Annotated[str | None, Query(max_length=200)] = None,
     ) -> HTMLResponse:
+        if browser_oauth.is_identity_state(state):
+            tokens = browser_oauth.complete(
+                state=state,
+                code=code,
+                verifier=request.cookies.get("studio_identity_pkce"),
+                oauth_error=error,
+            )
+            token_script = json.dumps(tokens.id_token)
+            refresh_script = json.dumps(tokens.refresh_token)
+            html = (
+                "<!doctype html><html lang='es'><head><meta charset='utf-8'>"
+                "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+                "<title>Acceso completado</title></head><body>"
+                "<p>Acceso verificado. Regresando al Studio…</p><script>"
+                f"localStorage.setItem('taskmaster_studio_id_token',{token_script});"
+                f"localStorage.setItem('taskmaster_studio_refresh_token',{refresh_script});"
+                "window.location.replace('/?identity=connected');"
+                "</script></body></html>"
+            )
+            response = HTMLResponse(
+                html,
+                headers={
+                    "Cache-Control": "no-store",
+                    "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'",
+                    "Referrer-Policy": "no-referrer",
+                },
+            )
+            response.delete_cookie(
+                "studio_identity_pkce",
+                path="/api/v1/collaborative/connections/oauth/callback",
+            )
+            return response
         record = services.connections.complete_callback(
             state=state,
             code=code,

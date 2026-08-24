@@ -2,7 +2,6 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-import app.main as app_main
 from app.main import app
 
 client = TestClient(app)
@@ -28,47 +27,18 @@ def test_home_serves_the_chat_only_experience() -> None:
     assert "Confirmar briefing" not in response.text
     assert "Generar proyecto ADK" not in response.text
     assert "Ejecutar 3 escenarios" not in response.text
-    assert '/static/app.js?v=20260824-auth-redirect' in response.text
+    assert '/static/app.js?v=20260824-server-oauth' in response.text
 
 
-def test_identity_uses_redirect_instead_of_popup() -> None:
+def test_identity_uses_same_origin_server_oauth_instead_of_firebase_iframe() -> None:
     script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(
         encoding="utf-8"
     )
 
-    assert "getRedirectResult(auth)" in script
-    assert "signInWithRedirect(firebaseRuntime.auth, provider)" in script
+    assert 'window.location.assign("/api/v1/collaborative/auth/google/start")' in script
+    assert "firebase-auth.js" not in script
+    assert "onAuthStateChanged" not in script
     assert "signInWithPopup" not in script
-
-
-def test_firebase_auth_helper_is_proxied_on_the_studio_origin(monkeypatch) -> None:
-    observed: dict[str, object] = {}
-
-    def fake_fetch(
-        method: str,
-        helper_path: str,
-        query: str,
-        headers: dict[str, str],
-        body: bytes,
-    ) -> tuple[int, dict[str, str], bytes]:
-        observed.update(
-            method=method,
-            helper_path=helper_path,
-            query=query,
-            headers=headers,
-            body=body,
-        )
-        return 200, {"Content-Type": "text/javascript"}, b"firebase-helper"
-
-    monkeypatch.setattr(app_main, "_fetch_firebase_auth_helper", fake_fetch)
-    response = client.get("/__/auth/handler?apiKey=public-test-key")
-
-    assert response.status_code == 200
-    assert response.text == "firebase-helper"
-    assert response.headers["content-type"] == "text/javascript"
-    assert observed["method"] == "GET"
-    assert observed["helper_path"] == "auth/handler"
-    assert observed["query"] == "apiKey=public-test-key"
 
 
 def test_meta_reports_h10_10_with_firestore_disabled() -> None:

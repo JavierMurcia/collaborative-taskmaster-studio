@@ -5,6 +5,7 @@ const PROJECT_KEY = "taskmaster_studio_project";
 const PARTNER_CHAT_KEY = "taskmaster_studio_partner_chat";
 const PARTNER_CONVERSATIONS_KEY = "taskmaster_studio_conversations";
 const ID_TOKEN_KEY = "taskmaster_studio_id_token";
+const REFRESH_TOKEN_KEY = "taskmaster_studio_refresh_token";
 const CONNECTION_CATALOG = [
   { plugin_id: "google.drive", title: "Google Drive", provider: "Google" },
   { plugin_id: "google.gmail", title: "Gmail", provider: "Google" },
@@ -13,7 +14,6 @@ const CONNECTION_CATALOG = [
 ];
 const sessionId = localStorage.getItem(SESSION_KEY) || `browser_${crypto.randomUUID().replaceAll("-", "")}`;
 localStorage.setItem(SESSION_KEY, sessionId);
-let firebaseRuntime = null;
 function conversationStorageKey(owner = state?.identity?.user_id || sessionId) { return `${PARTNER_CONVERSATIONS_KEY}:${owner}`; }
 
 const restoredConversations = readPartnerConversations(sessionId);
@@ -51,12 +51,17 @@ function handle(error) { console.error(error); notify(error.message || "Ocurrió
 
 function showOAuthReturnNotice() {
   const parameters = new URLSearchParams(window.location.search);
+  const identity = parameters.get("identity");
+  if (identity === "connected") notify("Tu espacio personal quedó abierto con Google.", "success");
+  else if (identity === "error") notify("No se pudo completar el acceso con Google.", "error");
   const outcome = parameters.get("connection");
-  if (!outcome) return;
-  const provider = parameters.get("provider") === "google.drive" ? "Google Drive" : "el servicio";
-  if (outcome === "connected") notify(`${provider} quedó conectado con permisos de solo lectura.`, "success");
-  else notify(`No se pudo completar la conexión con ${provider}. Puedes reintentarlo desde Conexiones.`, "error");
-  parameters.delete("connection"); parameters.delete("provider");
+  if (outcome) {
+    const provider = parameters.get("provider") === "google.drive" ? "Google Drive" : "el servicio";
+    if (outcome === "connected") notify(`${provider} quedó conectado con permisos de solo lectura.`, "success");
+    else notify(`No se pudo completar la conexión con ${provider}. Puedes reintentarlo desde Conexiones.`, "error");
+  }
+  if (!identity && !outcome) return;
+  parameters.delete("identity"); parameters.delete("connection"); parameters.delete("provider");
   const query = parameters.toString();
   window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
 }
@@ -102,50 +107,28 @@ function chatIsReady() { return state.runtimeLoaded && state.authReady && state.
 async function initializeIdentity() {
   const button = $("#identity-action");
   if (state.identityConfig.mode !== "identity_platform") { state.authReady = true; button.hidden = true; return; }
-  const config = state.identityConfig.firebase_config || {};
-  if (!config.apiKey || !config.authDomain || !config.projectId || !config.appId) {
-    state.authReady = false; button.hidden = false; button.textContent = "Acceso no configurado"; button.disabled = true; return;
-  }
+  state.authReady = false; button.hidden = false; button.disabled = false; button.textContent = "Iniciar con Google";
+  const idToken = localStorage.getItem(ID_TOKEN_KEY);
+  if (!idToken) return;
   try {
-    const [{ initializeApp }, authModule] = await Promise.all([
-      import("https://www.gstatic.com/firebasejs/11.2.0/firebase-app.js"),
-      import("https://www.gstatic.com/firebasejs/11.2.0/firebase-auth.js"),
-    ]);
-    const auth = authModule.getAuth(initializeApp(config));
-    firebaseRuntime = { auth, ...authModule };
-    try {
-      await authModule.getRedirectResult(auth);
-    } catch (error) {
-      console.error(error);
-      notify("Google no pudo completar el inicio de sesión. Inténtalo de nuevo.", "error");
-    }
-    await new Promise((resolve) => authModule.onAuthStateChanged(auth, async (user) => {
-      state.authReady = Boolean(user);
-      button.hidden = false; button.disabled = false;
-      button.textContent = user ? (user.email || "Cerrar sesión") : "Iniciar con Google";
-      if (user) {
-        localStorage.setItem(ID_TOKEN_KEY, await user.getIdToken());
-        state.identity = { user_id: user.uid, email: user.email, authenticated: true };
-        state.partnerConversations = readPartnerConversations(user.uid);
-        const active = state.partnerConversations[0]; state.activeConversationId = active?.id || null; state.partnerMessages = active ? [...active.messages] : [];
-      } else {
-        localStorage.removeItem(ID_TOKEN_KEY); state.identity = null; state.partnerConversations = []; state.activeConversationId = null; state.partnerMessages = [];
-      }
-      resolve();
-    }, () => { state.authReady = false; resolve(); }));
-  } catch (error) { console.error(error); state.authReady = false; button.hidden = false; button.textContent = "No se pudo iniciar sesión"; button.disabled = true; }
+    const response = await fetch("/api/v1/collaborative/identity", { headers: identityHeaders() });
+    if (!response.ok) throw new Error("identity token rejected");
+    const user = await response.json();
+    state.authReady = true; state.identity = user;
+    button.textContent = user.email || "Cerrar sesión";
+    state.partnerConversations = readPartnerConversations(user.user_id);
+    const active = state.partnerConversations[0]; state.activeConversationId = active?.id || null; state.partnerMessages = active ? [...active.messages] : [];
+  } catch (error) {
+    console.warn("Stored identity expired.", error);
+    localStorage.removeItem(ID_TOKEN_KEY); localStorage.removeItem(REFRESH_TOKEN_KEY); state.identity = null;
+  }
 }
 
 async function handleIdentityAction() {
-  if (!firebaseRuntime) return;
-  if (firebaseRuntime.auth.currentUser) {
-    await firebaseRuntime.signOut(firebaseRuntime.auth); localStorage.removeItem(ID_TOKEN_KEY); window.location.reload(); return;
+  if (state.identity?.authenticated) {
+    localStorage.removeItem(ID_TOKEN_KEY); localStorage.removeItem(REFRESH_TOKEN_KEY); window.location.reload(); return;
   }
-  try {
-    const provider = new firebaseRuntime.GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: "select_account" });
-    await firebaseRuntime.signInWithRedirect(firebaseRuntime.auth, provider);
-  } catch (error) { handle(new Error("No se completó el inicio de sesión con Google.")); }
+  window.location.assign("/api/v1/collaborative/auth/google/start");
 }
 
 async function createProject(event) {

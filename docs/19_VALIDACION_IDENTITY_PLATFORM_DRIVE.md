@@ -52,14 +52,14 @@ tokens ni identificadores sensibles.
 
 ## Corrección de compatibilidad del acceso
 
-Durante el primer recorrido en el navegador integrado, `signInWithPopup` dejó abierto el
-intermediario de Firebase sin completar la selección de cuenta. El cliente web utiliza ahora
-`signInWithRedirect`, recupera explícitamente el resultado al regresar y mantiene la misma
-verificación de ID token en el servidor. Este cambio evita depender de ventanas emergentes sin
-reducir los controles de identidad.
+Durante los primeros recorridos, tanto `signInWithPopup` como el helper embebido de Firebase
+quedaron bloqueados por el aislamiento del navegador y mostraron una ventana blanca. El dominio de
+Cloud Run y los dominios locales sí estaban autorizados, por lo que el problema no era la lista de
+orígenes sino la dependencia del iframe de Firebase.
 
-El segundo recorrido reveló que el helper permanecía en `firebaseapp.com`, una configuración que
-los navegadores modernos pueden aislar cuando la aplicación vive en Cloud Run. El servicio expone
-ahora un proxy restringido para `/__/auth/*` y `/__/firebase/init.json`, y declara el dominio de
-Cloud Run como `authDomain`. De este modo, el helper se ejecuta en el mismo origen visible sin
-convertir el proxy en un destino abierto ni desactivar protecciones del navegador.
+El acceso utiliza ahora un flujo OAuth de servidor sobre el callback que ya está registrado. El
+servidor firma `state`, exige PKCE, intercambia el código directamente con Google y convierte la
+identidad del proveedor en un ID token de Identity Platform. El navegador solo recibe la sesión al
+regresar al mismo origen; el API continúa verificando el ID token y derivando el propietario sin
+aceptar identificadores enviados por el cliente. Ya no se carga el SDK de Firebase ni se crea un
+iframe de autenticación, por lo que el acceso no puede quedar esperando silenciosamente.
