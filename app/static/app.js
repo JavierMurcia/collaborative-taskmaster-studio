@@ -113,6 +113,12 @@ async function initializeIdentity() {
     ]);
     const auth = authModule.getAuth(initializeApp(config));
     firebaseRuntime = { auth, ...authModule };
+    try {
+      await authModule.getRedirectResult(auth);
+    } catch (error) {
+      console.error(error);
+      notify("Google no pudo completar el inicio de sesión. Inténtalo de nuevo.", "error");
+    }
     await new Promise((resolve) => authModule.onAuthStateChanged(auth, async (user) => {
       state.authReady = Boolean(user);
       button.hidden = false; button.disabled = false;
@@ -136,8 +142,9 @@ async function handleIdentityAction() {
     await firebaseRuntime.signOut(firebaseRuntime.auth); localStorage.removeItem(ID_TOKEN_KEY); window.location.reload(); return;
   }
   try {
-    await firebaseRuntime.signInWithPopup(firebaseRuntime.auth, new firebaseRuntime.GoogleAuthProvider());
-    window.location.reload();
+    const provider = new firebaseRuntime.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    await firebaseRuntime.signInWithRedirect(firebaseRuntime.auth, provider);
   } catch (error) { handle(new Error("No se completó el inicio de sesión con Google.")); }
 }
 

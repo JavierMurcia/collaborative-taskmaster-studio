@@ -40,7 +40,7 @@ navegador.
 
 ```dotenv
 STUDIO_AUTH_MODE=identity_platform
-STUDIO_IDENTITY_PROJECT=collaborative-taskmaster-dev
+STUDIO_IDENTITY_PROJECT=sentinel-taskmaster-dev
 STUDIO_FIREBASE_API_KEY=...
 STUDIO_FIREBASE_AUTH_DOMAIN=...
 STUDIO_FIREBASE_APP_ID=...
@@ -71,8 +71,6 @@ derivada de espacio, usuario y plugin, por lo que una cuenta nunca puede recuper
 STUDIO_PUBLIC_BASE_URL=https://SERVICIO
 STUDIO_GOOGLE_OAUTH_CLIENT_ID=...
 STUDIO_GOOGLE_OAUTH_CLIENT_SECRET=...
-STUDIO_GITHUB_OAUTH_CLIENT_ID=...
-STUDIO_GITHUB_OAUTH_CLIENT_SECRET=...
 STUDIO_OAUTH_STATE_SECRET=...
 STUDIO_OAUTH_ENCRYPTION_KEY=...
 ```
@@ -97,6 +95,27 @@ El modo local en `127.0.0.1` sigue siendo deliberadamente anónimo y no conecta 
 Para probar OAuth localmente se debe ejecutar el servidor en `identity_platform`, registrar la URI
 local exacta y proporcionar Firestore y la clave cifrada; nunca se habilita OAuth para una identidad
 local no verificada.
+
+## Estado aplicado en Google Cloud
+
+Estado comprobado el **22 de agosto de 2026** en el proyecto
+`sentinel-taskmaster-dev`:
+
+- Identity Platform inicializado;
+- proveedor `google.com` habilitado con el cliente OAuth existente;
+- aplicación web Firebase `Collaborative Taskmaster Studio Web` activa;
+- dominios Firebase, Cloud Run y desarrollo local registrados;
+- seis secretos declarados disponibles con versión numérica `1`;
+- cuenta `taskmaster-studio-runtime@sentinel-taskmaster-dev.iam.gserviceaccount.com`
+  autorizada como `Secret Accessor` únicamente en esos seis secretos;
+- imagen `auth-f222aba` construida después de ejecutar las pruebas de Cloud Build;
+- revisión Cloud Run `collaborative-taskmaster-studio-00005-w4x` sirviendo el 100 % del tráfico;
+- despliegue verificado contra el digest inmutable
+  `sha256:345afcbe0899614ad24388b5074f078276488a9581966b8a3db68578af1a981a`.
+
+La validación manual de aceptación se conserva como paso separado: iniciar sesión con un usuario de
+prueba, conectar Drive con alcance de solo lectura, leer un documento permitido, desconectar y
+comprobar que otra identidad no puede recuperar la conversación ni la conexión.
 
 ## Reglas invariables
 

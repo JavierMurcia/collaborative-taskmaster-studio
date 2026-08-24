@@ -29,6 +29,16 @@ def test_home_serves_the_chat_only_experience() -> None:
     assert "Ejecutar 3 escenarios" not in response.text
 
 
+def test_identity_uses_redirect_instead_of_popup() -> None:
+    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert "getRedirectResult(auth)" in script
+    assert "signInWithRedirect(firebaseRuntime.auth, provider)" in script
+    assert "signInWithPopup" not in script
+
+
 def test_meta_reports_h10_10_with_firestore_disabled() -> None:
     response = client.get("/api/v1/meta")
     assert response.status_code == 200
