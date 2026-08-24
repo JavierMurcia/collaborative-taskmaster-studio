@@ -34,6 +34,7 @@ ToolCapability = Literal[
     "document.search",
     "memory.recall",
     "drive.search",
+    "drive.folders",
     "drive.read",
 ]
 ToolKind = Literal[
@@ -48,6 +49,7 @@ ToolKind = Literal[
     "document_search",
     "memory",
     "drive_search",
+    "drive_folders",
     "drive_file",
     "unknown",
 ]
@@ -215,8 +217,11 @@ class CollaborativeChatService:
                     "workspace_action=related para dependencias y referencias. Usa web_search para Internet, "
                     "web_open para abrir directamente una URL explícita, "
                     "document_inspect o document_search para adjuntos, y memory_recall para contexto previo. "
-                    "Usa drive_search para buscar archivos autorizados de Google Drive y drive_read para "
-                    "leer como texto un archivo elegido por su identificador. Drive es siempre de solo lectura. "
+                    "Usa drive_search para buscar archivos autorizados de Google Drive, "
+                    "drive_list_folders para enumerar carpetas (incluidas las anidadas) y drive_read para "
+                    "leer como texto un archivo elegido por su identificador. Si el usuario pregunta cuántas "
+                    "carpetas tiene o pide listarlas, usa drive_list_folders y no busques literalmente la palabra "
+                    "'carpetas'. Drive es siempre de solo lectura. "
                     "Usa '.' para la raíz. Puedes encadenar hasta seis operaciones, "
                     "profundizando desde un listado o búsqueda hacia los archivos relevantes. Cuando tengas "
                     "evidencia suficiente usa workspace_action=none. No inventes contenido ni afirmes haberlo "
@@ -283,7 +288,8 @@ class CollaborativeChatService:
                             "type": "string",
                             "enum": [
                                 "none", "inspect", "search", "map", "related", "web_search", "web_open",
-                                "document_inspect", "document_search", "memory_recall", "drive_search", "drive_read"
+                                "document_inspect", "document_search", "memory_recall", "drive_search",
+                                "drive_list_folders", "drive_read"
                             ],
                         },
                         "workspace_query": {"type": "string", "maxLength": 120},
@@ -332,8 +338,12 @@ class CollaborativeChatService:
         web_searches = 0
         explicit_urls = _message_urls(clean_message)
         freshness_required = _requires_fresh_web(clean_message)
-        drive_requested = "drive" in clean_message.casefold() and any(
+        normalized_message = clean_message.casefold()
+        drive_requested = "drive" in normalized_message and any(
             term in clean_message.casefold() for term in ("busca", "buscar", "encuentra", "lista", "archivo", "documento")
+        )
+        drive_folders_requested = "drive" in normalized_message and any(
+            term in normalized_message for term in ("carpeta", "folder", "directorio")
         )
         for step_number in range(1, 7):
             if step_number == 1 and explicit_urls:
@@ -344,6 +354,10 @@ class CollaborativeChatService:
                 action = "web_search"
                 workspace_path = "."
                 workspace_query = clean_message[:240]
+            elif step_number == 1 and drive_folders_requested:
+                action = "drive_list_folders"
+                workspace_path = "."
+                workspace_query = ""
             elif step_number == 1 and drive_requested:
                 action = "drive_search"
                 workspace_path = "."
@@ -377,7 +391,7 @@ class CollaborativeChatService:
                 tool_result, activity = self._run_memory_tool(
                     owner_session_id, workspace_query or clean_message, conversation_id
                 )
-            elif action in {"drive_search", "drive_read"}:
+            elif action in {"drive_search", "drive_list_folders", "drive_read"}:
                 tool_result, activity = self._run_drive_tool(
                     action,
                     identity,
@@ -473,7 +487,13 @@ class CollaborativeChatService:
         file_id: str,
         query: str,
     ) -> tuple[dict[str, object], WorkspaceToolActivity]:
-        capability: ToolCapability = "drive.read" if action == "drive_read" else "drive.search"
+        capability: ToolCapability = (
+            "drive.read"
+            if action == "drive_read"
+            else "drive.folders"
+            if action == "drive_list_folders"
+            else "drive.search"
+        )
         if identity is None or self._google_drive is None:
             return self._blocked_activity(
                 capability,
@@ -485,6 +505,9 @@ class CollaborativeChatService:
             if action == "drive_read":
                 payload = self._google_drive.read(identity, file_id)
                 kind: ToolKind = "drive_file"
+            elif action == "drive_list_folders":
+                payload = self._google_drive.list_folders(identity, query)
+                kind = "drive_folders"
             else:
                 payload = self._google_drive.search(identity, query)
                 kind = "drive_search"

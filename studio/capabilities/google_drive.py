@@ -13,6 +13,7 @@ from studio.domain.errors import DomainError
 from studio.security import IdentityContext
 
 _FILES_ENDPOINT = "https://www.googleapis.com/drive/v3/files"
+_FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
 _GOOGLE_EXPORTS = {
     "application/vnd.google-apps.document": "text/plain",
     "application/vnd.google-apps.spreadsheet": "text/csv",
@@ -40,7 +41,7 @@ class GoogleDriveReader:
                 "q": " and ".join(filters),
                 "pageSize": max(1, min(limit, 25)),
                 "orderBy": "modifiedTime desc",
-                "fields": "files(id,name,mimeType,modifiedTime,size,webViewLink)",
+                "fields": "files(id,name,mimeType,modifiedTime,size,webViewLink,parents)",
                 "spaces": "drive",
             }
         )
@@ -50,6 +51,50 @@ class GoogleDriveReader:
             "kind": "google_drive_search",
             "query": query,
             "files": files if isinstance(files, list) else [],
+            "read_only": True,
+        }
+
+    def list_folders(
+        self,
+        identity: IdentityContext,
+        query: str = "",
+        *,
+        limit: int = 100,
+    ) -> dict[str, object]:
+        """List folders across My Drive, including nested folders and parent references."""
+
+        token = self._connections.access_token(identity, "google.drive")
+        safe_query = query.strip().replace("\\", "\\\\").replace("'", "\\'")
+        filters = ["trashed = false", f"mimeType = '{_FOLDER_MIME_TYPE}'"]
+        if safe_query:
+            filters.append(f"name contains '{safe_query}'")
+
+        bounded_limit = max(1, min(limit, 200))
+        folders: list[object] = []
+        page_token = ""
+        while len(folders) < bounded_limit:
+            parameters: dict[str, object] = {
+                "q": " and ".join(filters),
+                "pageSize": min(100, bounded_limit - len(folders)),
+                "orderBy": "name_natural",
+                "fields": "nextPageToken,files(id,name,mimeType,modifiedTime,webViewLink,parents)",
+                "spaces": "drive",
+            }
+            if page_token:
+                parameters["pageToken"] = page_token
+            payload = self._json_request(f"{_FILES_ENDPOINT}?{urlencode(parameters)}", token)
+            page = payload.get("files", [])
+            if isinstance(page, list):
+                folders.extend(page[: bounded_limit - len(folders)])
+            page_token = str(payload.get("nextPageToken") or "")
+            if not page_token or not page:
+                break
+
+        return {
+            "kind": "google_drive_folders",
+            "query": query,
+            "folders": folders,
+            "count": len(folders),
             "read_only": True,
         }
 
