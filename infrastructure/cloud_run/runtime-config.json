@@ -23,7 +23,7 @@
     {"name": "STUDIO_FIRESTORE_DEMO_RETENTION_DAYS", "value_template": "7", "purpose": "Bound demo-data retention."},
     {"name": "STUDIO_AUTH_MODE", "value_template": "identity_platform", "purpose": "Require a server-verified multi-user identity."},
     {"name": "STUDIO_IDENTITY_PROJECT", "value_template": "{project_id}", "purpose": "Verify Firebase ID tokens against this project."},
-    {"name": "STUDIO_FIREBASE_AUTH_DOMAIN", "value_template": "{project_id}.firebaseapp.com", "purpose": "Select the public Firebase authentication domain."},
+    {"name": "STUDIO_FIREBASE_AUTH_DOMAIN", "value_template": "collaborative-taskmaster-studio-760216344589.us-central1.run.app", "purpose": "Keep Firebase authentication helpers on the same Cloud Run origin."},
     {"name": "STUDIO_PUBLIC_BASE_URL", "value_template": "https://collaborative-taskmaster-studio-760216344589.us-central1.run.app", "purpose": "Use the exact registered OAuth redirect origin."},
     {"name": "STUDIO_ADK_ROOT_NAME", "value_template": "studio_root_agent", "purpose": "Select the validated ADK root name."},
     {"name": "STUDIO_ADK_APP_NAME", "value_template": "agents", "purpose": "Select the validated ADK application name."},

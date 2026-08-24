@@ -57,3 +57,9 @@ intermediario de Firebase sin completar la selección de cuenta. El cliente web 
 `signInWithRedirect`, recupera explícitamente el resultado al regresar y mantiene la misma
 verificación de ID token en el servidor. Este cambio evita depender de ventanas emergentes sin
 reducir los controles de identidad.
+
+El segundo recorrido reveló que el helper permanecía en `firebaseapp.com`, una configuración que
+los navegadores modernos pueden aislar cuando la aplicación vive en Cloud Run. El servicio expone
+ahora un proxy restringido para `/__/auth/*` y `/__/firebase/init.json`, y declara el dominio de
+Cloud Run como `authDomain`. De este modo, el helper se ejecuta en el mismo origen visible sin
+convertir el proxy en un destino abierto ni desactivar protecciones del navegador.

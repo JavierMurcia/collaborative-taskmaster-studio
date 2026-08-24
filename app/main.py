@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import os
+import re
+from asyncio import to_thread
 from pathlib import Path
 from time import perf_counter
 from typing import Any, cast
+from urllib.error import HTTPError, URLError
+from urllib.request import HTTPRedirectHandler, Request as UrlRequest, build_opener
 from uuid import uuid4
 
 import uvicorn
@@ -86,6 +90,69 @@ ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
 MAX_REQUEST_BYTES = 32_768
 MAX_DOCUMENT_REQUEST_BYTES = 8_500_000
+MAX_FIREBASE_HELPER_BYTES = 2_000_000
+_FIREBASE_PROJECT_PATTERN = re.compile(r"^[a-z][a-z0-9-]{4,28}[a-z0-9]$")
+_FIREBASE_RESPONSE_HEADERS = {
+    "cache-control",
+    "content-language",
+    "content-type",
+    "expires",
+    "location",
+    "pragma",
+    "set-cookie",
+    "vary",
+    "x-content-type-options",
+}
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(
+        self,
+        request: UrlRequest,
+        file_pointer: Any,
+        code: int,
+        message: str,
+        headers: Any,
+        new_url: str,
+    ) -> None:
+        return None
+
+
+def _firebase_helper_origin() -> str:
+    project_id = os.getenv("STUDIO_IDENTITY_PROJECT", "").strip()
+    if not _FIREBASE_PROJECT_PATTERN.fullmatch(project_id):
+        raise RuntimeError("Firebase helper project is not configured safely.")
+    return f"https://{project_id}.firebaseapp.com"
+
+
+def _fetch_firebase_auth_helper(
+    method: str,
+    helper_path: str,
+    query: str,
+    headers: dict[str, str],
+    body: bytes,
+) -> tuple[int, dict[str, str], bytes]:
+    target = f"{_firebase_helper_origin()}/__/{helper_path}"
+    if query:
+        target = f"{target}?{query}"
+    request = UrlRequest(target, data=body or None, headers=headers, method=method)
+    opener = build_opener(_NoRedirect())
+    try:
+        upstream = opener.open(request, timeout=15)
+    except HTTPError as error:
+        upstream = error
+    try:
+        payload = upstream.read(MAX_FIREBASE_HELPER_BYTES + 1)
+        if len(payload) > MAX_FIREBASE_HELPER_BYTES:
+            raise RuntimeError("Firebase helper response exceeded the safe limit.")
+        response_headers = {
+            name: value
+            for name, value in upstream.headers.items()
+            if name.casefold() in _FIREBASE_RESPONSE_HEADERS
+        }
+        return int(upstream.status), response_headers, payload
+    finally:
+        upstream.close()
 
 
 def _workspace_read_limit() -> int:
@@ -644,6 +711,59 @@ def create_app(
     @app.get("/", include_in_schema=False)
     async def index() -> FileResponse:
         return FileResponse(STATIC / "index.html")
+
+    @app.api_route(
+        "/__/auth/{auth_path:path}",
+        methods=["GET", "POST"],
+        include_in_schema=False,
+    )
+    async def firebase_auth_helper(auth_path: str, request: Request) -> Response:
+        forwarded_headers = {
+            "Accept": request.headers.get("Accept", "text/html,*/*"),
+            "Content-Type": request.headers.get(
+                "Content-Type", "application/x-www-form-urlencoded"
+            ),
+            "User-Agent": request.headers.get("User-Agent", "TaskmasterStudio/1.0"),
+        }
+        try:
+            status, headers, payload = await to_thread(
+                _fetch_firebase_auth_helper,
+                request.method,
+                f"auth/{auth_path}",
+                request.url.query,
+                forwarded_headers,
+                await request.body(),
+            )
+        except (RuntimeError, URLError) as error:
+            return _error_response(
+                request,
+                502,
+                "FIREBASE_AUTH_HELPER_UNAVAILABLE",
+                "No se pudo cargar el acceso seguro con Google.",
+                context={"reason": type(error).__name__},
+            )
+        return Response(content=payload, status_code=status, headers=headers)
+
+    @app.get("/__/firebase/init.json", include_in_schema=False)
+    async def firebase_init(request: Request) -> Response:
+        try:
+            status, headers, payload = await to_thread(
+                _fetch_firebase_auth_helper,
+                "GET",
+                "firebase/init.json",
+                request.url.query,
+                {"Accept": "application/json", "User-Agent": "TaskmasterStudio/1.0"},
+                b"",
+            )
+        except (RuntimeError, URLError) as error:
+            return _error_response(
+                request,
+                502,
+                "FIREBASE_AUTH_HELPER_UNAVAILABLE",
+                "No se pudo cargar la configuración pública de identidad.",
+                context={"reason": type(error).__name__},
+            )
+        return Response(content=payload, status_code=status, headers=headers)
 
     return app
 

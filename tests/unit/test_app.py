@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+import app.main as app_main
 from app.main import app
 
 client = TestClient(app)
@@ -38,6 +39,36 @@ def test_identity_uses_redirect_instead_of_popup() -> None:
     assert "getRedirectResult(auth)" in script
     assert "signInWithRedirect(firebaseRuntime.auth, provider)" in script
     assert "signInWithPopup" not in script
+
+
+def test_firebase_auth_helper_is_proxied_on_the_studio_origin(monkeypatch) -> None:
+    observed: dict[str, object] = {}
+
+    def fake_fetch(
+        method: str,
+        helper_path: str,
+        query: str,
+        headers: dict[str, str],
+        body: bytes,
+    ) -> tuple[int, dict[str, str], bytes]:
+        observed.update(
+            method=method,
+            helper_path=helper_path,
+            query=query,
+            headers=headers,
+            body=body,
+        )
+        return 200, {"Content-Type": "text/javascript"}, b"firebase-helper"
+
+    monkeypatch.setattr(app_main, "_fetch_firebase_auth_helper", fake_fetch)
+    response = client.get("/__/auth/handler?apiKey=public-test-key")
+
+    assert response.status_code == 200
+    assert response.text == "firebase-helper"
+    assert response.headers["content-type"] == "text/javascript"
+    assert observed["method"] == "GET"
+    assert observed["helper_path"] == "auth/handler"
+    assert observed["query"] == "apiKey=public-test-key"
 
 
 def test_meta_reports_h10_10_with_firestore_disabled() -> None:
