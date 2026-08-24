@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from urllib.parse import parse_qs, urlsplit
 
-from studio.capabilities.google_drive import GoogleDriveReader
+from studio.capabilities.google_drive import GoogleDriveReader, _normalize_file_id
 from studio.security import IdentityContext
 
 
@@ -86,3 +86,13 @@ def test_list_folders_counts_all_scanned_items_but_bounds_prompt_payload() -> No
     assert result["shown"] == 25
     assert result["truncated"] is True
     assert len(result["folders"]) == 25  # type: ignore[arg-type]
+
+
+def test_drive_read_normalizes_model_punctuation_around_file_id() -> None:
+    assert _normalize_file_id('“1AbC_defGhijkLMNopQRstuVwxyz-234”') == "1AbC_defGhijkLMNopQRstuVwxyz-234"
+    assert _normalize_file_id('file_id: "1AbC_defGhijkLMNopQRstuVwxyz-234"') == "1AbC_defGhijkLMNopQRstuVwxyz-234"
+
+
+def test_drive_read_rejects_ambiguous_or_human_file_names() -> None:
+    assert _normalize_file_id("PREVENCION DE ENVEJECIMIENTO") == ""
+    assert _normalize_file_id("1AbC_defGhijkLMN 2Zyx_wvuTsrqPONM") == ""

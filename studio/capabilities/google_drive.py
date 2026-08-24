@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
@@ -14,6 +15,7 @@ from studio.security import IdentityContext
 
 _FILES_ENDPOINT = "https://www.googleapis.com/drive/v3/files"
 _FOLDER_MIME_TYPE = "application/vnd.google-apps.folder"
+_DRIVE_FILE_ID = re.compile(r"[A-Za-z0-9_-]{15,200}")
 _GOOGLE_EXPORTS = {
     "application/vnd.google-apps.document": "text/plain",
     "application/vnd.google-apps.spreadsheet": "text/csv",
@@ -109,21 +111,31 @@ class GoogleDriveReader:
         }
 
     def read(self, identity: IdentityContext, file_id: str) -> dict[str, object]:
-        if not file_id or len(file_id) > 200:
+        normalized_id = _normalize_file_id(file_id)
+        if not normalized_id:
             raise DomainError("DRIVE_FILE_INVALID", "El identificador de Drive no es válido.")
         token = self._connections.access_token(identity, "google.drive")
         metadata = self._json_request(
-            f"{_FILES_ENDPOINT}/{quote(file_id, safe='')}?fields=id,name,mimeType,modifiedTime,size,webViewLink",
+            f"{_FILES_ENDPOINT}/{quote(normalized_id, safe='')}?"
+            + urlencode(
+                {
+                    "fields": "id,name,mimeType,modifiedTime,size,webViewLink",
+                    "supportsAllDrives": "true",
+                }
+            ),
             token,
         )
         mime_type = str(metadata.get("mimeType") or "")
         if mime_type in _GOOGLE_EXPORTS:
             url = (
-                f"{_FILES_ENDPOINT}/{quote(file_id, safe='')}/export?"
+                f"{_FILES_ENDPOINT}/{quote(normalized_id, safe='')}/export?"
                 + urlencode({"mimeType": _GOOGLE_EXPORTS[mime_type]})
             )
         elif mime_type.startswith(_DIRECT_MIME_PREFIXES):
-            url = f"{_FILES_ENDPOINT}/{quote(file_id, safe='')}?alt=media"
+            url = (
+                f"{_FILES_ENDPOINT}/{quote(normalized_id, safe='')}?"
+                + urlencode({"alt": "media", "supportsAllDrives": "true"})
+            )
         else:
             raise DomainError(
                 "DRIVE_FILE_TYPE_UNSUPPORTED",
@@ -150,9 +162,24 @@ class GoogleDriveReader:
         except HTTPError as error:
             if error.code in {401, 403}:
                 raise DomainError("DRIVE_ACCESS_DENIED", "Drive rechazó la credencial o el permiso solicitado.") from error
+            if error.code == 404:
+                raise DomainError(
+                    "DRIVE_FILE_NOT_FOUND",
+                    "El archivo ya no existe o no está disponible para esta cuenta.",
+                ) from error
             raise DomainError("DRIVE_REQUEST_FAILED", "No se pudo consultar Google Drive.") from error
         except (URLError, TimeoutError) as error:
             raise DomainError("DRIVE_UNAVAILABLE", "Google Drive no respondió a tiempo.") from error
         if len(payload) > self._max_read_bytes:
             raise DomainError("DRIVE_FILE_TOO_LARGE", "El archivo supera el límite de lectura segura.")
         return bytes(payload)
+
+
+def _normalize_file_id(raw_file_id: str) -> str:
+    """Recover one exact Drive id from structured-model punctuation without guessing names."""
+
+    candidate = raw_file_id.strip().strip("\"'`“”‘’.,;:()[]{}")
+    if _DRIVE_FILE_ID.fullmatch(candidate):
+        return candidate
+    matches = _DRIVE_FILE_ID.findall(candidate)
+    return matches[0] if len(matches) == 1 else ""
