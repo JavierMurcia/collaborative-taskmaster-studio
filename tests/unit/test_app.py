@@ -32,7 +32,7 @@ def test_home_serves_the_chat_only_experience() -> None:
     assert "Generar proyecto ADK" not in response.text
     assert "Ejecutar 3 escenarios" not in response.text
     assert '/static/styles.css?v=20260824-project-radar-v1' in response.text
-    assert '/static/app.js?v=20260825-new-chat-v2' in response.text
+    assert '/static/app.js?v=20260825-entry-chat-v3' in response.text
     assert response.headers["cache-control"] == "no-cache, must-revalidate"
 
 
@@ -60,6 +60,21 @@ def test_new_chat_reserves_an_independent_conversation_before_first_message() ->
 
     assert "state.activeConversationId = newConversationId()" in reset_implementation
     assert "state.activeConversationId = null" not in reset_implementation
+
+
+def test_startup_keeps_the_entry_chat_instead_of_opening_latest_history() -> None:
+    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(
+        encoding="utf-8"
+    )
+
+    state_declaration = script[script.index("const state = "):script.index("const buildPollers")]
+    memory_start = script.index("async function loadConversationMemory()")
+    memory_end = script.index("function renderConversationHistory", memory_start)
+    memory_implementation = script[memory_start:memory_end]
+
+    assert "activeConversationId: null" in state_declaration
+    assert "partnerMessages: []" in state_declaration
+    assert "if (!state.activeConversationId && state.partnerConversations.length)" not in memory_implementation
 
 
 def test_meta_reports_h10_10_with_firestore_disabled() -> None:

@@ -18,10 +18,10 @@ venv/
 generated/*
 !generated/.gitkeep
 .studio-data/
+logs/
 
 # Editors and operating systems
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
-

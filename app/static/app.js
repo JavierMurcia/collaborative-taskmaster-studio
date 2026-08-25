@@ -17,8 +17,7 @@ localStorage.setItem(SESSION_KEY, sessionId);
 function conversationStorageKey(owner = state?.identity?.user_id || sessionId) { return `${PARTNER_CONVERSATIONS_KEY}:${owner}`; }
 
 const restoredConversations = readPartnerConversations(sessionId);
-const restoredConversation = restoredConversations[0] || null;
-const state = { projectId: localStorage.getItem(PROJECT_KEY), partnerConversations: restoredConversations, activeConversationId: restoredConversation?.id || null, partnerMessages: restoredConversation?.messages || [], partnerPhase: restoredConversation?.phase || "discovery", documents: [], agents: [], connections: [], identity: null, identityConfig: { mode: "local" }, authReady: true, attachedDocumentIds: restoredConversation?.documentIds || [], partnerPending: false, runtimeLoaded: false, runtime: { mode: "local", label: "Comprobando Gemini", provider: "Vertex AI", model: "gemini-3.7-flash", model_calls_enabled: false } };
+const state = { projectId: localStorage.getItem(PROJECT_KEY), partnerConversations: restoredConversations, activeConversationId: null, partnerMessages: [], partnerPhase: "discovery", documents: [], agents: [], connections: [], identity: null, identityConfig: { mode: "local" }, authReady: true, attachedDocumentIds: [], partnerPending: false, runtimeLoaded: false, runtime: { mode: "local", label: "Comprobando Gemini", provider: "Vertex AI", model: "gemini-3.7-flash", model_calls_enabled: false } };
 const buildPollers = new Map();
 const conversationSyncTimers = new Map();
 const terminalBuildStates = new Set(["completed", "failed", "stopped"]);
@@ -147,7 +146,9 @@ async function initializeIdentity() {
     state.authReady = true; state.identity = user;
     button.textContent = user.email || "Cerrar sesión";
     state.partnerConversations = readPartnerConversations(user.user_id);
-    const active = state.partnerConversations[0]; state.activeConversationId = active?.id || null; state.partnerMessages = active ? [...active.messages] : [];
+    // Keep the entry screen on startup. Previous chats remain selectable from
+    // history, but signing in must not open the most recent one automatically.
+    state.activeConversationId = null; state.partnerMessages = []; state.partnerPhase = "discovery"; state.attachedDocumentIds = [];
   } catch (error) {
     console.warn("Stored identity expired.", error);
     localStorage.removeItem(ID_TOKEN_KEY); state.identity = null;
@@ -418,14 +419,6 @@ async function loadConversationMemory() {
       state.partnerMessages = [...active.messages];
       state.partnerPhase = active.phase || "discovery";
       state.attachedDocumentIds = [...(active.documentIds || [])];
-    }
-    if (!state.activeConversationId && state.partnerConversations.length) {
-      const first = state.partnerConversations[0];
-      state.activeConversationId = first.id;
-      state.partnerMessages = [...first.messages];
-      state.partnerPhase = first.phase || "discovery";
-      state.attachedDocumentIds = [...(first.documentIds || [])];
-      showPartnerChat(); renderPartnerConversation();
     }
     localStorage.setItem(conversationStorageKey(), JSON.stringify(state.partnerConversations));
     renderConversationHistory();
