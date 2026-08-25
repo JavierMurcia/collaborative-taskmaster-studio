@@ -27,7 +27,7 @@ def test_home_serves_the_chat_only_experience() -> None:
     assert "Confirmar briefing" not in response.text
     assert "Generar proyecto ADK" not in response.text
     assert "Ejecutar 3 escenarios" not in response.text
-    assert '/static/app.js?v=20260824-persistent-auth' in response.text
+    assert '/static/app.js?v=20260824-google-workspace' in response.text
 
 
 def test_identity_uses_same_origin_server_oauth_instead_of_firebase_iframe() -> None:

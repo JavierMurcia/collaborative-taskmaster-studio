@@ -71,9 +71,11 @@ Drive.
 - resultados interactivos con enlace de apertura y acción de lectura;
 - revocación explícita desde el panel de conexiones.
 
-Gmail, Google Calendar y GitHub permanecen declarados en el catálogo pero requieren su adaptador,
-contratos de herramientas y pruebas de mínimo privilegio antes de presentarse como conexiones
-activas.
+Gmail y Google Calendar disponen ahora de adaptadores, contratos de herramientas y pruebas de
+mínimo privilegio. Cada servicio requiere una autorización independiente y solo admite lectura:
+`gmail.readonly` para buscar y leer mensajes, y `calendar.readonly` para consultar eventos. GitHub
+permanece declarado en el catálogo, pero todavía requiere un flujo OAuth propio, adaptador y pruebas
+antes de presentarse como conexión operativa.
 
 ## Corrección de compatibilidad del acceso
 

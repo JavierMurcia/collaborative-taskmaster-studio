@@ -192,16 +192,13 @@ def default_plugin_manifests() -> tuple[PluginManifest, ...]:
             id="google.gmail",
             version="1.0.0",
             title="Gmail",
-            description="Lee o envía correo únicamente con autorización explícita.",
+            description="Busca y lee correo con una conexión individual de solo lectura.",
             provider="Google",
             auth="oauth",
             availability="connection_required",
             permissions=("https://www.googleapis.com/auth/gmail.readonly",),
             operations=(
                 _operation("read_messages", "Leer mensajes", risk="medium"),
-                _operation(
-                    "send_message", "Enviar mensaje", mode="write", risk="high", approval=True
-                ),
             ),
             keywords=("gmail", "correo", "email", "enviar mensaje"),
         ),
@@ -209,16 +206,13 @@ def default_plugin_manifests() -> tuple[PluginManifest, ...]:
             id="google.calendar",
             version="1.0.0",
             title="Google Calendar",
-            description="Consulta o modifica calendarios con control humano.",
+            description="Consulta próximos eventos con una conexión individual de solo lectura.",
             provider="Google",
             auth="oauth",
             availability="connection_required",
             permissions=("https://www.googleapis.com/auth/calendar.readonly",),
             operations=(
                 _operation("list_events", "Consultar eventos"),
-                _operation(
-                    "create_event", "Crear evento", mode="write", risk="high", approval=True
-                ),
             ),
             keywords=("calendar", "calendario", "reunión", "agenda", "evento"),
         ),

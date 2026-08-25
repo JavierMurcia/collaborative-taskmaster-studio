@@ -73,7 +73,9 @@ from studio.application.plugin_registry import PluginRegistry
 from studio.application.revision_generator import StructuredRevisionGenerator
 from studio.application.specification_generator import StructuredSpecificationGenerator
 from studio.capabilities.documents import DocumentLibrary
+from studio.capabilities.google_calendar import GoogleCalendarReader
 from studio.capabilities.google_drive import GoogleDriveReader
+from studio.capabilities.google_gmail import GoogleGmailReader
 from studio.capabilities.web import VertexWebResearcher
 from studio.capabilities.workspace import WorkspaceReader
 from studio.domain.errors import DomainError
@@ -271,6 +273,8 @@ def create_app(
         vault=credential_vault,
     )
     google_drive = GoogleDriveReader(connection_service)
+    google_gmail = GoogleGmailReader(connection_service)
+    google_calendar = GoogleCalendarReader(connection_service)
     agent_catalog = AgentCatalog(data_directory)
     builder_readiness = inspect_builder_readiness()
     output_root = generated_root or Path(os.getenv("STUDIO_GENERATED_ROOT", "generated"))
@@ -339,6 +343,8 @@ def create_app(
             document_library=document_library,
             conversation_memory=ConversationMemoryService(conversation_memory, active_clock),
             google_drive=google_drive,
+            google_gmail=google_gmail,
+            google_calendar=google_calendar,
         ),
         conversation_memory=ConversationMemoryService(conversation_memory, active_clock),
         documents=document_library,
@@ -353,6 +359,8 @@ def create_app(
         plugin_registry=plugin_registry,
         connections=connection_service,
         google_drive=google_drive,
+        google_gmail=google_gmail,
+        google_calendar=google_calendar,
         builder_readiness=builder_readiness,
     )
     app.state.services = services

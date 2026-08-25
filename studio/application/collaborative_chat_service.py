@@ -16,7 +16,9 @@ from studio.application.framework_selector import (
     select_framework,
 )
 from studio.capabilities.documents import DocumentLibrary
+from studio.capabilities.google_calendar import GoogleCalendarReader
 from studio.capabilities.google_drive import GoogleDriveReader
+from studio.capabilities.google_gmail import GoogleGmailReader
 from studio.capabilities.web import WebResearcher
 from studio.capabilities.workspace import WorkspaceReader
 from studio.domain.errors import DomainError
@@ -36,6 +38,9 @@ ToolCapability = Literal[
     "drive.search",
     "drive.folders",
     "drive.read",
+    "gmail.search",
+    "gmail.read",
+    "calendar.events",
 ]
 ToolKind = Literal[
     "file",
@@ -51,6 +56,9 @@ ToolKind = Literal[
     "drive_search",
     "drive_folders",
     "drive_file",
+    "gmail_search",
+    "gmail_message",
+    "calendar_events",
     "unknown",
 ]
 
@@ -118,6 +126,8 @@ class CollaborativeChatService:
         document_library: DocumentLibrary | None = None,
         conversation_memory: ConversationMemoryService | None = None,
         google_drive: GoogleDriveReader | None = None,
+        google_gmail: GoogleGmailReader | None = None,
+        google_calendar: GoogleCalendarReader | None = None,
     ) -> None:
         self._gateway = gateway
         self._model_name = model_name
@@ -127,6 +137,8 @@ class CollaborativeChatService:
         self._document_library = document_library
         self._conversation_memory = conversation_memory
         self._google_drive = google_drive
+        self._google_gmail = google_gmail
+        self._google_calendar = google_calendar
 
     def reply(
         self,
@@ -179,6 +191,16 @@ class CollaborativeChatService:
                 and self._google_drive is not None
                 and self._google_drive.available(identity)
             ),
+            "gmail_connected": (
+                identity is not None
+                and self._google_gmail is not None
+                and self._google_gmail.available(identity)
+            ),
+            "google_calendar_connected": (
+                identity is not None
+                and self._google_calendar is not None
+                and self._google_calendar.available(identity)
+            ),
             "terminal_access": False,
             "write_access": False,
             "current_date": current_date,
@@ -223,6 +245,11 @@ class CollaborativeChatService:
                     "leer como texto un archivo elegido por su identificador. Si el usuario pregunta cuántas "
                     "carpetas tiene o pide listarlas, usa drive_list_folders y no busques literalmente la palabra "
                     "'carpetas'. Drive es siempre de solo lectura. "
+                    "Usa gmail_search para buscar mensajes de la cuenta Gmail conectada y gmail_read para "
+                    "leer un mensaje por su identificador. Usa calendar_events para consultar próximos eventos "
+                    "de Google Calendar. Gmail y Calendar son estrictamente de solo lectura: no puedes enviar, "
+                    "archivar, borrar, responder, crear ni modificar eventos. Si no están conectados, dilo y "
+                    "pide al usuario conectar el servicio correspondiente. "
                     "Usa '.' para la raíz. Puedes encadenar hasta seis operaciones, "
                     "profundizando desde un listado o búsqueda hacia los archivos relevantes. Cuando tengas "
                     "evidencia suficiente usa workspace_action=none. No inventes contenido ni afirmes haberlo "
@@ -291,6 +318,7 @@ class CollaborativeChatService:
                                 "none", "inspect", "search", "map", "related", "web_search", "web_open",
                                 "document_inspect", "document_search", "memory_recall", "drive_search",
                                 "drive_list_folders", "drive_read"
+                                , "gmail_search", "gmail_read", "calendar_events"
                             ],
                         },
                         "workspace_query": {"type": "string", "maxLength": 120},
@@ -346,6 +374,14 @@ class CollaborativeChatService:
         drive_folders_requested = "drive" in normalized_message and any(
             term in normalized_message for term in ("carpeta", "folder", "directorio")
         )
+        gmail_requested = any(term in normalized_message for term in ("gmail", "correo", "email")) and any(
+            term in normalized_message for term in ("busca", "buscar", "encuentra", "lista", "lee", "leer", "mensaje")
+        )
+        calendar_requested = any(
+            term in normalized_message for term in ("calendar", "calendario", "agenda", "evento", "reunión", "reunion")
+        ) and any(
+            term in normalized_message for term in ("busca", "buscar", "encuentra", "lista", "próximo", "proximo", "tengo", "consulta")
+        )
         for step_number in range(1, 7):
             if step_number == 1 and explicit_urls:
                 action = "web_open"
@@ -363,6 +399,14 @@ class CollaborativeChatService:
                 action = "drive_search"
                 workspace_path = "."
                 workspace_query = _drive_query(clean_message)
+            elif step_number == 1 and gmail_requested:
+                action = "gmail_search"
+                workspace_path = "."
+                workspace_query = _gmail_query(clean_message)
+            elif step_number == 1 and calendar_requested:
+                action = "calendar_events"
+                workspace_path = "."
+                workspace_query = _calendar_query(clean_message)
             else:
                 action = str(result.payload.get("workspace_action", "none"))
                 workspace_path = str(result.payload.get("workspace_path", "")).strip() or "."
@@ -399,6 +443,15 @@ class CollaborativeChatService:
                     workspace_path,
                     workspace_query,
                 )
+            elif action in {"gmail_search", "gmail_read"}:
+                tool_result, activity = self._run_gmail_tool(
+                    action,
+                    identity,
+                    workspace_path,
+                    workspace_query,
+                )
+            elif action == "calendar_events":
+                tool_result, activity = self._run_calendar_tool(identity, workspace_query)
             else:
                 tool_result, activity = self._run_workspace_tool(
                     action, workspace_path, workspace_query
@@ -526,6 +579,62 @@ class CollaborativeChatService:
             )
         except DomainError as error:
             return self._blocked_activity(capability, file_id, query, error.message)
+
+    def _run_gmail_tool(
+        self,
+        action: str,
+        identity: IdentityContext | None,
+        message_id: str,
+        query: str,
+    ) -> tuple[dict[str, object], WorkspaceToolActivity]:
+        capability: ToolCapability = "gmail.read" if action == "gmail_read" else "gmail.search"
+        if identity is None or self._google_gmail is None:
+            return self._blocked_activity(
+                capability, message_id, query, "Gmail no está configurado para esta sesión."
+            )
+        try:
+            if action == "gmail_read":
+                payload = self._google_gmail.read(identity, message_id)
+                kind: ToolKind = "gmail_message"
+            else:
+                payload = self._google_gmail.search(identity, query)
+                kind = "gmail_search"
+            return (
+                payload,
+                WorkspaceToolActivity(
+                    capability=capability,
+                    path=message_id if action == "gmail_read" else "Gmail",
+                    query=query,
+                    status="completed",
+                    kind=kind,
+                    items=_gmail_activity_items(payload),
+                ),
+            )
+        except DomainError as error:
+            return self._blocked_activity(capability, message_id, query, error.message)
+
+    def _run_calendar_tool(
+        self, identity: IdentityContext | None, query: str
+    ) -> tuple[dict[str, object], WorkspaceToolActivity]:
+        if identity is None or self._google_calendar is None:
+            return self._blocked_activity(
+                "calendar.events", "Google Calendar", query, "Google Calendar no está configurado para esta sesión."
+            )
+        try:
+            payload = self._google_calendar.list_events(identity, query)
+            return (
+                payload,
+                WorkspaceToolActivity(
+                    capability="calendar.events",
+                    path="Google Calendar",
+                    query=query,
+                    status="completed",
+                    kind="calendar_events",
+                    items=_calendar_activity_items(payload),
+                ),
+            )
+        except DomainError as error:
+            return self._blocked_activity("calendar.events", "Google Calendar", query, error.message)
 
     def _run_workspace_tool(
         self, action: str, relative_path: str, query: str
@@ -779,6 +888,64 @@ def _drive_activity_items(payload: dict[str, object]) -> list[dict[str, str]]:
             }
         )
     return items
+
+
+def _gmail_query(message: str) -> str:
+    cleaned = re.sub(
+        r"(?i)\b(?:gmail|correo|email|mensaje|mensajes|busca(?:r)?|encuentra|lista|lee(?:r)?|mi|mis|en|el|la|los|las)\b",
+        " ",
+        message,
+    )
+    return " ".join(cleaned.split())[:120]
+
+
+def _calendar_query(message: str) -> str:
+    cleaned = re.sub(
+        r"(?i)\b(?:google\s+calendar|calendar|calendario|agenda|evento|eventos|reunión|reunion|reuniones|busca(?:r)?|encuentra|lista|consulta|próximo|proximo|tengo|mi|mis|en|el|la|los|las)\b",
+        " ",
+        message,
+    )
+    return " ".join(cleaned.split())[:120]
+
+
+def _gmail_activity_items(payload: dict[str, object]) -> list[dict[str, str]]:
+    raw_items = payload.get("messages", [])
+    if payload.get("kind") == "google_gmail_message":
+        raw_items = [payload.get("message", {})]
+    if not isinstance(raw_items, list):
+        return []
+    return [
+        {
+            "id": str(item.get("id") or "")[:200],
+            "name": str(item.get("subject") or "(sin asunto)")[:180],
+            "item_type": "email",
+            "modified_time": str(item.get("date") or "")[:80],
+            "subtitle": str(item.get("from") or "")[:180],
+            "url": "",
+            "mime_type": "message/rfc822",
+        }
+        for item in raw_items[:8]
+        if isinstance(item, dict)
+    ]
+
+
+def _calendar_activity_items(payload: dict[str, object]) -> list[dict[str, str]]:
+    raw_items = payload.get("events", [])
+    if not isinstance(raw_items, list):
+        return []
+    return [
+        {
+            "id": str(item.get("id") or "")[:200],
+            "name": str(item.get("title") or "(sin título)")[:180],
+            "item_type": "event",
+            "modified_time": str(item.get("start") or "")[:80],
+            "subtitle": str(item.get("location") or item.get("organizer") or "")[:180],
+            "url": str(item.get("html_link") or "")[:1_000],
+            "mime_type": "text/calendar",
+        }
+        for item in raw_items[:8]
+        if isinstance(item, dict)
+    ]
 
 
 def _framework_selection_ready(draft: AgentDraft) -> bool:

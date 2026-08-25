@@ -183,6 +183,13 @@ son necesarias y el usuario proporciona el contexto correspondiente:
   puede usar esa evidencia cuando su especificación declara Drive como herramienta `read_only` y el
   usuario lo solicita explícitamente. La conexión puede revocarse desde el panel izquierdo.
 
+- **Gmail por usuario:** una autorización independiente con `gmail.readonly` permite buscar mensajes,
+  mostrar remitente, asunto y fecha, y leer el contenido seleccionado. No existen operaciones para
+  enviar, responder, archivar, modificar etiquetas ni borrar correo.
+- **Google Calendar por usuario:** una autorización independiente con `calendar.readonly` permite
+  consultar próximos eventos y abrirlos en Calendar. No existen operaciones para crear, modificar ni
+  eliminar eventos.
+
 - **Investigación en Internet:** Google Search grounding y lectura directa de URLs públicas mediante
   el mismo cliente autenticado de Vertex AI. Si una página impide la lectura directa, el Studio
   realiza una búsqueda verificable por su dominio y registra el cambio de método. Las consultas
@@ -198,8 +205,8 @@ son necesarias y el usuario proporciona el contexto correspondiente:
   cuenta líneas de archivos legibles e identifica imports y referencias inversas. Permanece
   confinada al directorio autorizado, sin escritura ni ejecución de comandos.
 
-Cada uso aparece como actividad verificable en la respuesta. Las páginas, documentos, recuerdos y
-archivos inspeccionados se consideran datos no confiables y no pueden modificar las políticas del
+Cada uso aparece como actividad verificable en la respuesta. Las páginas, documentos, recuerdos,
+correos, eventos y archivos inspeccionados se consideran datos no confiables y no pueden modificar las políticas del
 sistema. En desarrollo local, los documentos extraídos se guardan bajo `.studio-data`; en una
 instancia efímera de Cloud Run deben tratarse como datos temporales hasta conectar almacenamiento
 duradero específico para adjuntos.

@@ -55,7 +55,9 @@ from studio.application.project_service import ProjectService
 from studio.application.revision_generator import StructuredRevisionGenerator
 from studio.application.specification_generator import StructuredSpecificationGenerator
 from studio.capabilities.documents import MAX_UPLOAD_BYTES, DocumentLibrary
+from studio.capabilities.google_calendar import GoogleCalendarReader
 from studio.capabilities.google_drive import GoogleDriveReader
+from studio.capabilities.google_gmail import GoogleGmailReader
 from studio.domain.errors import DomainError
 from studio.domain.models import AuditEvent, ProjectSnapshot
 from studio.ports.clock import Clock
@@ -95,6 +97,8 @@ class ServiceContainer:
     plugin_registry: PluginRegistry
     connections: ConnectionService
     google_drive: GoogleDriveReader | None
+    google_gmail: GoogleGmailReader | None
+    google_calendar: GoogleCalendarReader | None
     builder_readiness: BuilderReadiness
     repository: ProjectRepository
     events: EventRepository
@@ -123,6 +127,8 @@ class ServiceContainer:
         plugin_registry: PluginRegistry | None = None,
         connections: ConnectionService | None = None,
         google_drive: GoogleDriveReader | None = None,
+        google_gmail: GoogleGmailReader | None = None,
+        google_calendar: GoogleCalendarReader | None = None,
         builder_readiness: BuilderReadiness | None = None,
     ) -> ServiceContainer:
         if agent_runtime is None:
@@ -177,6 +183,8 @@ class ServiceContainer:
             plugin_registry=active_registry,
             connections=connections,
             google_drive=google_drive,
+            google_gmail=google_gmail,
+            google_calendar=google_calendar,
             builder_readiness=builder_readiness or inspect_builder_readiness(),
             repository=repository,
             events=events,
@@ -539,6 +547,46 @@ def create_router(services: ServiceContainer) -> APIRouter:
         if services.google_drive is None:
             raise DomainError("DRIVE_UNAVAILABLE", "La lectura de Drive no está configurada.")
         return services.google_drive.read(_identity(request), file_id)
+
+    @router.get("/collaborative/connections/google.gmail/messages")
+    def search_google_gmail(
+        request: Request,
+        session_id: SessionHeader,
+        query: Annotated[str, Query(max_length=120)] = "",
+        limit: Annotated[int, Query(ge=1, le=20)] = 10,
+    ) -> dict[str, object]:
+        del session_id
+        if services.google_gmail is None:
+            raise DomainError("GMAIL_UNAVAILABLE", "La lectura de Gmail no está configurada.")
+        return services.google_gmail.search(_identity(request), query, limit=limit)
+
+    @router.get("/collaborative/connections/google.gmail/messages/{message_id}")
+    def read_google_gmail_message(
+        message_id: str,
+        request: Request,
+        session_id: SessionHeader,
+    ) -> dict[str, object]:
+        del session_id
+        if services.google_gmail is None:
+            raise DomainError("GMAIL_UNAVAILABLE", "La lectura de Gmail no está configurada.")
+        return services.google_gmail.read(_identity(request), message_id)
+
+    @router.get("/collaborative/connections/google.calendar/events")
+    def list_google_calendar_events(
+        request: Request,
+        session_id: SessionHeader,
+        query: Annotated[str, Query(max_length=120)] = "",
+        days: Annotated[int, Query(ge=1, le=366)] = 30,
+        limit: Annotated[int, Query(ge=1, le=25)] = 15,
+    ) -> dict[str, object]:
+        del session_id
+        if services.google_calendar is None:
+            raise DomainError(
+                "CALENDAR_UNAVAILABLE", "La lectura de Google Calendar no está configurada."
+            )
+        return services.google_calendar.list_events(
+            _identity(request), query, days=days, limit=limit
+        )
 
     @router.get("/collaborative/agents")
     def list_catalog_agents(session_id: SessionHeader) -> dict[str, Any]:

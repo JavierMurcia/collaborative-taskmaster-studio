@@ -231,7 +231,7 @@ function renderToolActivity(activity) {
 
 function renderDriveItems(items) {
   if (!Array.isArray(items) || !items.length) return "";
-  return `<div class="drive-result-grid">${items.map((item) => { const isFolder = item.item_type === "folder"; const date = item.modified_time ? new Date(item.modified_time).toLocaleDateString("es-CO") : ""; return `<article class="drive-result-card"><span class="drive-result-icon">${isFolder ? "▰" : "▤"}</span><div><strong>${escapeHtml(item.name || "Elemento de Drive")}</strong><small>${escapeHtml(isFolder ? "Carpeta" : "Documento")}${date ? ` · ${escapeHtml(date)}` : ""}</small></div><div class="drive-result-actions">${item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">Abrir</a>` : ""}${!isFolder && item.id ? `<button type="button" data-drive-read-id="${escapeHtml(item.id)}" data-drive-read-name="${escapeHtml(item.name || "documento")}">Leer</button>` : ""}</div></article>`; }).join("")}</div>`;
+  return `<div class="drive-result-grid">${items.map((item) => { const type = item.item_type || "file"; const isFolder = type === "folder"; const isEmail = type === "email"; const isEvent = type === "event"; const parsedDate = item.modified_time ? new Date(item.modified_time) : null; const date = parsedDate && !Number.isNaN(parsedDate.valueOf()) ? parsedDate.toLocaleString("es-CO", { dateStyle: "medium", timeStyle: isEvent ? "short" : undefined }) : (item.modified_time || ""); const label = isFolder ? "Carpeta" : isEmail ? (item.subtitle || "Correo") : isEvent ? (item.subtitle || "Evento") : "Documento"; const icon = isFolder ? "▰" : isEmail ? "✉" : isEvent ? "◫" : "▤"; return `<article class="drive-result-card"><span class="drive-result-icon">${icon}</span><div><strong>${escapeHtml(item.name || "Resultado")}</strong><small>${escapeHtml(label)}${date ? ` · ${escapeHtml(date)}` : ""}</small></div><div class="drive-result-actions">${item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">Abrir</a>` : ""}${!isFolder && !isEvent && item.id ? `<button type="button" ${isEmail ? `data-gmail-read-id="${escapeHtml(item.id)}" data-gmail-read-subject="${escapeHtml(item.name || "correo")}"` : `data-drive-read-id="${escapeHtml(item.id)}" data-drive-read-name="${escapeHtml(item.name || "documento")}"`}>Leer</button>` : ""}</div></article>`; }).join("")}</div>`;
 }
 
 function renderConnectionOffers(offers) {
@@ -468,7 +468,7 @@ async function startConnection(pluginId) {
 
 window.addEventListener("message", async (event) => {
   if (event.origin !== window.location.origin || event.data?.type !== "studio-oauth-result") return;
-  const provider = event.data.provider === "google.drive" ? "Google Drive" : "el servicio";
+  const provider = ({ "google.drive": "Google Drive", "google.gmail": "Gmail", "google.calendar": "Google Calendar" })[event.data.provider] || "el servicio";
   if (event.data.outcome === "connected") {
     notify(`${provider} quedó conectado a esta cuenta con permisos de solo lectura.`, "success");
     await loadConnections();
@@ -588,6 +588,11 @@ function enableComposerKeyboard(textarea, submit) {
   textarea.addEventListener("input", () => { textarea.style.height = "auto"; textarea.style.height = `${Math.min(textarea.scrollHeight, 220)}px`; });
 }
 async function handlePartnerConversationAction(event) {
+  const gmailReadButton = event.target.closest("[data-gmail-read-id]");
+  if (gmailReadButton) {
+    await sendPartnerMessage(`Lee en mi Gmail el correo «${gmailReadButton.dataset.gmailReadSubject}» con id ${gmailReadButton.dataset.gmailReadId} y resume su contenido.`);
+    return;
+  }
   const driveReadButton = event.target.closest("[data-drive-read-id]");
   if (driveReadButton) {
     await sendPartnerMessage(`Lee en mi Google Drive el archivo «${driveReadButton.dataset.driveReadName}» con id ${driveReadButton.dataset.driveReadId} y resume su contenido.`);

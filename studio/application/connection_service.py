@@ -312,7 +312,10 @@ class ConnectionService:
             None,
         )
         if record is None:
-            raise DomainError("CONNECTION_REQUIRED", "Conecta Google Drive antes de utilizarlo.")
+            raise DomainError(
+                "CONNECTION_REQUIRED",
+                f"Conecta {self._connection_title(plugin_id)} antes de utilizarlo.",
+            )
         credential = self._vault.get(self._credential_key(record))
         if not credential:
             raise DomainError("CONNECTION_CREDENTIAL_MISSING", "La conexión debe autorizarse nuevamente.")
@@ -354,6 +357,10 @@ class ConnectionService:
         if manifest is None or manifest.auth != "oauth":
             raise DomainError("CONNECTION_UNSUPPORTED", "Este plugin no utiliza una conexión OAuth.")
         return manifest
+
+    def _connection_title(self, plugin_id: str) -> str:
+        manifest = self._registry.get(plugin_id)
+        return manifest.title if manifest is not None else "el servicio externo"
 
     def _provider_configuration(self, manifest: PluginManifest) -> tuple[str, str, str]:
         if manifest.provider == "Google":
