@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Entrevista, diseña y aprueba Taskmasters auditables.">
+  <meta name="description" content="Descubre oportunidades de proyectos de sistemas con evidencia de GitHub, Google Drive y fuentes web verificadas.">
   <title>Collaborative Taskmaster Studio</title>
-  <link rel="stylesheet" href="/static/styles.css?v=20260824-readable-files-v3">
+  <link rel="stylesheet" href="/static/styles.css?v=20260824-project-radar-v1">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Saltar al contenido</a>
@@ -40,17 +40,12 @@
       <p id="connection-empty" class="history-empty">Selecciona un servicio para conectarlo.</p>
     </section>
     <div class="capability-status">
-      <p>DISPONIBILIDAD</p>
+      <p>CAPACIDADES DEL RADAR</p>
       <div><span class="status-dot active builder"></span><strong id="identity-label">Comprobando identidad</strong><small id="identity-detail">Aislando espacio personal</small></div>
-      <div><span class="status-dot active"></span><strong>Gemini 3.7 Flash</strong><small>Socio de diseño activo</small></div>
-      <div><span class="status-dot active"></span><strong>Selector de frameworks</strong><small>ADK · GenAI SDK · Genkit · Antigravity</small></div>
-      <div><span class="status-dot active builder"></span><strong>Ingeniero de agentes</strong><small>Constructor seguro con aprobación humana</small></div>
-      <div><span class="status-dot active"></span><strong>Investigación del Studio</strong><small>Leer · buscar · mapear · relacionar</small></div>
-      <div><span class="status-dot active"></span><strong>Investigación web</strong><small>Google Search grounding · fuentes visibles</small></div>
-      <div><span class="status-dot active"></span><strong>Documentos</strong><small>PDF · DOCX · TXT · MD · CSV · JSON</small></div>
-      <div><span class="status-dot active"></span><strong>Memoria avanzada</strong><small>Recuperación relevante por sesión</small></div>
-      <div><span class="status-dot active"></span><strong>Mapa del proyecto</strong><small>Estructura · importaciones · referencias</small></div>
-      <div><span class="status-dot"></span><strong>Efectos externos</strong><small>Solo con conexión y aprobación</small></div>
+      <div><span class="status-dot active"></span><strong>Analista de oportunidades</strong><small>GitHub · Drive · tendencias verificadas</small></div>
+      <div><span class="status-dot active"></span><strong>Investigación profunda</strong><small>Fuentes visibles · actualidad · contraste</small></div>
+      <div><span class="status-dot active builder"></span><strong>Diseño y construcción</strong><small>Framework automático · aprobación humana</small></div>
+      <div><span class="status-dot"></span><strong>Efectos externos</strong><small>Bloqueados hasta autorizar cada acción</small></div>
     </div>
   </aside>
 
@@ -60,9 +55,9 @@
 
     <section id="welcome-view" class="hero view">
       <div class="welcome-orb" aria-hidden="true">✦</div>
-      <p class="eyebrow">SOCIO COLABORATIVO</p>
-      <h1>¿Qué quieres resolver?</h1>
-      <p class="lead">Piensa en voz alta con Gemini. Te ayudará a explorar la idea y a convertir la ambigüedad en decisiones claras.</p>
+      <p class="eyebrow">RADAR DE PROYECTOS · SOCIO COLABORATIVO</p>
+      <h1>¿Qué proyecto deberíamos construir?</h1>
+      <p class="lead">Gemini contrasta tu portafolio de GitHub, el contexto de tus documentos y tendencias actuales en fuentes verificables para encontrar oportunidades de sistemas con evidencia.</p>
       <form id="project-form" class="composer">
         <label class="sr-only" for="project-description">Escribe tu mensaje para Gemini</label>
         <textarea id="project-description" rows="1" minlength="2" maxlength="6000" required disabled placeholder="Comprobando conexión con Gemini…"></textarea>
@@ -77,12 +72,17 @@
         </div>
       </form>
       <div id="welcome-attachments" class="attachment-list" aria-live="polite"></div>
-      <div class="examples" aria-label="Ideas para comenzar">
-        <button type="button" data-example="Ayúdame a ordenar una idea que todavía no tengo clara."><span>◇</span> Aclarar una idea</button>
-        <button type="button" data-example="Quiero analizar un problema complejo antes de decidir qué hacer."><span>◎</span> Analizar un problema</button>
-        <button type="button" data-example="Necesito convertir un proceso desordenado en pasos claros."><span>⌁</span> Diseñar un proceso</button>
+      <div class="examples" aria-label="Análisis para comenzar">
+        <button type="button" data-example="Analiza mis repositorios de GitHub y dime qué oportunidad de proyecto complementaría mejor mi portafolio."><span>⌘</span> Analizar mi portafolio</button>
+        <button type="button" data-example="Investiga proyectos en tendencia este año en el área de sistemas y propón oportunidades respaldadas por fuentes verificadas."><span>◎</span> Investigar tendencias</button>
+        <button type="button" data-example="Revisa mis proyectos de GitHub, mis documentos de Google Drive y tendencias actuales para recomendarme qué proyecto construir."><span>◇</span> Descubrir una oportunidad</button>
       </div>
-      <p class="trust-line">Gemini puede diseñar el agente contigo. Ningún proyecto se crea sin tu confirmación.</p>
+      <div class="research-sources" aria-label="Fuentes del análisis">
+        <article><span>⌘</span><div><strong>GitHub</strong><small>Experiencia, activos y vacíos</small></div></article>
+        <article><span>▤</span><div><strong>Google Drive</strong><small>Documentos, requisitos y contexto</small></div></article>
+        <article><span>◎</span><div><strong>Web verificada</strong><small>Tendencias, adopción y fuentes</small></div></article>
+      </div>
+      <p class="trust-line">El análisis es de solo lectura. Las fuentes no disponibles se declaran y ningún proyecto se crea sin tu confirmación.</p>
     </section>
 
     <section id="partner-chat-view" class="partner-chat-view view" hidden>
@@ -116,6 +116,6 @@
 
   <div id="loading" class="loading" role="status" aria-live="assertive" hidden><span></span><strong>Trabajando…</strong></div>
   <footer class="shell">Gemini 3.7 Flash diseña · El Ingeniero construye con aprobación · Sin efectos externos</footer>
-    <script src="/static/app.js?v=20260824-readable-files-v3" defer></script>
+    <script src="/static/app.js?v=20260824-project-radar-v1" defer></script>
 </body>
 </html>

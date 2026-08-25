@@ -160,6 +160,30 @@ class RecordingGitHub:
         }
 
 
+class RecordingDrive:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    def available(self, identity: IdentityContext) -> bool:
+        return True
+
+    def search(self, identity: IdentityContext, query: str) -> dict[str, object]:
+        del identity
+        self.queries.append(query)
+        return {
+            "kind": "google_drive_search",
+            "query": query,
+            "files": [
+                {
+                    "id": "doc-1",
+                    "name": "Investigación de sistemas",
+                    "mimeType": "application/pdf",
+                }
+            ],
+            "read_only": True,
+        }
+
+
 def test_collaborative_chat_request_preserves_tool_evidence() -> None:
     request = CollaborativeChatRequest.model_validate(
         {
@@ -316,6 +340,45 @@ def test_collaborative_chat_waits_for_enough_evidence_before_selecting_framework
 
     assert result.agent_draft.readiness == 10
     assert result.agent_draft.recommended_framework is None
+
+
+def test_project_opportunity_radar_contrasts_github_drive_and_verified_web() -> None:
+    gateway = RecordingGateway(readiness=10)
+    github = RecordingGitHub()
+    drive = RecordingDrive()
+    web = RecordingWebResearcher()
+    identity = IdentityContext(
+        user_id="javier",
+        workspace_id="personal_javier",
+        authenticated=True,
+        mode="identity_platform",
+    )
+    service = CollaborativeChatService(
+        gateway,
+        "gemini-3.7-flash",
+        github=github,  # type: ignore[arg-type]
+        google_drive=drive,  # type: ignore[arg-type]
+        web_researcher=web,
+    )
+
+    result = service.reply(
+        "Revisa mi GitHub, Drive y tendencias actuales para decirme qué proyecto construir.",
+        (),
+        identity=identity,
+    )
+
+    assert github.queries == [""]
+    assert drive.queries == [""]
+    assert len(web.searches) == 1
+    assert str(date.today().year) in web.searches[0]
+    assert [item.capability for item in result.tool_activity] == [
+        "github.repositories",
+        "drive.search",
+        "web.search",
+    ]
+    assert len(gateway.requests) == 4
+    assert "accumulated_research" in gateway.requests[-1].prompt
+    assert "oportunidad recomendada" in gateway.requests[0].system_instruction
 
 
 def test_collaborative_chat_fails_closed_when_gemini_is_not_connected() -> None:

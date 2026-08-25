@@ -20,15 +20,19 @@ def test_home_serves_the_chat_only_experience() -> None:
     response = client.get("/")
     assert response.status_code == 200
     assert "Collaborative Taskmaster Studio" in response.text
-    assert "SOCIO COLABORATIVO" in response.text
+    assert "RADAR DE PROYECTOS · SOCIO COLABORATIVO" in response.text
+    assert "¿Qué proyecto deberíamos construir?" in response.text
+    assert "GitHub" in response.text
+    assert "Google Drive" in response.text
+    assert "Web verificada" in response.text
     assert "Gemini 3.7 Flash" in response.text
     assert 'id="partner-chat-view"' in response.text
     assert 'id="studio-view"' not in response.text
     assert "Confirmar briefing" not in response.text
     assert "Generar proyecto ADK" not in response.text
     assert "Ejecutar 3 escenarios" not in response.text
-    assert '/static/styles.css?v=20260824-readable-files-v3' in response.text
-    assert '/static/app.js?v=20260824-readable-files-v3' in response.text
+    assert '/static/styles.css?v=20260824-project-radar-v1' in response.text
+    assert '/static/app.js?v=20260824-project-radar-v1' in response.text
     assert response.headers["cache-control"] == "no-cache, must-revalidate"
 
 
