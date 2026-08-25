@@ -32,7 +32,7 @@ def test_home_serves_the_chat_only_experience() -> None:
     assert "Generar proyecto ADK" not in response.text
     assert "Ejecutar 3 escenarios" not in response.text
     assert '/static/styles.css?v=20260824-project-radar-v1' in response.text
-    assert '/static/app.js?v=20260825-entry-chat-v3' in response.text
+    assert '/static/app.js?v=20260825-brand-new-chat-v4' in response.text
     assert response.headers["cache-control"] == "no-cache, must-revalidate"
 
 
@@ -75,6 +75,15 @@ def test_startup_keeps_the_entry_chat_instead_of_opening_latest_history() -> Non
     assert "activeConversationId: null" in state_declaration
     assert "partnerMessages: []" in state_declaration
     assert "if (!state.activeConversationId && state.partnerConversations.length)" not in memory_implementation
+
+
+def test_brand_button_opens_an_independent_new_chat() -> None:
+    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert "function openChatHome() { resetPartnerChat(); }" in script
+    assert '$("#home-button").addEventListener("click", openChatHome)' in script
 
 
 def test_meta_reports_h10_10_with_firestore_disabled() -> None:
