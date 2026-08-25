@@ -55,6 +55,7 @@ from studio.application.project_service import ProjectService
 from studio.application.revision_generator import StructuredRevisionGenerator
 from studio.application.specification_generator import StructuredSpecificationGenerator
 from studio.capabilities.documents import MAX_UPLOAD_BYTES, DocumentLibrary
+from studio.capabilities.github import GitHubReader
 from studio.capabilities.google_calendar import GoogleCalendarReader
 from studio.capabilities.google_drive import GoogleDriveReader
 from studio.capabilities.google_gmail import GoogleGmailReader
@@ -99,6 +100,7 @@ class ServiceContainer:
     google_drive: GoogleDriveReader | None
     google_gmail: GoogleGmailReader | None
     google_calendar: GoogleCalendarReader | None
+    github: GitHubReader | None
     builder_readiness: BuilderReadiness
     repository: ProjectRepository
     events: EventRepository
@@ -129,6 +131,7 @@ class ServiceContainer:
         google_drive: GoogleDriveReader | None = None,
         google_gmail: GoogleGmailReader | None = None,
         google_calendar: GoogleCalendarReader | None = None,
+        github: GitHubReader | None = None,
         builder_readiness: BuilderReadiness | None = None,
     ) -> ServiceContainer:
         if agent_runtime is None:
@@ -185,6 +188,7 @@ class ServiceContainer:
             google_drive=google_drive,
             google_gmail=google_gmail,
             google_calendar=google_calendar,
+            github=github,
             builder_readiness=builder_readiness or inspect_builder_readiness(),
             repository=repository,
             events=events,
@@ -587,6 +591,18 @@ def create_router(services: ServiceContainer) -> APIRouter:
         return services.google_calendar.list_events(
             _identity(request), query, days=days, limit=limit
         )
+
+    @router.get("/collaborative/connections/github/repositories")
+    def list_github_repositories(
+        request: Request,
+        session_id: SessionHeader,
+        query: Annotated[str, Query(max_length=120)] = "",
+        limit: Annotated[int, Query(ge=1, le=1_000)] = 100,
+    ) -> dict[str, object]:
+        del session_id
+        if services.github is None:
+            raise DomainError("GITHUB_UNAVAILABLE", "GitHub no está configurado.")
+        return services.github.list_repositories(_identity(request), query, limit=limit)
 
     @router.get("/collaborative/agents")
     def list_catalog_agents(session_id: SessionHeader) -> dict[str, Any]:

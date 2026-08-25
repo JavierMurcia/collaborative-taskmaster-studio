@@ -17,6 +17,7 @@ from studio.application.framework_selector import (
     select_framework,
 )
 from studio.capabilities.documents import DocumentLibrary
+from studio.capabilities.github import GitHubReader
 from studio.capabilities.google_calendar import GoogleCalendarReader
 from studio.capabilities.google_drive import GoogleDriveReader
 from studio.capabilities.google_gmail import GoogleGmailReader
@@ -42,6 +43,7 @@ ToolCapability = Literal[
     "gmail.search",
     "gmail.read",
     "calendar.events",
+    "github.repositories",
 ]
 ToolKind = Literal[
     "file",
@@ -60,6 +62,7 @@ ToolKind = Literal[
     "gmail_search",
     "gmail_message",
     "calendar_events",
+    "github_repositories",
     "unknown",
 ]
 
@@ -129,6 +132,7 @@ class CollaborativeChatService:
         google_drive: GoogleDriveReader | None = None,
         google_gmail: GoogleGmailReader | None = None,
         google_calendar: GoogleCalendarReader | None = None,
+        github: GitHubReader | None = None,
         connections: ConnectionService | None = None,
     ) -> None:
         self._gateway = gateway
@@ -141,6 +145,7 @@ class CollaborativeChatService:
         self._google_drive = google_drive
         self._google_gmail = google_gmail
         self._google_calendar = google_calendar
+        self._github = github
         self._connections = connections
 
     def reply(
@@ -205,6 +210,11 @@ class CollaborativeChatService:
                 and self._google_calendar is not None
                 and self._google_calendar.available(identity)
             ),
+            "github_connected": (
+                identity is not None
+                and self._github is not None
+                and self._github.available(identity)
+            ),
             "connections": connection_facts,
             "terminal_access": False,
             "write_access": False,
@@ -255,6 +265,11 @@ class CollaborativeChatService:
                     "de Google Calendar. Gmail y Calendar son estrictamente de solo lectura: no puedes enviar, "
                     "archivar, borrar, responder, crear ni modificar eventos. Si no están conectados, dilo y "
                     "pide al usuario conectar el servicio correspondiente. "
+                    "Usa github_repositories para contar, listar o buscar los repositorios visibles para la "
+                    "conexión OAuth actual de GitHub. La herramienta es de solo lectura y no puede crear, "
+                    "modificar ni eliminar repositorios. Informa que el recuento corresponde a repositorios "
+                    "visibles para la autorización actual; no supongas acceso a repositorios privados que el "
+                    "token no devuelva. "
                     "Usa '.' para la raíz. Puedes encadenar hasta seis operaciones, "
                     "profundizando desde un listado o búsqueda hacia los archivos relevantes. Cuando tengas "
                     "evidencia suficiente usa workspace_action=none. No inventes contenido ni afirmes haberlo "
@@ -323,7 +338,8 @@ class CollaborativeChatService:
                                 "none", "inspect", "search", "map", "related", "web_search", "web_open",
                                 "document_inspect", "document_search", "memory_recall", "drive_search",
                                 "drive_list_folders", "drive_read"
-                                , "gmail_search", "gmail_read", "calendar_events"
+                                , "gmail_search", "gmail_read", "calendar_events",
+                                "github_repositories"
                             ],
                         },
                         "workspace_query": {"type": "string", "maxLength": 120},
@@ -387,6 +403,12 @@ class CollaborativeChatService:
         ) and any(
             term in normalized_message for term in ("busca", "buscar", "encuentra", "lista", "próximo", "proximo", "tengo", "consulta")
         )
+        github_requested = any(
+            term in normalized_message for term in ("github", "repositorio", "repositorios", "repo", "repos")
+        ) and any(
+            term in normalized_message
+            for term in ("cuánt", "cuant", "busca", "buscar", "encuentra", "lista", "tengo", "consulta", "muestra")
+        )
         for step_number in range(1, 7):
             if step_number == 1 and explicit_urls:
                 action = "web_open"
@@ -412,6 +434,10 @@ class CollaborativeChatService:
                 action = "calendar_events"
                 workspace_path = "."
                 workspace_query = _calendar_query(clean_message)
+            elif step_number == 1 and github_requested:
+                action = "github_repositories"
+                workspace_path = "."
+                workspace_query = _github_query(clean_message)
             else:
                 action = str(result.payload.get("workspace_action", "none"))
                 workspace_path = str(result.payload.get("workspace_path", "")).strip() or "."
@@ -457,6 +483,8 @@ class CollaborativeChatService:
                 )
             elif action == "calendar_events":
                 tool_result, activity = self._run_calendar_tool(identity, workspace_query)
+            elif action == "github_repositories":
+                tool_result, activity = self._run_github_tool(identity, workspace_query)
             else:
                 tool_result, activity = self._run_workspace_tool(
                     action, workspace_path, workspace_query
@@ -679,6 +707,34 @@ class CollaborativeChatService:
             )
         except DomainError as error:
             return self._blocked_activity("calendar.events", "Google Calendar", query, error.message)
+
+    def _run_github_tool(
+        self, identity: IdentityContext | None, query: str
+    ) -> tuple[dict[str, object], WorkspaceToolActivity]:
+        if identity is None or self._github is None:
+            return self._blocked_activity(
+                "github.repositories",
+                "GitHub",
+                query,
+                "GitHub no está configurado para esta sesión.",
+            )
+        try:
+            payload = self._github.list_repositories(identity, query)
+            return (
+                payload,
+                WorkspaceToolActivity(
+                    capability="github.repositories",
+                    path="GitHub",
+                    query=query,
+                    status="completed",
+                    kind="github_repositories",
+                    items=_github_activity_items(payload),
+                ),
+            )
+        except DomainError as error:
+            return self._blocked_activity(
+                "github.repositories", "GitHub", query, error.message
+            )
 
     def _run_workspace_tool(
         self, action: str, relative_path: str, query: str
@@ -952,17 +1008,29 @@ def _calendar_query(message: str) -> str:
     return " ".join(cleaned.split())[:120]
 
 
+def _github_query(message: str) -> str:
+    cleaned = re.sub(
+        r"(?i)\b(?:github|repositorio|repositorios|repo|repos|cuántos|cuantas|cuántas|cuantos|"
+        r"busca(?:r)?|encuentra|lista|consulta|muestra|tengo|mi|mis|en|el|la|los|las)\b",
+        " ",
+        message,
+    )
+    return " ".join(cleaned.split()).strip("¿?¡!.,;: ")[:120]
+
+
 def _asks_connection_status(message: str) -> bool:
     """Detect status questions that must be answered from authoritative metadata."""
 
     normalized = message.casefold()
+    if any(term in normalized for term in ("repositorio", "repositorios", " repo", "repos ")):
+        return False
     named_services = sum(
         term in normalized
         for term in ("google drive", "gmail", "google calendar", "github")
     )
     status_terms = (
         "conexión", "conexion", "conectad", "activo", "activa", "estado",
-        "disponible", "cuánt", "cuant", "servicios", "integraciones",
+        "disponible", "servicios", "integraciones",
     )
     return named_services >= 2 or (
         named_services >= 1 and any(term in normalized for term in status_terms)
@@ -1029,6 +1097,25 @@ def _calendar_activity_items(payload: dict[str, object]) -> list[dict[str, str]]
             "subtitle": str(item.get("location") or item.get("organizer") or "")[:180],
             "url": str(item.get("html_link") or "")[:1_000],
             "mime_type": "text/calendar",
+        }
+        for item in raw_items[:8]
+        if isinstance(item, dict)
+    ]
+
+
+def _github_activity_items(payload: dict[str, object]) -> list[dict[str, str]]:
+    raw_items = payload.get("repositories", [])
+    if not isinstance(raw_items, list):
+        return []
+    return [
+        {
+            "id": str(item.get("id") or "")[:200],
+            "name": str(item.get("full_name") or item.get("name") or "Repositorio")[:180],
+            "item_type": "repository",
+            "modified_time": str(item.get("updated_at") or "")[:80],
+            "subtitle": str(item.get("language") or item.get("description") or "")[:180],
+            "url": str(item.get("html_url") or "")[:1_000],
+            "mime_type": "application/vnd.github+json",
         }
         for item in raw_items[:8]
         if isinstance(item, dict)

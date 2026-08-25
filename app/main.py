@@ -73,6 +73,7 @@ from studio.application.plugin_registry import PluginRegistry
 from studio.application.revision_generator import StructuredRevisionGenerator
 from studio.application.specification_generator import StructuredSpecificationGenerator
 from studio.capabilities.documents import DocumentLibrary
+from studio.capabilities.github import GitHubReader
 from studio.capabilities.google_calendar import GoogleCalendarReader
 from studio.capabilities.google_drive import GoogleDriveReader
 from studio.capabilities.google_gmail import GoogleGmailReader
@@ -275,6 +276,7 @@ def create_app(
     google_drive = GoogleDriveReader(connection_service)
     google_gmail = GoogleGmailReader(connection_service)
     google_calendar = GoogleCalendarReader(connection_service)
+    github = GitHubReader(connection_service)
     agent_catalog = AgentCatalog(data_directory)
     builder_readiness = inspect_builder_readiness()
     output_root = generated_root or Path(os.getenv("STUDIO_GENERATED_ROOT", "generated"))
@@ -345,6 +347,7 @@ def create_app(
             google_drive=google_drive,
             google_gmail=google_gmail,
             google_calendar=google_calendar,
+            github=github,
             connections=connection_service,
         ),
         conversation_memory=ConversationMemoryService(conversation_memory, active_clock),
@@ -362,6 +365,7 @@ def create_app(
         google_drive=google_drive,
         google_gmail=google_gmail,
         google_calendar=google_calendar,
+        github=github,
         builder_readiness=builder_readiness,
     )
     app.state.services = services

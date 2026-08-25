@@ -130,6 +130,36 @@ class StaticConnections:
         return self.records
 
 
+class RecordingGitHub:
+    def __init__(self) -> None:
+        self.queries: list[str] = []
+
+    def available(self, identity: IdentityContext) -> bool:
+        return True
+
+    def list_repositories(
+        self, identity: IdentityContext, query: str = "", *, limit: int = 100
+    ) -> dict[str, object]:
+        del identity, limit
+        self.queries.append(query)
+        return {
+            "kind": "github_repositories",
+            "query": query,
+            "visible_repository_count": 3,
+            "matching_repository_count": 3,
+            "repositories": [
+                {
+                    "id": "1",
+                    "name": "studio",
+                    "full_name": "JavierMurcia/studio",
+                    "html_url": "https://github.com/JavierMurcia/studio",
+                    "updated_at": "2026-08-24T12:00:00Z",
+                }
+            ],
+            "read_only": True,
+        }
+
+
 def test_collaborative_chat_request_preserves_tool_evidence() -> None:
     request = CollaborativeChatRequest.model_validate(
         {
@@ -247,6 +277,35 @@ def test_collaborative_chat_reports_connection_state_from_authoritative_registry
     assert gateway.request is not None
     assert '"google.gmail"' in gateway.request.prompt
     assert '"status": "connected"' in gateway.request.prompt
+
+
+def test_collaborative_chat_counts_github_repositories_instead_of_reporting_connection_status() -> None:
+    gateway = RecordingGateway(readiness=10)
+    github = RecordingGitHub()
+    identity = IdentityContext(
+        user_id="javier",
+        workspace_id="personal_javier",
+        authenticated=True,
+        mode="identity_platform",
+    )
+    service = CollaborativeChatService(
+        gateway,
+        "gemini-3.7-flash",
+        github=github,  # type: ignore[arg-type]
+    )
+
+    result = service.reply(
+        "¿Cuántos repositorios tengo en GitHub?",
+        (),
+        identity=identity,
+    )
+
+    assert github.queries == [""]
+    assert result.tool_activity[0].capability == "github.repositories"
+    assert result.tool_activity[0].status == "completed"
+    assert "Estado verificado de tus conexiones" not in result.reply
+    assert len(gateway.requests) == 2
+    assert '"visible_repository_count": 3' in gateway.requests[-1].prompt
 
 
 def test_collaborative_chat_waits_for_enough_evidence_before_selecting_framework() -> None:
