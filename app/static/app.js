@@ -229,6 +229,22 @@ function renderToolActivity(activity) {
   return `<div class="tool-activity-list" aria-label="Actividad de herramientas">${activity.map((item) => { const detail = item.query ? `${item.path || "."} · “${item.query}”` : `${item.path || "."} · ${item.kind || "unknown"}`; return `<div class="tool-activity ${escapeHtml(item.status || "unavailable")}"><span>◇</span><div><strong>${escapeHtml(item.capability || "workspace.read")} · ${escapeHtml(labels[item.status] || "Lectura")}</strong><small>${escapeHtml(detail)}</small></div></div>${renderDriveItems(item.items)}`; }).join("")}</div>`;
 }
 
+function isDriveReadableMime(mimeType) {
+  const normalized = String(mimeType || "").toLowerCase();
+  if (normalized.startsWith("text/")) return true;
+  return new Set([
+    "application/json",
+    "application/xml",
+    "application/pdf",
+    "application/vnd.google-apps.document",
+    "application/vnd.google-apps.spreadsheet",
+    "application/vnd.google-apps.presentation",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ]).has(normalized);
+}
+
 function renderDriveItems(items) {
   if (!Array.isArray(items) || !items.length) return "";
   return `<div class="drive-result-grid">${items.map((item) => {
@@ -237,13 +253,14 @@ function renderDriveItems(items) {
     const isEmail = type === "email";
     const isEvent = type === "event";
     const isRepository = type === "repository";
+    const isImage = String(item.mime_type || "").toLowerCase().startsWith("image/");
     const parsedDate = item.modified_time ? new Date(item.modified_time) : null;
     const date = parsedDate && !Number.isNaN(parsedDate.valueOf())
       ? parsedDate.toLocaleString("es-CO", { dateStyle: "medium", timeStyle: isEvent ? "short" : undefined })
       : (item.modified_time || "");
-    const label = isFolder ? "Carpeta" : isEmail ? (item.subtitle || "Correo") : isEvent ? (item.subtitle || "Evento") : isRepository ? (item.subtitle || "Repositorio de GitHub") : "Documento";
-    const icon = isFolder ? "▰" : isEmail ? "✉" : isEvent ? "◫" : isRepository ? "⌘" : "▤";
-    const canRead = !isFolder && !isEvent && !isRepository && Boolean(item.id);
+    const label = isFolder ? "Carpeta" : isEmail ? (item.subtitle || "Correo") : isEvent ? (item.subtitle || "Evento") : isRepository ? (item.subtitle || "Repositorio de GitHub") : isImage ? "Imagen" : isDriveReadableMime(item.mime_type) ? "Documento legible" : "Archivo";
+    const icon = isFolder ? "▰" : isEmail ? "✉" : isEvent ? "◫" : isRepository ? "⌘" : isImage ? "▧" : "▤";
+    const canRead = Boolean(item.id) && (isEmail || (!isFolder && !isEvent && !isRepository && isDriveReadableMime(item.mime_type)));
     const openLabel = isRepository ? "Ver repositorio" : "Abrir";
     return `<article class="drive-result-card${isRepository ? " repository-result-card" : ""}"><span class="drive-result-icon" aria-hidden="true">${icon}</span><div class="drive-result-details"><strong title="${escapeHtml(item.name || "Resultado")}">${escapeHtml(item.name || "Resultado")}</strong><small>${escapeHtml(label)}${date ? ` · ${escapeHtml(date)}` : ""}</small></div><div class="drive-result-actions">${item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${openLabel}</a>` : ""}${canRead ? `<button type="button" ${isEmail ? `data-gmail-read-id="${escapeHtml(item.id)}" data-gmail-read-subject="${escapeHtml(item.name || "correo")}"` : `data-drive-read-id="${escapeHtml(item.id)}" data-drive-read-name="${escapeHtml(item.name || "documento")}"`}>Leer</button>` : ""}</div></article>`;
   }).join("")}</div>`;
