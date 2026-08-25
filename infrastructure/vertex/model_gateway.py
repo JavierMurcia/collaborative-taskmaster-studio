@@ -223,11 +223,23 @@ def _validator(schema: dict[str, Any]) -> Draft202012Validator:
 
 
 def _payload(response: object) -> dict[str, Any]:
+    parsed_response = getattr(response, "parsed", None)
+    if isinstance(parsed_response, dict):
+        return cast(dict[str, Any], parsed_response)
+    model_dump = getattr(parsed_response, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump(mode="json")
+        if isinstance(dumped, dict):
+            return cast(dict[str, Any], dumped)
     text = getattr(response, "text", None)
     if not isinstance(text, str) or not text.strip():
         raise DomainError("MODEL_EMPTY_RESPONSE", "Vertex AI no devolvió contenido utilizable.")
+    normalized = text.strip()
+    fenced = re.fullmatch(r"```(?:json)?\s*(\{.*\})\s*```", normalized, flags=re.DOTALL)
+    if fenced is not None:
+        normalized = fenced.group(1)
     try:
-        parsed = json.loads(text)
+        parsed = json.loads(normalized)
     except json.JSONDecodeError as error:
         raise DomainError(
             "MODEL_OUTPUT_INVALID",

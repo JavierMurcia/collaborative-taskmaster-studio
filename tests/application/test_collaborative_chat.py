@@ -90,6 +90,18 @@ class ResearchGateway(RecordingGateway):
         return result.model_copy(update={"payload": payload})
 
 
+class MalformedOnceGateway(RecordingGateway):
+    def generate_structured(self, request: ModelRequest) -> ModelResult:
+        if not self.requests:
+            self.request = request
+            self.requests.append(request)
+            raise DomainError(
+                "MODEL_OUTPUT_INVALID",
+                "Vertex AI devolvió contenido que no es JSON válido.",
+            )
+        return super().generate_structured(request)
+
+
 class RecordingWebResearcher:
     def __init__(self) -> None:
         self.searches: list[str] = []
@@ -353,6 +365,49 @@ def test_collaborative_chat_waits_for_enough_evidence_before_selecting_framework
 
     assert result.agent_draft.readiness == 10
     assert result.agent_draft.recommended_framework is None
+
+
+def test_collaborative_chat_retries_one_malformed_structured_response() -> None:
+    gateway = MalformedOnceGateway()
+    service = CollaborativeChatService(gateway, "gemini-3.7-flash")
+
+    result = service.reply("Hola", ())
+
+    assert result.reply.startswith("Entiendo")
+    assert len(gateway.requests) == 2
+    assert gateway.requests[-1].purpose == "collaborative_chat_json_repair"
+    assert "REINTENTO DE CONTRATO" in gateway.requests[-1].system_instruction
+
+
+def test_short_confirmation_continues_previous_opportunity_research() -> None:
+    gateway = RecordingGateway()
+    github = RecordingGitHub()
+    drive = RecordingDrive()
+    web = RecordingWebResearcher()
+    identity = IdentityContext(
+        user_id="javier",
+        workspace_id="personal_javier",
+        authenticated=True,
+        mode="identity_platform",
+    )
+    service = CollaborativeChatService(
+        gateway,
+        "gemini-3.7-flash",
+        github=github,  # type: ignore[arg-type]
+        google_drive=drive,  # type: ignore[arg-type]
+        web_researcher=web,
+    )
+    history = (
+        ChatTurn(role="user", content="Recomiéndame qué proyecto construir."),
+        ChatTurn(role="assistant", content="Puedo contrastar GitHub, Drive y tendencias."),
+    )
+
+    result = service.reply("procede", history, identity=identity)
+
+    assert github.queries == [""]
+    assert drive.queries == ["proyecto"]
+    assert len(web.searches) == 1
+    assert result.tool_activity
 
 
 def test_project_opportunity_radar_contrasts_github_drive_and_verified_web() -> None:

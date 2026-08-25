@@ -24,7 +24,12 @@ from studio.capabilities.google_gmail import GoogleGmailReader
 from studio.capabilities.web import WebResearcher
 from studio.capabilities.workspace import WorkspaceReader
 from studio.domain.errors import DomainError
-from studio.ports.model_gateway import ModelGateway, ModelRequest, model_metadata_details
+from studio.ports.model_gateway import (
+    ModelGateway,
+    ModelRequest,
+    ModelResult,
+    model_metadata_details,
+)
 from studio.security import IdentityContext
 
 ToolCapability = Literal[
@@ -387,7 +392,7 @@ class CollaborativeChatService:
                 max_output_tokens=self._max_output_tokens,
             temperature=0.55,
         )
-        result = self._gateway.generate_structured(request)
+        result = self._generate_structured_resilient(request)
         activities: list[WorkspaceToolActivity] = []
         if memories:
             activities.append(
@@ -423,7 +428,10 @@ class CollaborativeChatService:
             term in normalized_message
             for term in ("cuánt", "cuant", "busca", "buscar", "encuentra", "lista", "tengo", "consulta", "muestra")
         )
-        opportunity_research = _requests_project_opportunities(clean_message)
+        opportunity_research = _requests_project_opportunities(clean_message) or (
+            _continues_previous_request(clean_message)
+            and any(_requests_project_opportunities(turn.content) for turn in recent_history)
+        )
         opportunity_web_query = (
             f"tendencias actuales {date.today().year} y oportunidades verificadas de proyectos "
             "de ingeniería de software, IA, ciberseguridad, datos y sistemas; prioriza fuentes "
@@ -543,7 +551,7 @@ class CollaborativeChatService:
                     "result": tool_result,
                 }
             )
-            result = self._gateway.generate_structured(
+            result = self._generate_structured_resilient(
                 ModelRequest(
                     purpose="collaborative_chat_workspace",
                     system_instruction=request.system_instruction,
@@ -575,7 +583,7 @@ class CollaborativeChatService:
                 )
             )
         if str(result.payload.get("workspace_action", "none")) != "none":
-            result = self._gateway.generate_structured(
+            result = self._generate_structured_resilient(
                 ModelRequest(
                     purpose="collaborative_chat_workspace",
                     system_instruction=request.system_instruction,
@@ -627,6 +635,30 @@ class CollaborativeChatService:
             tool_activity=tuple(activities),
             telemetry=model_metadata_details(result.metadata),
         )
+
+    def _generate_structured_resilient(self, request: ModelRequest) -> ModelResult:
+        """Retry one malformed structured response without hiding provider outages."""
+
+        assert self._gateway is not None
+        try:
+            return self._gateway.generate_structured(request)
+        except DomainError as error:
+            if error.code != "MODEL_OUTPUT_INVALID":
+                raise
+        repair_request = ModelRequest(
+            purpose=f"{request.purpose}_json_repair",
+            system_instruction=(
+                f"{request.system_instruction}\n\n"
+                "REINTENTO DE CONTRATO: la respuesta anterior no fue JSON válido o no cumplió "
+                "el esquema. Devuelve exclusivamente un objeto JSON que cumpla exactamente "
+                "response_schema. No uses Markdown, bloques de código, comentarios ni texto externo."
+            ),
+            prompt=request.prompt,
+            response_schema=request.response_schema,
+            max_output_tokens=request.max_output_tokens,
+            temperature=0.0,
+        )
+        return self._gateway.generate_structured(repair_request)
 
     def _connection_facts(
         self, identity: IdentityContext | None
@@ -1021,6 +1053,22 @@ def _requests_project_opportunities(message: str) -> bool:
             "recomiendame un proyecto",
         )
     )
+
+
+def _continues_previous_request(message: str) -> bool:
+    """Recognize short confirmations that ask the Studio to execute its prior proposal."""
+
+    normalized = re.sub(r"[^a-záéíóúüñ]+", " ", message.casefold()).strip()
+    return normalized in {
+        "adelante",
+        "continúa",
+        "continua",
+        "hazlo",
+        "procede",
+        "sí",
+        "si",
+        "de acuerdo",
+    }
 
 
 def _first_readable_drive_file_id(payload: dict[str, object]) -> str:

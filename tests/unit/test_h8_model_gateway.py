@@ -31,6 +31,7 @@ class FakeResponse:
     response_id: str = "response-123"
     model_version: str = "gemini-3.5-flash-001"
     usage_metadata: FakeUsage | None = None
+    parsed: object | None = None
 
 
 class FakeModels:
@@ -141,6 +142,28 @@ def test_gateway_generates_and_validates_structured_output() -> None:
         "temperature": 0.1,
         "thinking_config": {"thinking_level": "MINIMAL"},
     }
+
+
+def test_gateway_prefers_sdk_parsed_structured_output() -> None:
+    client = FakeClient(FakeResponse("not json", parsed={"question": "Pregunta verificada"}))
+    gateway = VertexModelGateway(
+        settings(), readiness(), client_factory=lambda _: client, timer=timer((0.0, 0.1))
+    )
+
+    result = gateway.generate_structured(request())
+
+    assert result.payload == {"question": "Pregunta verificada"}
+
+
+def test_gateway_accepts_an_exact_json_markdown_fence() -> None:
+    client = FakeClient(FakeResponse('```json\n{"question":"Pregunta"}\n```'))
+    gateway = VertexModelGateway(
+        settings(), readiness(), client_factory=lambda _: client, timer=timer((0.0, 0.1))
+    )
+
+    result = gateway.generate_structured(request())
+
+    assert result.payload == {"question": "Pregunta"}
 
 
 def test_non_gemini_3_model_does_not_receive_thinking_level() -> None:
