@@ -26,6 +26,7 @@ from app.api.schemas import (
     FeedbackRequest,
     GenerationRequest,
     InterviewAnswerRequest,
+    RefreshIdentityRequest,
 )
 from studio.application.agent_catalog import AgentCatalog
 from studio.application.agent_runtime_service import AgentRuntimeService
@@ -61,6 +62,9 @@ from studio.ports.clock import Clock
 from studio.ports.repositories import EventRepository, ProjectRepository
 from studio.security import IdentityContext
 from studio.security.browser_oauth import BrowserOAuthService
+
+IDENTITY_REFRESH_COOKIE = "studio_identity_refresh"
+IDENTITY_REFRESH_MAX_AGE = 60 * 60 * 24 * 180
 
 SessionHeader = Annotated[
     str,
@@ -365,6 +369,39 @@ def create_router(services: ServiceContainer) -> APIRouter:
         response.headers["Referrer-Policy"] = "no-referrer"
         return response
 
+    @router.post("/collaborative/auth/refresh", include_in_schema=False)
+    def refresh_browser_identity(
+        request: Request,
+        payload: RefreshIdentityRequest | None = None,
+    ) -> Response:
+        legacy_token = payload.refresh_token if payload is not None else None
+        refresh_token = request.cookies.get(IDENTITY_REFRESH_COOKIE) or legacy_token or ""
+        tokens = browser_oauth.refresh(refresh_token)
+        response = Response(
+            content=json.dumps({"id_token": tokens.id_token}),
+            media_type="application/json",
+            headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+        )
+        response.set_cookie(
+            IDENTITY_REFRESH_COOKIE,
+            tokens.refresh_token,
+            max_age=IDENTITY_REFRESH_MAX_AGE,
+            httponly=True,
+            secure=browser_oauth.settings.public_base_url.startswith("https://"),
+            samesite="lax",
+            path="/api/v1/collaborative/auth",
+        )
+        return response
+
+    @router.post("/collaborative/auth/logout", include_in_schema=False)
+    def logout_browser_identity() -> Response:
+        response = Response(status_code=204, headers={"Cache-Control": "no-store"})
+        response.delete_cookie(
+            IDENTITY_REFRESH_COOKIE,
+            path="/api/v1/collaborative/auth",
+        )
+        return response
+
     @router.get("/collaborative/connections")
     def list_collaborative_connections(
         request: Request,
@@ -402,14 +439,13 @@ def create_router(services: ServiceContainer) -> APIRouter:
                 oauth_error=error,
             )
             token_script = json.dumps(tokens.id_token)
-            refresh_script = json.dumps(tokens.refresh_token)
             html = (
                 "<!doctype html><html lang='es'><head><meta charset='utf-8'>"
                 "<meta name='viewport' content='width=device-width,initial-scale=1'>"
                 "<title>Acceso completado</title></head><body>"
                 "<p>Acceso verificado. Regresando al Studio…</p><script>"
                 f"localStorage.setItem('taskmaster_studio_id_token',{token_script});"
-                f"localStorage.setItem('taskmaster_studio_refresh_token',{refresh_script});"
+                "localStorage.removeItem('taskmaster_studio_refresh_token');"
                 "window.location.replace('/?identity=connected');"
                 "</script></body></html>"
             )
@@ -424,6 +460,15 @@ def create_router(services: ServiceContainer) -> APIRouter:
             response.delete_cookie(
                 "studio_identity_pkce",
                 path="/api/v1/collaborative/connections/oauth/callback",
+            )
+            response.set_cookie(
+                IDENTITY_REFRESH_COOKIE,
+                tokens.refresh_token,
+                max_age=IDENTITY_REFRESH_MAX_AGE,
+                httponly=True,
+                secure=browser_oauth.settings.public_base_url.startswith("https://"),
+                samesite="lax",
+                path="/api/v1/collaborative/auth",
             )
             return response
         record = services.connections.complete_callback(

@@ -10,6 +10,7 @@ from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 from studio.application.connection_service import ConnectionService
+from studio.capabilities.documents import extract_document_text
 from studio.domain.errors import DomainError
 from studio.security import IdentityContext
 
@@ -22,12 +23,19 @@ _GOOGLE_EXPORTS = {
     "application/vnd.google-apps.presentation": "text/plain",
 }
 _DIRECT_MIME_PREFIXES = ("text/", "application/json", "application/xml")
+_BINARY_DOCUMENTS = {
+    "application/pdf": ".pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+}
+_MAX_CHAT_CHARACTERS = 24_000
 
 
 class GoogleDriveReader:
-    def __init__(self, connections: ConnectionService, *, max_read_bytes: int = 250_000) -> None:
+    def __init__(self, connections: ConnectionService, *, max_read_bytes: int = 8_388_608) -> None:
         self._connections = connections
-        self._max_read_bytes = max(1_000, min(max_read_bytes, 1_000_000))
+        self._max_read_bytes = max(1_000, min(max_read_bytes, 8_388_608))
 
     def available(self, identity: IdentityContext) -> bool:
         return self._connections.connected(identity, "google.drive")
@@ -37,7 +45,7 @@ class GoogleDriveReader:
         safe_query = query.strip().replace("\\", "\\\\").replace("'", "\\'")
         filters = ["trashed = false"]
         if safe_query:
-            filters.append(f"name contains '{safe_query}'")
+            filters.append(f"(name contains '{safe_query}' or fullText contains '{safe_query}')")
         parameters = urlencode(
             {
                 "q": " and ".join(filters),
@@ -45,6 +53,8 @@ class GoogleDriveReader:
                 "orderBy": "modifiedTime desc",
                 "fields": "files(id,name,mimeType,modifiedTime,size,webViewLink,parents)",
                 "spaces": "drive",
+                "includeItemsFromAllDrives": "true",
+                "supportsAllDrives": "true",
             }
         )
         payload = self._json_request(f"{_FILES_ENDPOINT}?{parameters}", token)
@@ -52,6 +62,7 @@ class GoogleDriveReader:
         return {
             "kind": "google_drive_search",
             "query": query,
+            "search_mode": "name_and_indexed_content",
             "files": files if isinstance(files, list) else [],
             "read_only": True,
         }
@@ -131,18 +142,34 @@ class GoogleDriveReader:
                 f"{_FILES_ENDPOINT}/{quote(normalized_id, safe='')}/export?"
                 + urlencode({"mimeType": _GOOGLE_EXPORTS[mime_type]})
             )
+            content = self._bytes_request(url, token).decode("utf-8", errors="replace")
         elif mime_type.startswith(_DIRECT_MIME_PREFIXES):
             url = (
                 f"{_FILES_ENDPOINT}/{quote(normalized_id, safe='')}?"
                 + urlencode({"alt": "media", "supportsAllDrives": "true"})
             )
+            content = self._bytes_request(url, token).decode("utf-8", errors="replace")
+        elif mime_type in _BINARY_DOCUMENTS:
+            url = (
+                f"{_FILES_ENDPOINT}/{quote(normalized_id, safe='')}?"
+                + urlencode({"alt": "media", "supportsAllDrives": "true"})
+            )
+            filename = str(metadata.get("name") or f"documento{_BINARY_DOCUMENTS[mime_type]}")
+            if not filename.casefold().endswith(_BINARY_DOCUMENTS[mime_type]):
+                filename += _BINARY_DOCUMENTS[mime_type]
+            content = extract_document_text(filename, self._bytes_request(url, token))
         else:
             raise DomainError(
                 "DRIVE_FILE_TYPE_UNSUPPORTED",
                 "Este tipo de archivo no puede leerse como texto dentro del chat.",
             )
-        content = self._bytes_request(url, token).decode("utf-8", errors="replace")
-        return {"kind": "google_drive_file", "metadata": metadata, "content": content, "read_only": True}
+        return {
+            "kind": "google_drive_file",
+            "metadata": metadata,
+            "content": content[:_MAX_CHAT_CHARACTERS],
+            "content_truncated": len(content) > _MAX_CHAT_CHARACTERS,
+            "read_only": True,
+        }
 
     def _json_request(self, url: str, token: str) -> dict[str, Any]:
         raw = self._bytes_request(url, token)

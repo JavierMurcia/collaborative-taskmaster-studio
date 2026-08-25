@@ -90,6 +90,7 @@ class WorkspaceToolActivity(ChatModel):
     query: str = ""
     status: Literal["completed", "blocked", "unavailable"]
     kind: ToolKind = "unknown"
+    items: list[dict[str, str]] = Field(default_factory=list, max_length=8)
 
 
 class CollaborativeChatResult(ChatModel):
@@ -511,6 +512,7 @@ class CollaborativeChatService:
             else:
                 payload = self._google_drive.search(identity, query)
                 kind = "drive_search"
+            items = _drive_activity_items(payload)
             return (
                 payload,
                 WorkspaceToolActivity(
@@ -519,6 +521,7 @@ class CollaborativeChatService:
                     query=query,
                     status="completed",
                     kind=kind,
+                    items=items,
                 ),
             )
         except DomainError as error:
@@ -740,6 +743,42 @@ def _drive_query(message: str) -> str:
         message,
     )
     return " ".join(cleaned.split())[:120]
+
+
+def _drive_activity_items(payload: dict[str, object]) -> list[dict[str, str]]:
+    """Expose only compact, non-secret Drive metadata to the interactive chat UI."""
+
+    raw_items: object
+    if payload.get("kind") == "google_drive_file":
+        raw_items = [payload.get("metadata", {})]
+    else:
+        raw_items = payload.get("files", payload.get("folders", []))
+    if not isinstance(raw_items, list):
+        return []
+    items: list[dict[str, str]] = []
+    for raw in raw_items[:8]:
+        if not isinstance(raw, dict):
+            continue
+        file_id = str(raw.get("id") or "")[:200]
+        mime_type = str(raw.get("mimeType") or "")[:180]
+        link = str(raw.get("webViewLink") or "")[:1_000]
+        if not link and file_id:
+            link = (
+                f"https://drive.google.com/drive/folders/{file_id}"
+                if mime_type == "application/vnd.google-apps.folder"
+                else f"https://drive.google.com/open?id={file_id}"
+            )
+        items.append(
+            {
+                "id": file_id,
+                "name": str(raw.get("name") or "Elemento de Drive")[:180],
+                "mime_type": mime_type,
+                "modified_time": str(raw.get("modifiedTime") or "")[:40],
+                "url": link,
+                "item_type": "folder" if mime_type == "application/vnd.google-apps.folder" else "file",
+            }
+        )
+    return items
 
 
 def _framework_selection_ready(draft: AgentDraft) -> bool:

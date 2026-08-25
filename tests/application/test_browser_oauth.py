@@ -74,3 +74,26 @@ def test_browser_oauth_rejects_tampered_state() -> None:
         )
 
     assert captured.value.code == "OAUTH_STATE_INVALID"
+
+
+def test_browser_oauth_refreshes_identity_platform_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = BrowserOAuthService(settings())
+    captured: dict[str, object] = {}
+
+    def fake_post(url: str, values: dict[str, str]) -> dict[str, str]:
+        captured.update({"url": url, "values": values})
+        return {"id_token": "fresh-id-token", "refresh_token": "rotated-refresh-token"}
+
+    monkeypatch.setattr(service, "_form_post_json", fake_post)
+
+    tokens = service.refresh("stored-refresh-token-with-enough-length")
+
+    assert tokens.id_token == "fresh-id-token"
+    assert tokens.refresh_token == "rotated-refresh-token"
+    assert "securetoken.googleapis.com" in str(captured["url"])
+    assert captured["values"] == {
+        "grant_type": "refresh_token",
+        "refresh_token": "stored-refresh-token-with-enough-length",
+    }

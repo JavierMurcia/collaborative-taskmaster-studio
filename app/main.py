@@ -12,7 +12,7 @@ from uuid import uuid4
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
@@ -130,6 +130,8 @@ class IdentityMiddleware(BaseHTTPMiddleware):
         public_paths = {
             "/api/v1/meta",
             "/api/v1/collaborative/auth/google/start",
+            "/api/v1/collaborative/auth/refresh",
+            "/api/v1/collaborative/auth/logout",
             "/api/v1/collaborative/connections/oauth/callback",
         }
         protected = path.startswith("/api/v1/") and path not in public_paths

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+import zipfile
 from urllib.parse import parse_qs, urlsplit
 
 from studio.capabilities.google_drive import GoogleDriveReader, _normalize_file_id
@@ -96,3 +98,41 @@ def test_drive_read_normalizes_model_punctuation_around_file_id() -> None:
 def test_drive_read_rejects_ambiguous_or_human_file_names() -> None:
     assert _normalize_file_id("PREVENCION DE ENVEJECIMIENTO") == ""
     assert _normalize_file_id("1AbC_defGhijkLMN 2Zyx_wvuTsrqPONM") == ""
+
+
+def test_search_uses_names_and_indexed_content_across_drives() -> None:
+    reader = RecordingDriveReader([{"files": []}])
+
+    result = reader.search(identity(), "Taskmaster")
+
+    query = parse_qs(urlsplit(reader.urls[0]).query)
+    assert "name contains 'Taskmaster'" in query["q"][0]
+    assert "fullText contains 'Taskmaster'" in query["q"][0]
+    assert query["includeItemsFromAllDrives"] == ["true"]
+    assert result["search_mode"] == "name_and_indexed_content"
+
+
+def test_drive_reads_docx_with_safe_text_extraction() -> None:
+    payload = io.BytesIO()
+    with zipfile.ZipFile(payload, "w") as archive:
+        archive.writestr(
+            "word/document.xml",
+            '<w:document xmlns:w="urn:test"><w:body><w:p><w:r><w:t>Contrato SaaS</w:t></w:r></w:p></w:body></w:document>',
+        )
+
+    class BinaryReader(RecordingDriveReader):
+        def _bytes_request(self, url: str, token: str) -> bytes:
+            assert "alt=media" in url
+            return payload.getvalue()
+
+    reader = BinaryReader(
+        [{
+            "id": "1AbC_defGhijkLMNopQRstuVwxyz-234",
+            "name": "contrato.docx",
+            "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        }]
+    )
+
+    result = reader.read(identity(), "1AbC_defGhijkLMNopQRstuVwxyz-234")
+
+    assert result["content"] == "Contrato SaaS"

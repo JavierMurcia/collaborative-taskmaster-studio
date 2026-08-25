@@ -30,6 +30,22 @@ function identityHeaders(extra = {}) {
   if (idToken) headers.Authorization = `Bearer ${idToken}`;
   return headers;
 }
+async function refreshIdentitySession() {
+  const legacyRefreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+  const options = {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(legacyRefreshToken ? { refresh_token: legacyRefreshToken } : {}),
+  };
+  const response = await fetch("/api/v1/collaborative/auth/refresh", options);
+  if (!response.ok) return false;
+  const payload = await response.json();
+  if (!payload.id_token) return false;
+  localStorage.setItem(ID_TOKEN_KEY, payload.id_token);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  return true;
+}
 async function api(path, options = {}) {
   const background = Boolean(options.background);
   const requestOptions = { ...options }; delete requestOptions.background;
@@ -38,7 +54,10 @@ async function api(path, options = {}) {
   if (options.idempotent) headers["Idempotency-Key"] = operationKey(options.idempotent);
   if (!background) setLoading(true);
   try {
-    const response = await fetch(path, { ...requestOptions, headers });
+    let response = await fetch(path, { ...requestOptions, headers, credentials: "same-origin" });
+    if (response.status === 401 && path !== "/api/v1/collaborative/auth/refresh" && await refreshIdentitySession()) {
+      response = await fetch(path, { ...requestOptions, headers: identityHeaders(options.headers || {}), credentials: "same-origin" });
+    }
     if (response.status === 204) return {};
     const raw = await response.text();
     let payload = {};
@@ -114,10 +133,14 @@ async function initializeIdentity() {
   const button = $("#identity-action");
   if (state.identityConfig.mode !== "identity_platform") { state.authReady = true; button.hidden = true; return; }
   state.authReady = false; button.hidden = false; button.disabled = false; button.textContent = "Iniciar con Google";
-  const idToken = localStorage.getItem(ID_TOKEN_KEY);
+  let idToken = localStorage.getItem(ID_TOKEN_KEY);
+  if (!idToken && await refreshIdentitySession()) idToken = localStorage.getItem(ID_TOKEN_KEY);
   if (!idToken) return;
   try {
-    const response = await fetch("/api/v1/collaborative/identity", { headers: identityHeaders() });
+    let response = await fetch("/api/v1/collaborative/identity", { headers: identityHeaders(), credentials: "same-origin" });
+    if (response.status === 401 && await refreshIdentitySession()) {
+      response = await fetch("/api/v1/collaborative/identity", { headers: identityHeaders(), credentials: "same-origin" });
+    }
     if (!response.ok) throw new Error("identity token rejected");
     const user = await response.json();
     state.authReady = true; state.identity = user;
@@ -126,12 +149,13 @@ async function initializeIdentity() {
     const active = state.partnerConversations[0]; state.activeConversationId = active?.id || null; state.partnerMessages = active ? [...active.messages] : [];
   } catch (error) {
     console.warn("Stored identity expired.", error);
-    localStorage.removeItem(ID_TOKEN_KEY); localStorage.removeItem(REFRESH_TOKEN_KEY); state.identity = null;
+    localStorage.removeItem(ID_TOKEN_KEY); state.identity = null;
   }
 }
 
 async function handleIdentityAction() {
   if (state.identity?.authenticated) {
+    await fetch("/api/v1/collaborative/auth/logout", { method: "POST", credentials: "same-origin" });
     localStorage.removeItem(ID_TOKEN_KEY); localStorage.removeItem(REFRESH_TOKEN_KEY); window.location.reload(); return;
   }
   window.location.assign("/api/v1/collaborative/auth/google/start");
@@ -202,7 +226,12 @@ function renderPartnerConversation() {
 function renderToolActivity(activity) {
   if (!Array.isArray(activity) || !activity.length) return "";
   const labels = { completed: "Operación completada", blocked: "Operación bloqueada", unavailable: "Operación no disponible" };
-  return `<div class="tool-activity-list" aria-label="Actividad de herramientas">${activity.map((item) => { const detail = item.query ? `${item.path || "."} · “${item.query}”` : `${item.path || "."} · ${item.kind || "unknown"}`; return `<div class="tool-activity ${escapeHtml(item.status || "unavailable")}"><span>◇</span><div><strong>${escapeHtml(item.capability || "workspace.read")} · ${escapeHtml(labels[item.status] || "Lectura")}</strong><small>${escapeHtml(detail)}</small></div></div>`; }).join("")}</div>`;
+  return `<div class="tool-activity-list" aria-label="Actividad de herramientas">${activity.map((item) => { const detail = item.query ? `${item.path || "."} · “${item.query}”` : `${item.path || "."} · ${item.kind || "unknown"}`; return `<div class="tool-activity ${escapeHtml(item.status || "unavailable")}"><span>◇</span><div><strong>${escapeHtml(item.capability || "workspace.read")} · ${escapeHtml(labels[item.status] || "Lectura")}</strong><small>${escapeHtml(detail)}</small></div></div>${renderDriveItems(item.items)}`; }).join("")}</div>`;
+}
+
+function renderDriveItems(items) {
+  if (!Array.isArray(items) || !items.length) return "";
+  return `<div class="drive-result-grid">${items.map((item) => { const isFolder = item.item_type === "folder"; const date = item.modified_time ? new Date(item.modified_time).toLocaleDateString("es-CO") : ""; return `<article class="drive-result-card"><span class="drive-result-icon">${isFolder ? "▰" : "▤"}</span><div><strong>${escapeHtml(item.name || "Elemento de Drive")}</strong><small>${escapeHtml(isFolder ? "Carpeta" : "Documento")}${date ? ` · ${escapeHtml(date)}` : ""}</small></div><div class="drive-result-actions">${item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">Abrir</a>` : ""}${!isFolder && item.id ? `<button type="button" data-drive-read-id="${escapeHtml(item.id)}" data-drive-read-name="${escapeHtml(item.name || "documento")}">Leer</button>` : ""}</div></article>`; }).join("")}</div>`;
 }
 
 function renderConnectionOffers(offers) {
@@ -559,6 +588,11 @@ function enableComposerKeyboard(textarea, submit) {
   textarea.addEventListener("input", () => { textarea.style.height = "auto"; textarea.style.height = `${Math.min(textarea.scrollHeight, 220)}px`; });
 }
 async function handlePartnerConversationAction(event) {
+  const driveReadButton = event.target.closest("[data-drive-read-id]");
+  if (driveReadButton) {
+    await sendPartnerMessage(`Lee en mi Google Drive el archivo «${driveReadButton.dataset.driveReadName}» con id ${driveReadButton.dataset.driveReadId} y resume su contenido.`);
+    return;
+  }
   const connectionButton = event.target.closest("[data-connect-plugin]");
   if (connectionButton) { await startConnection(connectionButton.dataset.connectPlugin); return; }
   const createButton = event.target.closest("[data-create-agent-index]");

@@ -44,11 +44,36 @@ autoriza Google Drive sin guardar tokens en el navegador ni conceder permisos de
 - Desconectar revoca el acceso inmediatamente.
 - No se muestran secretos, refresh tokens ni credenciales en respuestas, logs o interfaz.
 
-## Resultado pendiente
+## Resultado validado
 
-La infraestructura y el despliegue están aprobados automáticamente. Este documento se completa con
-la fecha, las dos cuentas de prueba y el resultado del recorrido manual, sin registrar correos,
-tokens ni identificadores sensibles.
+El recorrido de identidad, autorización, búsqueda de carpetas y archivos y lectura de documentos
+fue completado en Cloud Run. La corrección posterior normaliza los identificadores elegidos por el
+modelo antes de solicitar el contenido a Drive y conserva compatibilidad con unidades compartidas.
+
+La sesión de Identity Platform se renueva automáticamente mediante una cookie `HttpOnly`, `Secure`
+en producción y `SameSite=Lax`. El ID token de corta duración puede vencer sin obligar al usuario a
+iniciar sesión nuevamente. El refresh token no queda disponible para JavaScript y la sesión solo se
+interrumpe por cierre explícito, revocación, política de la cuenta o invalidación del proveedor.
+Mientras la pantalla OAuth externa conserve el estado `Testing`, Google limita a siete días los
+refresh tokens que incluyen scopes de Drive; para continuidad pública debe pasarse a producción y
+completar la verificación aplicable.
+
+Las credenciales OAuth de Drive continúan cifradas y separadas por identidad en Firestore. El
+servidor renueva su access token cuando corresponde, por lo que cerrar el navegador no desconecta
+Drive.
+
+## Cobertura funcional vigente
+
+- búsqueda por nombre y contenido que Google Drive tenga indexado;
+- enumeración de carpetas, incluidas carpetas anidadas;
+- lectura de Google Docs, Sheets y Slides;
+- extracción segura de PDF, DOCX, XLSX, PPTX y texto admitido;
+- resultados interactivos con enlace de apertura y acción de lectura;
+- revocación explícita desde el panel de conexiones.
+
+Gmail, Google Calendar y GitHub permanecen declarados en el catálogo pero requieren su adaptador,
+contratos de herramientas y pruebas de mínimo privilegio antes de presentarse como conexiones
+activas.
 
 ## Corrección de compatibilidad del acceso
 

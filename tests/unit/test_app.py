@@ -27,7 +27,7 @@ def test_home_serves_the_chat_only_experience() -> None:
     assert "Confirmar briefing" not in response.text
     assert "Generar proyecto ADK" not in response.text
     assert "Ejecutar 3 escenarios" not in response.text
-    assert '/static/app.js?v=20260824-drive-folders' in response.text
+    assert '/static/app.js?v=20260824-persistent-auth' in response.text
 
 
 def test_identity_uses_same_origin_server_oauth_instead_of_firebase_iframe() -> None:
@@ -36,6 +36,8 @@ def test_identity_uses_same_origin_server_oauth_instead_of_firebase_iframe() -> 
     )
 
     assert 'window.location.assign("/api/v1/collaborative/auth/google/start")' in script
+    assert 'refreshIdentitySession()' in script
+    assert '/api/v1/collaborative/auth/refresh' in script
     assert "firebase-auth.js" not in script
     assert "onAuthStateChanged" not in script
     assert "signInWithPopup" not in script

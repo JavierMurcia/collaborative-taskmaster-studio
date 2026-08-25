@@ -159,6 +159,33 @@ class BrowserOAuthService:
             )
         return BrowserOAuthTokens(id_token=id_token, refresh_token=refresh_token)
 
+    def refresh(self, refresh_token: str) -> BrowserOAuthTokens:
+        """Exchange a persistent Identity Platform refresh token for a fresh session."""
+        token = refresh_token.strip()
+        if not self.configured or not token:
+            raise DomainError(
+                "AUTHENTICATION_REQUIRED",
+                "La sesión guardada ya no está disponible.",
+            )
+        firebase = self._form_post_json(
+            "https://securetoken.googleapis.com/v1/token?"
+            + urlencode({"key": self.settings.firebase_api_key}),
+            {"grant_type": "refresh_token", "refresh_token": token},
+        )
+        id_token = str(firebase.get("id_token") or firebase.get("idToken") or "")
+        next_refresh_token = str(
+            firebase.get("refresh_token") or firebase.get("refreshToken") or token
+        )
+        if not id_token:
+            raise DomainError(
+                "AUTHENTICATION_REFRESH_FAILED",
+                "La sesión de Google expiró y debe abrirse nuevamente.",
+            )
+        return BrowserOAuthTokens(
+            id_token=id_token,
+            refresh_token=next_refresh_token,
+        )
+
     @property
     def callback_url(self) -> str:
         return (

@@ -19,7 +19,7 @@ MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 MAX_EXTRACTED_CHARACTERS = 100_000
 MAX_DOCUMENTS_PER_SESSION = 12
 TEXT_SUFFIXES = frozenset({".txt", ".md", ".csv", ".json", ".yaml", ".yml", ".xml"})
-ALLOWED_SUFFIXES = TEXT_SUFFIXES | {".pdf", ".docx"}
+ALLOWED_SUFFIXES = TEXT_SUFFIXES | {".pdf", ".docx", ".xlsx", ".pptx"}
 
 
 class DocumentRecord(BaseModel):
@@ -57,7 +57,7 @@ class DocumentLibrary:
         if not safe_name or suffix not in ALLOWED_SUFFIXES:
             raise DomainError(
                 "DOCUMENT_FORMAT_UNSUPPORTED",
-                "El formato no está permitido. Usa PDF, DOCX, TXT, Markdown, CSV, JSON o YAML.",
+                "El formato no está permitido. Usa PDF, DOCX, XLSX, PPTX, TXT, Markdown, CSV, JSON o YAML.",
             )
         if not payload or len(payload) > MAX_UPLOAD_BYTES:
             raise DomainError(
@@ -161,7 +161,26 @@ def _extract_text(suffix: str, payload: bytes) -> str:
         return _extract_docx(payload)
     if suffix == ".pdf":
         return _extract_pdf(payload)
+    if suffix == ".xlsx":
+        return _extract_xlsx(payload)
+    if suffix == ".pptx":
+        return _extract_pptx(payload)
     raise DomainError("DOCUMENT_FORMAT_UNSUPPORTED", "El formato no está permitido.")
+
+
+def extract_document_text(filename: str, payload: bytes) -> str:
+    """Extract bounded, normalized text from a supported untrusted document."""
+
+    suffix = Path(filename).suffix.casefold()
+    if suffix not in ALLOWED_SUFFIXES:
+        raise DomainError("DOCUMENT_FORMAT_UNSUPPORTED", "El formato no está permitido.")
+    clean = _normalize_text(_extract_text(suffix, payload))
+    if not clean:
+        raise DomainError(
+            "DOCUMENT_TEXT_EMPTY",
+            "No fue posible extraer texto utilizable del documento.",
+        )
+    return clean[:MAX_EXTRACTED_CHARACTERS]
 
 
 def _extract_docx(payload: bytes) -> str:
@@ -191,6 +210,66 @@ def _extract_pdf(payload: bytes) -> str:
         raise
     except Exception as error:
         raise DomainError("DOCUMENT_PDF_INVALID", "El archivo PDF no pudo procesarse de forma segura.") from error
+
+
+def _extract_xlsx(payload: bytes) -> str:
+    try:
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            _validate_office_archive(archive, "XLSX")
+            shared: list[str] = []
+            if "xl/sharedStrings.xml" in archive.namelist():
+                root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
+                shared = ["".join(node.text or "" for node in item.iter() if node.tag.endswith("}t")) for item in root if item.tag.endswith("}si")]
+            sheets: list[str] = []
+            names = sorted(
+                name for name in archive.namelist()
+                if re.fullmatch(r"xl/worksheets/sheet\d+\.xml", name)
+            )
+            for index, name in enumerate(names, start=1):
+                root = ElementTree.fromstring(archive.read(name))
+                rows: list[str] = []
+                for row in (node for node in root.iter() if node.tag.endswith("}row")):
+                    values: list[str] = []
+                    for cell in (node for node in row if node.tag.endswith("}c")):
+                        cell_type = cell.attrib.get("t", "")
+                        value = next((node.text or "" for node in cell.iter() if node.tag.endswith("}v")), "")
+                        if cell_type == "s" and value.isdigit() and int(value) < len(shared):
+                            value = shared[int(value)]
+                        elif cell_type == "inlineStr":
+                            value = "".join(node.text or "" for node in cell.iter() if node.tag.endswith("}t"))
+                        values.append(value)
+                    if any(values):
+                        rows.append("\t".join(values))
+                if rows:
+                    sheets.append(f"Hoja {index}\n" + "\n".join(rows))
+            return "\n\n".join(sheets)
+    except (zipfile.BadZipFile, ElementTree.ParseError) as error:
+        raise DomainError("DOCUMENT_XLSX_INVALID", "El archivo XLSX no es válido.") from error
+
+
+def _extract_pptx(payload: bytes) -> str:
+    try:
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            _validate_office_archive(archive, "PPTX")
+            slides: list[str] = []
+            names = sorted(
+                (name for name in archive.namelist() if re.fullmatch(r"ppt/slides/slide\d+\.xml", name)),
+                key=lambda name: int(re.search(r"(\d+)", Path(name).stem).group(1)),  # type: ignore[union-attr]
+            )
+            for index, name in enumerate(names, start=1):
+                root = ElementTree.fromstring(archive.read(name))
+                text = "\n".join(node.text or "" for node in root.iter() if node.tag.endswith("}t"))
+                if text.strip():
+                    slides.append(f"Diapositiva {index}\n{text}")
+            return "\n\n".join(slides)
+    except (zipfile.BadZipFile, ElementTree.ParseError) as error:
+        raise DomainError("DOCUMENT_PPTX_INVALID", "El archivo PPTX no es válido.") from error
+
+
+def _validate_office_archive(archive: zipfile.ZipFile, label: str) -> None:
+    members = archive.infolist()
+    if len(members) > 1_500 or sum(item.file_size for item in members) > 40_000_000:
+        raise DomainError("DOCUMENT_ARCHIVE_UNSAFE", f"El {label} supera los límites seguros.")
 
 
 def _normalize_text(value: str) -> str:

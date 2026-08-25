@@ -176,7 +176,9 @@ El chat de diseño puede utilizar cinco capacidades de solo lectura cuando Gemin
 son necesarias y el usuario proporciona el contexto correspondiente:
 
 - **Google Drive por usuario:** tras iniciar sesión y completar OAuth, Gemini puede buscar archivos
-  autorizados y leer contenido textual con el scope `drive.readonly`. Los grants se cifran antes de
+  por nombre o contenido indexado, enumerar carpetas y leer Google Docs, Sheets, Slides, PDF,
+  DOCX, XLSX, PPTX y contenido textual con el scope `drive.readonly`. Los resultados incluyen
+  accesos para abrir o leer el elemento desde el chat. Los grants se cifran antes de
   persistirse en Firestore y nunca llegan al navegador ni al historial. Un Taskmaster aprobado solo
   puede usar esa evidencia cuando su especificación declara Drive como herramienta `read_only` y el
   usuario lo solicita explícitamente. La conexión puede revocarse desde el panel izquierdo.
@@ -186,7 +188,8 @@ son necesarias y el usuario proporciona el contexto correspondiente:
   realiza una búsqueda verificable por su dominio y registra el cambio de método. Las consultas
   recientes incluyen la fecha y el año actuales; una respuesta sin fuentes verificables se
   descarta. No inicia sesión, completa formularios ni ejecuta acciones en sitios externos.
-- **Lectura de documentos:** carga explícita de TXT, Markdown, CSV, JSON, YAML, XML, PDF o DOCX.
+- **Lectura de documentos:** carga explícita de TXT, Markdown, CSV, JSON, YAML, XML, PDF, DOCX,
+  XLSX o PPTX.
   Se extrae únicamente texto, el original nunca se ejecuta, cada archivo se limita a 8 MiB y solo
   queda disponible en la sesión que lo adjuntó.
 - **Memoria avanzada:** recupera fragmentos visibles y relevantes de conversaciones anteriores de
