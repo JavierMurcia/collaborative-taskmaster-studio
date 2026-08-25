@@ -345,6 +345,7 @@ def create_app(
             google_drive=google_drive,
             google_gmail=google_gmail,
             google_calendar=google_calendar,
+            connections=connection_service,
         ),
         conversation_memory=ConversationMemoryService(conversation_memory, active_clock),
         documents=document_library,

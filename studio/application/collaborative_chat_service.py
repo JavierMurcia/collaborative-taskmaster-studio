@@ -10,6 +10,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from studio.application.connection_service import ConnectionService
 from studio.application.conversation_memory import ConversationMemoryService
 from studio.application.framework_selector import (
     FrameworkRecommendation,
@@ -128,6 +129,7 @@ class CollaborativeChatService:
         google_drive: GoogleDriveReader | None = None,
         google_gmail: GoogleGmailReader | None = None,
         google_calendar: GoogleCalendarReader | None = None,
+        connections: ConnectionService | None = None,
     ) -> None:
         self._gateway = gateway
         self._model_name = model_name
@@ -139,6 +141,7 @@ class CollaborativeChatService:
         self._google_drive = google_drive
         self._google_gmail = google_gmail
         self._google_calendar = google_calendar
+        self._connections = connections
 
     def reply(
         self,
@@ -177,6 +180,7 @@ class CollaborativeChatService:
             owner_session_id, document_ids
         )
         current_date = date.today().isoformat()
+        connection_facts = self._connection_facts(identity)
         runtime_facts = {
             "collaborator_model": self._model_name,
             "provider": "Vertex AI",
@@ -201,6 +205,7 @@ class CollaborativeChatService:
                 and self._google_calendar is not None
                 and self._google_calendar.available(identity)
             ),
+            "connections": connection_facts,
             "terminal_access": False,
             "write_access": False,
             "current_date": current_date,
@@ -465,6 +470,7 @@ class CollaborativeChatService:
                         {
                             "conversation_history": transcript,
                             "latest_user_message": clean_message,
+                            "verified_runtime_facts": runtime_facts,
                             "previous_model_response": result.payload,
                             "workspace_tool_result": tool_result,
                             "research_step": step_number,
@@ -493,6 +499,7 @@ class CollaborativeChatService:
                         {
                             "conversation_history": transcript,
                             "latest_user_message": clean_message,
+                            "verified_runtime_facts": runtime_facts,
                             "previous_model_response": result.payload,
                             "instruction": (
                                 "El presupuesto de investigación terminó. Responde ahora con la evidencia "
@@ -523,8 +530,11 @@ class CollaborativeChatService:
                     )
                 }
             )
+        reply = str(result.payload["reply"])
+        if _asks_connection_status(clean_message):
+            reply = _verified_connection_reply(connection_facts)
         return CollaborativeChatResult(
-            reply=str(result.payload["reply"]),
+            reply=reply,
             phase=phase,
             intent=intent,
             agent_draft=draft,
@@ -533,6 +543,40 @@ class CollaborativeChatService:
             tool_activity=tuple(activities),
             telemetry=model_metadata_details(result.metadata),
         )
+
+    def _connection_facts(
+        self, identity: IdentityContext | None
+    ) -> dict[str, dict[str, str | None]]:
+        supported = {
+            "google.drive": "Google Drive",
+            "google.gmail": "Gmail",
+            "google.calendar": "Google Calendar",
+            "github": "GitHub",
+        }
+        facts: dict[str, dict[str, str | None]] = {
+            plugin_id: {
+                "title": title,
+                "status": "not_connected",
+                "account": None,
+            }
+            for plugin_id, title in supported.items()
+        }
+        if identity is None or self._connections is None:
+            return facts
+        latest = {}
+        for record in self._connections.list(identity):
+            current = latest.get(record.plugin_id)
+            if current is None or record.updated_at >= current.updated_at:
+                latest[record.plugin_id] = record
+        for plugin_id, record in latest.items():
+            if plugin_id not in facts:
+                continue
+            facts[plugin_id] = {
+                "title": record.title,
+                "status": record.status,
+                "account": record.account_label,
+            }
+        return facts
 
     def _run_drive_tool(
         self,
@@ -906,6 +950,49 @@ def _calendar_query(message: str) -> str:
         message,
     )
     return " ".join(cleaned.split())[:120]
+
+
+def _asks_connection_status(message: str) -> bool:
+    """Detect status questions that must be answered from authoritative metadata."""
+
+    normalized = message.casefold()
+    named_services = sum(
+        term in normalized
+        for term in ("google drive", "gmail", "google calendar", "github")
+    )
+    status_terms = (
+        "conexión", "conexion", "conectad", "activo", "activa", "estado",
+        "disponible", "cuánt", "cuant", "servicios", "integraciones",
+    )
+    return named_services >= 2 or (
+        named_services >= 1 and any(term in normalized for term in status_terms)
+    )
+
+
+def _verified_connection_reply(
+    facts: dict[str, dict[str, str | None]],
+) -> str:
+    labels = {
+        "connected": "Conectado y activo",
+        "pending": "Autorización pendiente",
+        "setup_required": "Configuración requerida",
+        "error": "Requiere atención",
+        "revoked": "Desconectado",
+        "not_connected": "No conectado",
+    }
+    lines = ["Estado verificado de tus conexiones en esta sesión:"]
+    active = 0
+    for plugin_id in ("google.drive", "google.gmail", "google.calendar", "github"):
+        item = facts[plugin_id]
+        status = str(item["status"])
+        if status == "connected":
+            active += 1
+        account = f" — {item['account']}" if item.get("account") else ""
+        access = " (solo lectura)" if status == "connected" and plugin_id != "github" else ""
+        lines.append(f"- **{item['title']}:** {labels.get(status, status)}{access}{account}.")
+    lines.append(f"\nEn total, **{active} de 4** servicios están conectados y activos.")
+    lines.append("Este estado procede del registro de conexiones de tu cuenta, no de una inferencia del modelo.")
+    return "\n".join(lines)
 
 
 def _gmail_activity_items(payload: dict[str, object]) -> list[dict[str, str]]:

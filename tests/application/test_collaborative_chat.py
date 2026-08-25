@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
@@ -10,6 +10,7 @@ from studio.application.collaborative_chat_service import (
     ChatTurn,
     CollaborativeChatService,
 )
+from studio.application.connection_service import ConnectionRecord
 from studio.capabilities.workspace import WorkspaceReader
 from studio.domain.errors import DomainError
 from studio.ports.model_gateway import (
@@ -18,6 +19,7 @@ from studio.ports.model_gateway import (
     ModelResult,
     ModelUsage,
 )
+from studio.security import IdentityContext
 
 
 class RecordingGateway:
@@ -120,6 +122,14 @@ class FallbackWebResearcher(RecordingWebResearcher):
         raise DomainError("WEB_PAGE_UNVERIFIED", "La página bloqueó la lectura directa.")
 
 
+class StaticConnections:
+    def __init__(self, records: tuple[ConnectionRecord, ...]) -> None:
+        self.records = records
+
+    def list(self, identity: IdentityContext) -> tuple[ConnectionRecord, ...]:
+        return self.records
+
+
 def test_collaborative_chat_request_preserves_tool_evidence() -> None:
     request = CollaborativeChatRequest.model_validate(
         {
@@ -184,6 +194,59 @@ def test_collaborative_chat_grounds_questions_about_its_runtime_identity() -> No
     assert '"provider": "Vertex AI"' in prompt
     assert '"when_vertex_is_unavailable"' in prompt
     assert '"internet_access": false' in prompt
+
+
+def test_collaborative_chat_reports_connection_state_from_authoritative_registry() -> None:
+    gateway = RecordingGateway(readiness=10)
+    now = datetime.now(UTC)
+    identity = IdentityContext(
+        user_id="javier",
+        workspace_id="personal_javier",
+        email="javier@example.com",
+        authenticated=True,
+        mode="identity_platform",
+    )
+    records = tuple(
+        ConnectionRecord(
+            id=f"conn_{index}",
+            owner_id=identity.user_id,
+            workspace_id=identity.workspace_id,
+            plugin_id=plugin_id,
+            title=title,
+            provider=provider,
+            status=status,
+            account_label="javier@example.com" if status == "connected" else None,
+            message="Estado de prueba",
+            updated_at=now,
+        )
+        for index, (plugin_id, title, provider, status) in enumerate(
+            (
+                ("google.drive", "Google Drive", "Google", "connected"),
+                ("google.gmail", "Gmail", "Google", "connected"),
+                ("google.calendar", "Google Calendar", "Google", "connected"),
+                ("github", "GitHub", "GitHub", "setup_required"),
+            )
+        )
+    )
+    service = CollaborativeChatService(
+        gateway,
+        "gemini-3.7-flash",
+        connections=StaticConnections(records),  # type: ignore[arg-type]
+    )
+
+    result = service.reply(
+        "Me refiero a Google Drive, Gmail, Google Calendar y GitHub.",
+        (),
+        identity=identity,
+    )
+
+    assert "**3 de 4**" in result.reply
+    assert "**Gmail:** Conectado y activo" in result.reply
+    assert "**Google Calendar:** Conectado y activo" in result.reply
+    assert "**GitHub:** Configuración requerida" in result.reply
+    assert gateway.request is not None
+    assert '"google.gmail"' in gateway.request.prompt
+    assert '"status": "connected"' in gateway.request.prompt
 
 
 def test_collaborative_chat_waits_for_enough_evidence_before_selecting_framework() -> None:
