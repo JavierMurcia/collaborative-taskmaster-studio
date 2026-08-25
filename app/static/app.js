@@ -609,7 +609,10 @@ function handleAttachmentClick(event) {
   const button = event.target.closest("[data-delete-document]");
   if (button) deleteDocument(button.dataset.deleteDocument);
 }
-function openChatHome() { resetPartnerChat(); }
+function openChatHome() {
+  state.activeConversationId = null; state.partnerMessages = []; state.partnerPhase = "discovery"; state.attachedDocumentIds = [];
+  renderConversationHistory(); renderAttachments(); showWelcome();
+}
 function enableComposerKeyboard(textarea, submit) {
   textarea.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); submit.requestSubmit(); }
