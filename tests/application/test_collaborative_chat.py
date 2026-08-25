@@ -163,6 +163,7 @@ class RecordingGitHub:
 class RecordingDrive:
     def __init__(self) -> None:
         self.queries: list[str] = []
+        self.read_ids: list[str] = []
 
     def available(self, identity: IdentityContext) -> bool:
         return True
@@ -180,6 +181,18 @@ class RecordingDrive:
                     "mimeType": "application/pdf",
                 }
             ],
+            "read_only": True,
+        }
+
+    def read(self, identity: IdentityContext, file_id: str) -> dict[str, object]:
+        del identity
+        self.read_ids.append(file_id)
+        return {
+            "kind": "google_drive_file",
+            "id": file_id,
+            "name": "Investigación de sistemas",
+            "mimeType": "application/pdf",
+            "content": "Restricciones y oportunidades documentadas para el proyecto.",
             "read_only": True,
         }
 
@@ -368,15 +381,17 @@ def test_project_opportunity_radar_contrasts_github_drive_and_verified_web() -> 
     )
 
     assert github.queries == [""]
-    assert drive.queries == [""]
+    assert drive.queries == ["proyecto"]
+    assert drive.read_ids == ["doc-1"]
     assert len(web.searches) == 1
     assert str(date.today().year) in web.searches[0]
     assert [item.capability for item in result.tool_activity] == [
         "github.repositories",
         "drive.search",
+        "drive.read",
         "web.search",
     ]
-    assert len(gateway.requests) == 4
+    assert len(gateway.requests) == 5
     assert "accumulated_research" in gateway.requests[-1].prompt
     assert "oportunidad recomendada" in gateway.requests[0].system_instruction
 

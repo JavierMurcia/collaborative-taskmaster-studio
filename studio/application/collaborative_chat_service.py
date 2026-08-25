@@ -424,27 +424,39 @@ class CollaborativeChatService:
             for term in ("cuánt", "cuant", "busca", "buscar", "encuentra", "lista", "tengo", "consulta", "muestra")
         )
         opportunity_research = _requests_project_opportunities(clean_message)
-        opportunity_plan: tuple[tuple[str, str, str], ...] = (
-            ("github_repositories", ".", ""),
-            ("drive_search", ".", ""),
-            (
-                "web_search",
-                ".",
-                (
-                    f"tendencias actuales {date.today().year} y oportunidades verificadas de proyectos "
-                    "de ingeniería de software, IA, ciberseguridad, datos y sistemas; prioriza fuentes "
-                    "oficiales, investigación y señales de adopción"
-                ),
-            ),
+        opportunity_web_query = (
+            f"tendencias actuales {date.today().year} y oportunidades verificadas de proyectos "
+            "de ingeniería de software, IA, ciberseguridad, datos y sistemas; prioriza fuentes "
+            "oficiales, investigación y señales de adopción"
         )
+        opportunity_drive_file_id = ""
+        opportunity_web_completed = False
         accumulated_research: list[dict[str, object]] = []
         for step_number in range(1, 7):
             if step_number == 1 and explicit_urls:
                 action = "web_open"
                 workspace_path = explicit_urls[0]
                 workspace_query = ""
-            elif opportunity_research and step_number <= len(opportunity_plan):
-                action, workspace_path, workspace_query = opportunity_plan[step_number - 1]
+            elif opportunity_research and step_number == 1:
+                action, workspace_path, workspace_query = "github_repositories", ".", ""
+            elif opportunity_research and step_number == 2:
+                action, workspace_path, workspace_query = "drive_search", ".", "proyecto"
+            elif opportunity_research and step_number == 3 and opportunity_drive_file_id:
+                action, workspace_path, workspace_query = (
+                    "drive_read",
+                    opportunity_drive_file_id,
+                    "",
+                )
+            elif (
+                opportunity_research
+                and step_number in {3, 4}
+                and not opportunity_web_completed
+            ):
+                action, workspace_path, workspace_query = (
+                    "web_search",
+                    ".",
+                    opportunity_web_query,
+                )
             elif step_number == 1 and freshness_required:
                 action = "web_search"
                 workspace_path = "."
@@ -486,6 +498,7 @@ class CollaborativeChatService:
                     )
                 else:
                     tool_result, activity = self._run_web_tool(workspace_query)
+                opportunity_web_completed = True
             elif action in {"document_inspect", "document_search"}:
                 tool_result, activity = self._run_document_tool(
                     action,
@@ -521,6 +534,8 @@ class CollaborativeChatService:
                     action, workspace_path, workspace_query
                 )
             activities.append(activity)
+            if action == "drive_search":
+                opportunity_drive_file_id = _first_readable_drive_file_id(tool_result)
             accumulated_research.append(
                 {
                     "capability": activity.capability,
@@ -1006,6 +1021,32 @@ def _requests_project_opportunities(message: str) -> bool:
             "recomiendame un proyecto",
         )
     )
+
+
+def _first_readable_drive_file_id(payload: dict[str, object]) -> str:
+    """Choose one topical text document from an explicitly requested Drive search."""
+
+    readable_mime_types = {
+        "application/pdf",
+        "application/json",
+        "application/vnd.google-apps.document",
+        "application/vnd.google-apps.spreadsheet",
+        "application/vnd.google-apps.presentation",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    }
+    files = payload.get("files")
+    if not isinstance(files, list):
+        return ""
+    for item in files:
+        if not isinstance(item, dict):
+            continue
+        mime_type = str(item.get("mimeType") or "")
+        file_id = str(item.get("id") or "")
+        if file_id and (mime_type.startswith("text/") or mime_type in readable_mime_types):
+            return file_id
+    return ""
 
 
 def _drive_query(message: str) -> str:
