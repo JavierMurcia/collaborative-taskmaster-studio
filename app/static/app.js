@@ -24,6 +24,7 @@ const conversationSyncTimers = new Map();
 const terminalBuildStates = new Set(["completed", "failed", "stopped"]);
 
 function operationKey(prefix) { return `${prefix}-${crypto.randomUUID()}`; }
+function newConversationId() { return `chat_${crypto.randomUUID()}`; }
 function identityHeaders(extra = {}) {
   const headers = { "X-Studio-Session": sessionId, ...extra };
   const idToken = localStorage.getItem(ID_TOKEN_KEY);
@@ -281,7 +282,10 @@ async function continuePartnerChat(event) {
 }
 
 function resetPartnerChat() {
-  state.activeConversationId = null; state.partnerMessages = []; state.partnerPhase = "discovery"; state.attachedDocumentIds = [];
+  // Reserve the conversation before the first message. Otherwise, a delayed
+  // history refresh can interpret a null id as "open the latest chat" and
+  // replace the blank conversation the user just requested.
+  state.activeConversationId = newConversationId(); state.partnerMessages = []; state.partnerPhase = "discovery"; state.attachedDocumentIds = [];
   renderConversationHistory();
   renderAttachments();
   showWelcome(); $("#project-description").focus();
@@ -349,7 +353,7 @@ function buildPhaseLabel(phase) {
 }
 function persistPartnerHistory() {
   const first = state.partnerMessages.find((item) => item.role === "user")?.content || "Nueva conversación";
-  if (!state.activeConversationId) state.activeConversationId = `chat_${crypto.randomUUID()}`;
+  if (!state.activeConversationId) state.activeConversationId = newConversationId();
   const stored = { id: state.activeConversationId, title: conversationTitle(first), messages: state.partnerMessages.slice(-32), documentIds: [...state.attachedDocumentIds], phase: state.partnerPhase, updatedAt: new Date().toISOString() };
   state.partnerConversations = [stored, ...state.partnerConversations.filter((item) => item.id !== stored.id)].slice(0, 40);
   localStorage.setItem(conversationStorageKey(), JSON.stringify(state.partnerConversations));

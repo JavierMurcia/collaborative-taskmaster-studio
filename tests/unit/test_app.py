@@ -32,7 +32,7 @@ def test_home_serves_the_chat_only_experience() -> None:
     assert "Generar proyecto ADK" not in response.text
     assert "Ejecutar 3 escenarios" not in response.text
     assert '/static/styles.css?v=20260824-project-radar-v1' in response.text
-    assert '/static/app.js?v=20260824-project-radar-v1' in response.text
+    assert '/static/app.js?v=20260825-new-chat-v2' in response.text
     assert response.headers["cache-control"] == "no-cache, must-revalidate"
 
 
@@ -47,6 +47,19 @@ def test_identity_uses_same_origin_server_oauth_instead_of_firebase_iframe() -> 
     assert "firebase-auth.js" not in script
     assert "onAuthStateChanged" not in script
     assert "signInWithPopup" not in script
+
+
+def test_new_chat_reserves_an_independent_conversation_before_first_message() -> None:
+    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(
+        encoding="utf-8"
+    )
+
+    reset_start = script.index("function resetPartnerChat()")
+    reset_end = script.index("function readPartnerConversations", reset_start)
+    reset_implementation = script[reset_start:reset_end]
+
+    assert "state.activeConversationId = newConversationId()" in reset_implementation
+    assert "state.activeConversationId = null" not in reset_implementation
 
 
 def test_meta_reports_h10_10_with_firestore_disabled() -> None:
