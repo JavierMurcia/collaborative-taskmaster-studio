@@ -231,7 +231,22 @@ function renderToolActivity(activity) {
 
 function renderDriveItems(items) {
   if (!Array.isArray(items) || !items.length) return "";
-  return `<div class="drive-result-grid">${items.map((item) => { const type = item.item_type || "file"; const isFolder = type === "folder"; const isEmail = type === "email"; const isEvent = type === "event"; const parsedDate = item.modified_time ? new Date(item.modified_time) : null; const date = parsedDate && !Number.isNaN(parsedDate.valueOf()) ? parsedDate.toLocaleString("es-CO", { dateStyle: "medium", timeStyle: isEvent ? "short" : undefined }) : (item.modified_time || ""); const label = isFolder ? "Carpeta" : isEmail ? (item.subtitle || "Correo") : isEvent ? (item.subtitle || "Evento") : "Documento"; const icon = isFolder ? "▰" : isEmail ? "✉" : isEvent ? "◫" : "▤"; return `<article class="drive-result-card"><span class="drive-result-icon">${icon}</span><div><strong>${escapeHtml(item.name || "Resultado")}</strong><small>${escapeHtml(label)}${date ? ` · ${escapeHtml(date)}` : ""}</small></div><div class="drive-result-actions">${item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">Abrir</a>` : ""}${!isFolder && !isEvent && item.id ? `<button type="button" ${isEmail ? `data-gmail-read-id="${escapeHtml(item.id)}" data-gmail-read-subject="${escapeHtml(item.name || "correo")}"` : `data-drive-read-id="${escapeHtml(item.id)}" data-drive-read-name="${escapeHtml(item.name || "documento")}"`}>Leer</button>` : ""}</div></article>`; }).join("")}</div>`;
+  return `<div class="drive-result-grid">${items.map((item) => {
+    const type = item.item_type || "file";
+    const isFolder = type === "folder";
+    const isEmail = type === "email";
+    const isEvent = type === "event";
+    const isRepository = type === "repository";
+    const parsedDate = item.modified_time ? new Date(item.modified_time) : null;
+    const date = parsedDate && !Number.isNaN(parsedDate.valueOf())
+      ? parsedDate.toLocaleString("es-CO", { dateStyle: "medium", timeStyle: isEvent ? "short" : undefined })
+      : (item.modified_time || "");
+    const label = isFolder ? "Carpeta" : isEmail ? (item.subtitle || "Correo") : isEvent ? (item.subtitle || "Evento") : isRepository ? (item.subtitle || "Repositorio de GitHub") : "Documento";
+    const icon = isFolder ? "▰" : isEmail ? "✉" : isEvent ? "◫" : isRepository ? "⌘" : "▤";
+    const canRead = !isFolder && !isEvent && !isRepository && Boolean(item.id);
+    const openLabel = isRepository ? "Ver repositorio" : "Abrir";
+    return `<article class="drive-result-card${isRepository ? " repository-result-card" : ""}"><span class="drive-result-icon" aria-hidden="true">${icon}</span><div class="drive-result-details"><strong title="${escapeHtml(item.name || "Resultado")}">${escapeHtml(item.name || "Resultado")}</strong><small>${escapeHtml(label)}${date ? ` · ${escapeHtml(date)}` : ""}</small></div><div class="drive-result-actions">${item.url ? `<a href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${openLabel}</a>` : ""}${canRead ? `<button type="button" ${isEmail ? `data-gmail-read-id="${escapeHtml(item.id)}" data-gmail-read-subject="${escapeHtml(item.name || "correo")}"` : `data-drive-read-id="${escapeHtml(item.id)}" data-drive-read-name="${escapeHtml(item.name || "documento")}"`}>Leer</button>` : ""}</div></article>`;
+  }).join("")}</div>`;
 }
 
 function renderConnectionOffers(offers) {
