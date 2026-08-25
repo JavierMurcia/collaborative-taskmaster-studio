@@ -36,6 +36,8 @@
     {"environment_variable": "STUDIO_FIREBASE_APP_ID", "secret_id": "studio-firebase-app-id", "version": "1", "purpose": "Identify the registered Firebase web application."},
     {"environment_variable": "STUDIO_GOOGLE_OAUTH_CLIENT_ID", "secret_id": "studio-google-oauth-client-id", "version": "1", "purpose": "Identify the Google OAuth web client."},
     {"environment_variable": "STUDIO_GOOGLE_OAUTH_CLIENT_SECRET", "secret_id": "studio-google-oauth-client-secret", "version": "1", "purpose": "Authenticate the OAuth code exchange on the server."},
+    {"environment_variable": "STUDIO_GITHUB_OAUTH_CLIENT_ID", "secret_id": "studio-github-oauth-client-id", "version": "1", "purpose": "Identify the GitHub OAuth application."},
+    {"environment_variable": "STUDIO_GITHUB_OAUTH_CLIENT_SECRET", "secret_id": "studio-github-oauth-client-secret", "version": "1", "purpose": "Authenticate the GitHub OAuth code exchange on the server."},
     {"environment_variable": "STUDIO_OAUTH_STATE_SECRET", "secret_id": "studio-oauth-state-secret", "version": "1", "purpose": "Sign short-lived OAuth state tokens."},
     {"environment_variable": "STUDIO_OAUTH_ENCRYPTION_KEY", "secret_id": "studio-oauth-encryption-key", "version": "1", "purpose": "Encrypt per-user OAuth grants before Firestore persistence."}
   ],

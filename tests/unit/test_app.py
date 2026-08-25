@@ -87,7 +87,7 @@ def test_meta_reports_h10_10_with_firestore_disabled() -> None:
     assert response.json()["runtime_configuration"] == {
         "status": "declared",
         "environment_variable_count": 27,
-        "secret_reference_count": 6,
+        "secret_reference_count": 8,
         "secret_provider": "google_secret_manager",
         "plaintext_secrets_allowed": False,
         "latest_secret_alias_allowed": False,

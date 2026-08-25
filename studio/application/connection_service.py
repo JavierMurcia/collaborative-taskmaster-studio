@@ -163,7 +163,7 @@ class ConnectionService:
             self._save(record)
             return ConnectionStart(connection=record)
 
-        if manifest.provider != "Google":
+        if manifest.provider not in {"Google", "GitHub"}:
             record = ConnectionRecord(
                 id=connection_id,
                 owner_id=identity.user_id,
@@ -271,12 +271,18 @@ class ConnectionService:
         verifier = str((pending or {}).get("code_verifier") or "")
         if not verifier:
             raise DomainError("OAUTH_STATE_INVALID", "La autorización venció o perdió su contexto.")
-        if record.provider != "Google":
+        if record.provider == "Google":
+            token_payload = self._exchange_google_code(code, verifier)
+        elif record.provider == "GitHub":
+            token_payload = self._exchange_github_code(code, verifier)
+        else:
             raise DomainError("OAUTH_PROVIDER_UNSUPPORTED", "El retorno OAuth aún no admite este proveedor.")
-        token_payload = self._exchange_google_code(code, verifier)
         existing = self._vault.get(self._credential_key(record)) or {}
         refresh_token = token_payload.get("refresh_token") or existing.get("refresh_token")
-        expires_in = int(token_payload.get("expires_in") or 3600)
+        expires_in = int(
+            token_payload.get("expires_in")
+            or (3600 if record.provider == "Google" else 315_360_000)
+        )
         credential = {
             "access_token": str(token_payload.get("access_token") or ""),
             "refresh_token": str(refresh_token or ""),
@@ -284,20 +290,30 @@ class ConnectionService:
             "expires_at": (datetime.now(UTC) + timedelta(seconds=max(60, expires_in))).isoformat(),
             "scope": str(token_payload.get("scope") or " ".join(record.scopes)),
         }
-        if not credential["access_token"] or not credential["refresh_token"]:
+        if not credential["access_token"] or (
+            record.provider == "Google" and not credential["refresh_token"]
+        ):
             raise DomainError(
                 "OAUTH_REFRESH_TOKEN_MISSING",
                 "Google no devolvió una credencial renovable. Revoca el acceso y vuelve a consentir.",
             )
         self._vault.put(self._credential_key(record), credential)
         self._vault.delete(self._pending_key(record.id))
-        account_label = self._google_account_label(str(credential["access_token"]))
+        account_label = (
+            self._google_account_label(str(credential["access_token"]))
+            if record.provider == "Google"
+            else self._github_account_label(str(credential["access_token"]))
+        )
         return self._replace(
             record.model_copy(
                 update={
                     "status": "connected",
                     "account_label": account_label,
-                    "message": "Cuenta conectada con permisos de solo lectura.",
+                    "message": (
+                        "Cuenta conectada con permisos de solo lectura."
+                        if record.provider == "Google"
+                        else "Cuenta de GitHub conectada con acceso mínimo."
+                    ),
                     "updated_at": datetime.now(UTC),
                 }
             )
@@ -321,7 +337,12 @@ class ConnectionService:
             raise DomainError("CONNECTION_CREDENTIAL_MISSING", "La conexión debe autorizarse nuevamente.")
         expires_at = _parse_datetime(credential.get("expires_at"))
         if expires_at <= datetime.now(UTC) + timedelta(seconds=60):
-            credential = self._refresh_google_token(record, credential)
+            if record.provider == "Google":
+                credential = self._refresh_google_token(record, credential)
+            elif record.provider == "GitHub" and credential.get("refresh_token"):
+                credential = self._refresh_github_token(record, credential)
+            else:
+                raise DomainError("OAUTH_REFRESH_REQUIRED", "La conexión debe autorizarse nuevamente.")
         token = str(credential.get("access_token") or "")
         if not token:
             raise DomainError("CONNECTION_CREDENTIAL_MISSING", "La conexión debe autorizarse nuevamente.")
@@ -417,6 +438,24 @@ class ConnectionService:
             },
         )
 
+    def _exchange_github_code(self, code: str, verifier: str) -> dict[str, Any]:
+        payload = self._form_post_json(
+            "https://github.com/login/oauth/access_token",
+            {
+                "code": code,
+                "client_id": self._settings.github_client_id,
+                "client_secret": self._settings.github_client_secret,
+                "redirect_uri": self._callback_url(),
+                "code_verifier": verifier,
+            },
+        )
+        if payload.get("error"):
+            raise DomainError(
+                "OAUTH_EXCHANGE_FAILED",
+                "GitHub rechazó la autorización. Revisa el cliente OAuth y vuelve a intentarlo.",
+            )
+        return payload
+
     def _refresh_google_token(self, record: ConnectionRecord, credential: dict[str, object]) -> dict[str, object]:
         refresh_token = str(credential.get("refresh_token") or "")
         if not refresh_token:
@@ -438,6 +477,30 @@ class ConnectionService:
         self._vault.put(self._credential_key(record), updated)
         return updated
 
+    def _refresh_github_token(self, record: ConnectionRecord, credential: dict[str, object]) -> dict[str, object]:
+        refresh_token = str(credential.get("refresh_token") or "")
+        if not refresh_token:
+            raise DomainError("OAUTH_REFRESH_REQUIRED", "La conexión debe autorizarse nuevamente.")
+        payload = self._form_post_json(
+            "https://github.com/login/oauth/access_token",
+            {
+                "client_id": self._settings.github_client_id,
+                "client_secret": self._settings.github_client_secret,
+                "refresh_token": refresh_token,
+                "grant_type": "refresh_token",
+            },
+        )
+        updated = dict(credential)
+        updated.update(
+            access_token=str(payload.get("access_token") or ""),
+            refresh_token=str(payload.get("refresh_token") or refresh_token),
+            expires_at=(
+                datetime.now(UTC) + timedelta(seconds=int(payload.get("expires_in") or 28_800))
+            ).isoformat(),
+        )
+        self._vault.put(self._credential_key(record), updated)
+        return updated
+
     def _google_account_label(self, token: str) -> str:
         try:
             request = Request(
@@ -450,6 +513,23 @@ class ConnectionService:
             return str(user.get("emailAddress") or user.get("displayName") or "Cuenta de Google")[:320]
         except (HTTPError, URLError, TimeoutError, ValueError, TypeError):
             return "Cuenta de Google"
+
+    def _github_account_label(self, token: str) -> str:
+        try:
+            request = Request(
+                "https://api.github.com/user",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                    "User-Agent": "Collaborative-Taskmaster-Studio",
+                },
+            )
+            with urlopen(request, timeout=10) as response:  # noqa: S310 - fixed GitHub HTTPS endpoint
+                payload = json.loads(response.read(16_384).decode("utf-8"))
+            return str(payload.get("login") or payload.get("name") or "Cuenta de GitHub")[:320]
+        except (HTTPError, URLError, TimeoutError, ValueError, TypeError, AttributeError):
+            return "Cuenta de GitHub"
 
     @staticmethod
     def _revoke_google_token(token: str) -> None:

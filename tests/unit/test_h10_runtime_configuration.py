@@ -86,6 +86,8 @@ def test_definition_declares_production_identity_and_oauth_secrets() -> None:
         "STUDIO_FIREBASE_APP_ID",
         "STUDIO_GOOGLE_OAUTH_CLIENT_ID",
         "STUDIO_GOOGLE_OAUTH_CLIENT_SECRET",
+        "STUDIO_GITHUB_OAUTH_CLIENT_ID",
+        "STUDIO_GITHUB_OAUTH_CLIENT_SECRET",
         "STUDIO_OAUTH_STATE_SECRET",
         "STUDIO_OAUTH_ENCRYPTION_KEY",
     }
@@ -142,7 +144,7 @@ def test_offline_cli_emits_machine_readable_plan(capsys: pytest.CaptureFixture[s
 
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "planned"
-    assert len(payload["secret_references"]) == 6
+    assert len(payload["secret_references"]) == 8
     assert payload["cloud_verified"] is False
     assert payload["configuration_applied"] is False
 

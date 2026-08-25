@@ -175,11 +175,11 @@ def default_plugin_manifests() -> tuple[PluginManifest, ...]:
             id="github",
             version="1.0.0",
             title="GitHub",
-            description="Consulta repositorios y propone cambios sujetos a aprobación.",
+            description="Conecta la identidad de GitHub y consulta repositorios públicos.",
             provider="GitHub",
             auth="oauth",
             availability="connection_required",
-            permissions=("contents:read",),
+            permissions=("read:user",),
             operations=(
                 _operation("read_repository", "Leer repositorio"),
                 _operation(

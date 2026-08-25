@@ -36,6 +36,8 @@ def oauth_settings() -> OAuthSettings:
         public_base_url="https://studio.example",
         google_client_id="client.apps.googleusercontent.com",
         google_client_secret="client-secret",
+        github_client_id="github-client-id",
+        github_client_secret="github-client-secret",
         state_secret="state-secret-with-enough-entropy-for-tests",
     )
 
@@ -134,3 +136,40 @@ def test_oauth_callback_rejects_tampered_state(tmp_path: Path) -> None:
         service.complete_callback(state=f"{state}tampered", code="authorization-code")
 
     assert captured.value.code == "OAUTH_STATE_INVALID"
+
+
+def test_github_oauth_connects_with_minimal_scope_and_without_refresh_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    vault = InMemoryCredentialVault()
+    service = ConnectionService(
+        tmp_path,
+        PluginRegistry(),
+        vault=vault,
+        settings=oauth_settings(),
+    )
+    identity = cloud_identity("javier")
+
+    started = service.begin(identity, "github")
+    query = parse_qs(urlsplit(started.authorization_url or "").query)
+    state = query["state"][0]
+
+    assert started.connection.status == "pending"
+    assert query["scope"] == ["read:user"]
+
+    monkeypatch.setattr(
+        service,
+        "_exchange_github_code",
+        lambda code, verifier: {
+            "access_token": f"github-{code}",
+            "token_type": "bearer",
+            "scope": "read:user",
+        },
+    )
+    monkeypatch.setattr(service, "_github_account_label", lambda token: "JavierMurcia")
+
+    connected = service.complete_callback(state=state, code="authorization-code")
+
+    assert connected.status == "connected"
+    assert connected.account_label == "JavierMurcia"
+    assert service.access_token(identity, "github") == "github-authorization-code"
