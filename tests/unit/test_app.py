@@ -31,8 +31,10 @@ def test_home_serves_the_chat_only_experience() -> None:
     assert "Confirmar briefing" not in response.text
     assert "Generar proyecto ADK" not in response.text
     assert "Ejecutar 3 escenarios" not in response.text
-    assert '/static/styles.css?v=20260824-project-radar-v1' in response.text
-    assert '/static/app.js?v=20260825-brand-home-v5' in response.text
+    assert 'id="taskmaster-studio-access"' in response.text
+    assert "Taskmaster Studio" in response.text
+    assert '/static/styles.css?v=20260825-taskmaster-access-v1' in response.text
+    assert '/static/app.js?v=20260825-taskmaster-access-v1' in response.text
     assert response.headers["cache-control"] == "no-cache, must-revalidate"
 
 

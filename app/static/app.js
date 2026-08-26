@@ -17,7 +17,7 @@ localStorage.setItem(SESSION_KEY, sessionId);
 function conversationStorageKey(owner = state?.identity?.user_id || sessionId) { return `${PARTNER_CONVERSATIONS_KEY}:${owner}`; }
 
 const restoredConversations = readPartnerConversations(sessionId);
-const state = { projectId: localStorage.getItem(PROJECT_KEY), partnerConversations: restoredConversations, activeConversationId: null, partnerMessages: [], partnerPhase: "discovery", documents: [], agents: [], connections: [], identity: null, identityConfig: { mode: "local" }, authReady: true, attachedDocumentIds: [], partnerPending: false, runtimeLoaded: false, runtime: { mode: "local", label: "Comprobando Gemini", provider: "Vertex AI", model: "gemini-3.7-flash", model_calls_enabled: false } };
+const state = { projectId: localStorage.getItem(PROJECT_KEY), partnerConversations: restoredConversations, activeConversationId: null, partnerMessages: [], partnerPhase: "discovery", entryMode: "radar", documents: [], agents: [], connections: [], identity: null, identityConfig: { mode: "local" }, authReady: true, attachedDocumentIds: [], partnerPending: false, runtimeLoaded: false, runtime: { mode: "local", label: "Comprobando Gemini", provider: "Vertex AI", model: "gemini-3.7-flash", model_calls_enabled: false } };
 const buildPollers = new Map();
 const conversationSyncTimers = new Map();
 const terminalBuildStates = new Set(["completed", "failed", "stopped"]);
@@ -174,6 +174,10 @@ async function createProject(event) {
 
 async function sendPartnerMessage(message) {
   if (!chatIsReady()) { notify("Gemini no está conectado. Reinicia el estudio con la verificación de Vertex AI.", "error"); return; }
+  const firstTurnInBuilder = state.entryMode === "builder" && !state.partnerMessages.some((item) => item.role === "user");
+  const requestMessage = firstTurnInBuilder
+    ? `Quiero diseñar y construir un agente Taskmaster en Taskmaster Studio. Mi solicitud es: ${message}`
+    : message;
   const history = state.partnerMessages.filter((item) => ["user", "assistant"].includes(item.role)).slice(-16).map(({ role, content, toolActivity }) => ({ role, content, evidence: Array.isArray(toolActivity) ? toolActivity.slice(0, 8).map((entry) => `${entry.capability || "unknown"} | ${entry.status || "unknown"} | ${entry.path || "."} | ${entry.query || ""}`.slice(0, 500)) : [] }));
   state.partnerMessages.push({ role: "user", content: message });
   state.partnerPending = true; persistPartnerHistory(); showPartnerChat(); renderPartnerConversation();
@@ -181,7 +185,7 @@ async function sendPartnerMessage(message) {
     const payload = await api("/api/v1/collaborative/messages", {
       method: "POST",
       background: true,
-      body: JSON.stringify({ message, history, conversation_id: state.activeConversationId, document_ids: state.attachedDocumentIds }),
+      body: JSON.stringify({ message: requestMessage, history, conversation_id: state.activeConversationId, document_ids: state.attachedDocumentIds }),
     });
     state.partnerMessages.push({ role: "assistant", content: payload.reply, model: payload.model, provider: payload.provider, intent: payload.intent, agentDraft: payload.agent_draft, toolActivity: payload.tool_activity, connectionOffers: payload.connection_offers || [] });
     state.partnerPhase = payload.phase;
@@ -203,6 +207,37 @@ function showWelcome() {
   document.body.classList.remove("chat-active");
   $("#partner-chat-view").hidden = true;
   $("#welcome-view").hidden = false;
+  renderWelcomeMode();
+}
+
+function renderWelcomeMode() {
+  const builder = state.entryMode === "builder";
+  $("#taskmaster-studio-access").setAttribute("aria-pressed", String(builder));
+  document.body.classList.toggle("taskmaster-studio-mode", builder);
+  $("#welcome-eyebrow").textContent = builder ? "TASKMASTER STUDIO · INGENIERO DE AGENTES" : "RADAR DE PROYECTOS · SOCIO COLABORATIVO";
+  $("#welcome-title").textContent = builder ? "Construye tu Taskmaster" : "¿Qué proyecto deberíamos construir?";
+  $("#welcome-lead").textContent = builder
+    ? "Describe el trabajo que quieres delegar. Gemini aclarará el objetivo y el Ingeniero de agentes seleccionará el framework, preparará las pruebas y pedirá tu aprobación antes de construir."
+    : "Gemini contrasta tu portafolio de GitHub, el contexto de tus documentos y tendencias actuales en fuentes verificables para encontrar oportunidades de sistemas con evidencia.";
+  $("#project-description").placeholder = builder ? "Describe el agente, sus usuarios o el proceso que quieres automatizar…" : "Escribe un mensaje para explorar una oportunidad…";
+  $("#welcome-examples").innerHTML = builder
+    ? `<button type="button" data-example="Quiero crear un agente Taskmaster que organice un flujo de trabajo de varios pasos y solicite aprobación antes de actuar."><span>✦</span> Diseñar un Taskmaster</button><button type="button" data-example="Ayúdame a convertir este proceso manual en un agente seguro, con herramientas, memoria y pruebas."><span>⌁</span> Automatizar un proceso</button><button type="button" data-example="Quiero evaluar la arquitectura y los riesgos de un agente antes de construirlo."><span>◇</span> Evaluar una arquitectura</button>`
+    : `<button type="button" data-example="Analiza mis repositorios de GitHub y dime qué oportunidad de proyecto complementaría mejor mi portafolio."><span>⌘</span> Analizar mi portafolio</button><button type="button" data-example="Investiga proyectos en tendencia este año en el área de sistemas y propón oportunidades respaldadas por fuentes verificadas."><span>◎</span> Investigar tendencias</button><button type="button" data-example="Revisa mis proyectos de GitHub, mis documentos de Google Drive y tendencias actuales para recomendarme qué proyecto construir."><span>◇</span> Descubrir una oportunidad</button>`;
+  $("#welcome-sources").innerHTML = builder
+    ? `<article><span>✦</span><div><strong>Gemini 3.7 Flash</strong><small>Descubre y especifica contigo</small></div></article><article><span>⌁</span><div><strong>Agents CLI + ADK</strong><small>Estructura, herramientas y pruebas</small></div></article><article><span>◇</span><div><strong>Aprobación humana</strong><small>Nada se construye sin confirmar</small></div></article>`
+    : `<article><span>⌘</span><div><strong>GitHub</strong><small>Experiencia, activos y vacíos</small></div></article><article><span>▤</span><div><strong>Google Drive</strong><small>Documentos, requisitos y contexto</small></div></article><article><span>◎</span><div><strong>Web verificada</strong><small>Tendencias, adopción y fuentes</small></div></article>`;
+  $("#welcome-trust").textContent = builder
+    ? "El Socio colaborativo diseña contigo. El Ingeniero construye solo después de tu confirmación y solicita permiso antes de ejecutar pruebas o efectos externos."
+    : "El análisis es de solo lectura. Las fuentes no disponibles se declaran y ningún proyecto se crea sin tu confirmación.";
+  bindExampleButtons();
+}
+
+function openTaskmasterStudio() {
+  state.entryMode = "builder";
+  state.activeConversationId = newConversationId(); state.partnerMessages = []; state.partnerPhase = "discovery"; state.attachedDocumentIds = [];
+  renderConversationHistory(); renderAttachments(); showWelcome();
+  document.body.classList.remove("sidebar-open");
+  $("#project-description").focus();
 }
 
 function renderPartnerConversation() {
@@ -286,7 +321,7 @@ function resetPartnerChat() {
   // Reserve the conversation before the first message. Otherwise, a delayed
   // history refresh can interpret a null id as "open the latest chat" and
   // replace the blank conversation the user just requested.
-  state.activeConversationId = newConversationId(); state.partnerMessages = []; state.partnerPhase = "discovery"; state.attachedDocumentIds = [];
+  state.entryMode = "radar"; state.activeConversationId = newConversationId(); state.partnerMessages = []; state.partnerPhase = "discovery"; state.attachedDocumentIds = [];
   renderConversationHistory();
   renderAttachments();
   showWelcome(); $("#project-description").focus();
@@ -610,7 +645,7 @@ function handleAttachmentClick(event) {
   if (button) deleteDocument(button.dataset.deleteDocument);
 }
 function openChatHome() {
-  state.activeConversationId = null; state.partnerMessages = []; state.partnerPhase = "discovery"; state.attachedDocumentIds = [];
+  state.entryMode = "radar"; state.activeConversationId = null; state.partnerMessages = []; state.partnerPhase = "discovery"; state.attachedDocumentIds = [];
   renderConversationHistory(); renderAttachments(); showWelcome();
 }
 function enableComposerKeyboard(textarea, submit) {
@@ -730,6 +765,7 @@ $("#sidebar-new-chat").addEventListener("click", resetPartnerChat);
 $("#partner-conversation").addEventListener("click", handlePartnerConversationAction);
 $("#conversation-history").addEventListener("click", handleConversationHistory);
 $("#agent-catalog").addEventListener("click", handleAgentCatalog);
+$("#taskmaster-studio-access").addEventListener("click", openTaskmasterStudio);
 $("#connection-catalog").addEventListener("click", handleConnectionCatalog);
 $("#sidebar-toggle").addEventListener("click", () => document.body.classList.add("sidebar-open"));
 $("#sidebar-close").addEventListener("click", () => document.body.classList.remove("sidebar-open"));
@@ -738,11 +774,14 @@ $("#welcome-document-input").addEventListener("change", (event) => { uploadDocum
 $("#chat-document-input").addEventListener("change", (event) => { uploadDocuments(event.target.files); event.target.value = ""; });
 $("#welcome-attachments").addEventListener("click", handleAttachmentClick);
 $("#chat-attachments").addEventListener("click", handleAttachmentClick);
-$$('[data-example]').forEach((button) => button.addEventListener("click", () => {
-  $("#project-description").value = button.dataset.example;
-  $("#project-description").dispatchEvent(new Event("input"));
-  $("#project-description").focus();
-}));
+function bindExampleButtons() {
+  $$('[data-example]').forEach((button) => button.addEventListener("click", () => {
+    $("#project-description").value = button.dataset.example;
+    $("#project-description").dispatchEvent(new Event("input"));
+    $("#project-description").focus();
+  }));
+}
+bindExampleButtons();
 $("#project-description").addEventListener("input", (event) => { $("#char-count").textContent = `${event.target.value.length} / 6000`; });
 $("#partner-message-input").addEventListener("input", (event) => { $("#partner-char-count").textContent = `${event.target.value.length} / 6000`; });
 enableComposerKeyboard($("#project-description"), $("#project-form"));
