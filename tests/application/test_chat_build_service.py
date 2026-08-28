@@ -14,6 +14,9 @@ from adapters.frameworks import (
     GenkitGenerator,
 )
 from adapters.google_adk import GoogleAdkGenerator
+from studio.application.agent_catalog import AgentCatalog
+from studio.application.agent_runtime_service import AgentRuntimeResult, RuntimeStep
+from studio.application.catalog_agent_execution_service import CatalogAgentExecutionService
 from studio.application.chat_build_service import ChatBuildService, ChatBuildSnapshot
 from studio.domain.errors import DomainError
 
@@ -50,8 +53,8 @@ def _workspace_draft() -> dict[str, object]:
     return draft
 
 
-def _service(tmp_path: Path) -> ChatBuildService:
-    root = tmp_path / "generated"
+def _service(tmp_path: Path, *, catalog: AgentCatalog | None = None) -> ChatBuildService:
+    root = tmp_path / "projects"
     registry = FrameworkGeneratorRegistry(
         (
             GoogleAdkGenerator(root),
@@ -60,7 +63,7 @@ def _service(tmp_path: Path) -> ChatBuildService:
             GenkitGenerator(root),
         )
     )
-    return ChatBuildService(registry, root, step_delay_seconds=0)
+    return ChatBuildService(registry, root, step_delay_seconds=0, agent_catalog=catalog)
 
 
 def _wait(
@@ -93,7 +96,7 @@ def test_chat_build_requires_confirmation_and_owner(tmp_path: Path) -> None:
         service.get(snapshot.build_id, owner_session_id="owner_two")
 
 
-def test_chat_build_waits_for_tests_then_delivers_zip(tmp_path: Path) -> None:
+def test_chat_build_waits_for_tests_then_saves_a_project_directory(tmp_path: Path) -> None:
     service = _service(tmp_path)
     started = service.start(
         _draft(), owner_session_id="owner_one", confirmation="CONSTRUIR_AGENTE"
@@ -117,6 +120,13 @@ def test_chat_build_waits_for_tests_then_delivers_zip(tmp_path: Path) -> None:
     assert len(completed.tests) == 3
     assert all(result.passed for result in completed.tests)
     assert completed.download_ready is True
+    project_directory = Path(completed.project_directory)
+    assert project_directory.parent == (tmp_path / "projects").resolve()
+    assert (project_directory / "taskmaster.specification.json").is_file()
+    assert (project_directory / "taskmaster.manifest.json").is_file()
+
+    # The legacy package remains available through the API for backwards compatibility,
+    # but the product's primary artifact is the persistent project directory above.
     filename, content = service.download(started.build_id, owner_session_id="owner_one")
     assert filename.endswith("-google_adk.zip")
     with zipfile.ZipFile(BytesIO(content)) as archive:
@@ -175,3 +185,64 @@ def test_chat_build_adds_and_verifies_confined_workspace_reader(tmp_path: Path) 
         assert "tests/unit/test_workspace.py" in archive.namelist()
         tools = archive.read("app/tools.py").decode("utf-8")
         assert "def workspace_read" in tools
+
+
+class _RuntimeSpy:
+    def __init__(self) -> None:
+        self.messages: list[str] = []
+
+    def run_specification(self, specification, **kwargs) -> AgentRuntimeResult:
+        del specification
+        self.messages.append(kwargs["message"])
+        return AgentRuntimeResult(
+            run_id="run_1234567890abcdef",
+            reply="Resultado ejecutado desde la carpeta persistente.",
+            status="safe_preview",
+            steps=(
+                RuntimeStep(
+                    name="Procesar solicitud",
+                    status="simulated",
+                    detail="Ejecución controlada dentro del Studio.",
+                ),
+            ),
+            runtime_mode="local_fallback",
+            model="runtime-de-prueba",
+        )
+
+
+def test_catalog_agent_runs_from_projects_and_keeps_its_own_memory(tmp_path: Path) -> None:
+    catalog = AgentCatalog(tmp_path / "data")
+    service = _service(tmp_path, catalog=catalog)
+    started = service.start(
+        _draft(), owner_session_id="owner_one", confirmation="CONSTRUIR_AGENTE"
+    )
+    _wait(service, started.build_id, "owner_one", {"awaiting_test_approval"})
+    service.decide_tests(
+        started.build_id,
+        owner_session_id="owner_one",
+        decision="approved",
+    )
+    completed = _wait(service, started.build_id, "owner_one", {"completed", "failed"})
+    assert completed.state == "completed"
+
+    agent = catalog.list("owner_one")[0]
+    runtime = _RuntimeSpy()
+    execution = CatalogAgentExecutionService(catalog, runtime, tmp_path / "projects")
+    execution.run(
+        agent.id,
+        message="Primera solicitud",
+        owner_session_id="owner_one",
+        idempotency_key="first-run",
+    )
+    execution.run(
+        agent.id,
+        message="Segunda solicitud",
+        owner_session_id="owner_one",
+        idempotency_key="second-run",
+    )
+
+    project_directory = Path(agent.artifact_directory)
+    state = (project_directory / "runtime-state.json").read_text(encoding="utf-8")
+    assert "Primera solicitud" in state
+    assert "Segunda solicitud" in state
+    assert "Contexto persistente de ejecuciones anteriores" in runtime.messages[1]

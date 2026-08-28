@@ -21,6 +21,7 @@ COPY sandbox ./sandbox
 COPY schemas ./schemas
 
 RUN python -m pip install --no-cache-dir ".[vertex,firestore,laboratory]"
+RUN python -m pip install --no-cache-dir ".[storage]"
 
 
 FROM python:3.13-slim AS runtime
@@ -33,7 +34,7 @@ ENV HOME=/tmp \
 
 RUN groupadd --gid 10001 studio \
     && useradd --uid 10001 --gid studio --no-create-home --shell /usr/sbin/nologin studio \
-    && mkdir -p /app/.studio-data /app/generated \
+    && mkdir -p /app/.studio-data /app/generated /app/projects \
     && chown -R 10001:10001 /app
 
 COPY --from=builder /opt/venv /opt/venv

@@ -21,6 +21,9 @@
     {"name": "STUDIO_FIRESTORE_LOCATION", "value_template": "us-central1", "purpose": "Match the declared database location."},
     {"name": "STUDIO_FIRESTORE_TRANSACTION_MAX_ATTEMPTS", "value_template": "5", "purpose": "Bound transaction retries."},
     {"name": "STUDIO_FIRESTORE_DEMO_RETENTION_DAYS", "value_template": "7", "purpose": "Bound demo-data retention."},
+    {"name": "STUDIO_ENABLE_CLOUD_STORAGE", "value_template": "true", "purpose": "Require durable generated-project replication."},
+    {"name": "STUDIO_PROJECTS_BUCKET", "value_template": "{project_id}-taskmaster-projects", "purpose": "Select the private generated-project bucket."},
+    {"name": "STUDIO_PROJECTS_BUCKET_PREFIX", "value_template": "taskmaster-projects", "purpose": "Isolate Studio objects inside the bucket."},
     {"name": "STUDIO_AUTH_MODE", "value_template": "identity_platform", "purpose": "Require a server-verified multi-user identity."},
     {"name": "STUDIO_IDENTITY_PROJECT", "value_template": "{project_id}", "purpose": "Verify Firebase ID tokens against this project."},
     {"name": "STUDIO_FIREBASE_AUTH_DOMAIN", "value_template": "collaborative-taskmaster-studio-760216344589.us-central1.run.app", "purpose": "Keep Firebase authentication helpers on the same Cloud Run origin."},
@@ -29,6 +32,7 @@
     {"name": "STUDIO_ADK_APP_NAME", "value_template": "agents", "purpose": "Select the validated ADK application name."},
     {"name": "STUDIO_DATA_DIRECTORY", "value_template": "/tmp/studio-data", "purpose": "Keep fallback state in writable ephemeral storage."},
     {"name": "STUDIO_GENERATED_ROOT", "value_template": "/tmp/generated", "purpose": "Keep generated artifacts in writable ephemeral storage."},
+    {"name": "STUDIO_PROJECTS_ROOT", "value_template": "/tmp/projects", "purpose": "Use an ephemeral workspace backed by Cloud Storage."},
     {"name": "STUDIO_SANDBOX_TIMEOUT", "value_template": "8", "purpose": "Bound local sandbox execution."}
   ],
   "secrets": [

@@ -18,6 +18,8 @@ venv/
 # Generated Taskmasters and local state
 generated/*
 !generated/.gitkeep
+projects/*
+!projects/.gitkeep
 .studio-data/
 logs/
 .local-server*.log

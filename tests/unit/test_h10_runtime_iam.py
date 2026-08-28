@@ -46,6 +46,15 @@ def _secret_condition() -> dict[str, str]:
     return binding.condition.render(PROJECT_ID)
 
 
+def _storage_condition() -> dict[str, str]:
+    definition = load_iam_definition()
+    binding = next(
+        item for item in definition.bindings if item.role == "roles/storage.objectUser"
+    )
+    assert binding.condition is not None
+    return binding.condition.render(PROJECT_ID)
+
+
 def _policy(*bindings: dict[str, object]) -> dict[str, object]:
     default = (
         {"role": "roles/aiplatform.user", "members": [MEMBER]},
@@ -58,6 +67,11 @@ def _policy(*bindings: dict[str, object]) -> dict[str, object]:
             "role": "roles/secretmanager.secretAccessor",
             "members": [MEMBER],
             "condition": _secret_condition(),
+        },
+        {
+            "role": "roles/storage.objectUser",
+            "members": [MEMBER],
+            "condition": _storage_condition(),
         },
         {"role": "roles/viewer", "members": ["user:someone@example.com"]},
     )
@@ -95,6 +109,7 @@ def test_definition_contains_only_runtime_roles_with_scoped_data_access() -> Non
         "roles/aiplatform.user",
         "roles/datastore.user",
         "roles/secretmanager.secretAccessor",
+        "roles/storage.objectUser",
     }
     assert definition.exact_project_roles is True
     firestore = next(
@@ -113,7 +128,7 @@ def test_plan_is_offline_and_never_marks_bindings_as_applied() -> None:
     assert result.member == MEMBER
     assert result.cloud_verified is False
     assert result.bindings_applied is False
-    assert len(result.binding_commands) == 3
+    assert len(result.binding_commands) == 4
 
 
 def test_binding_commands_are_explicit_and_contain_no_admin_roles() -> None:
@@ -126,6 +141,8 @@ def test_binding_commands_are_explicit_and_contain_no_admin_roles() -> None:
     assert "roles/aiplatform.user" in serialized
     assert "roles/datastore.user" in serialized
     assert "roles/secretmanager.secretAccessor" in serialized
+    assert "roles/storage.objectUser" in serialized
+    assert f"{PROJECT_ID}-taskmaster-projects/objects/" in serialized
     assert serialized.count(f"projects/{PROJECT_ID}/secrets/studio-") == 6
     assert "databases/collaborative-taskmaster" in serialized
     assert "roles/owner" not in serialized
@@ -139,7 +156,7 @@ def test_offline_cli_emits_machine_readable_plan(capsys: pytest.CaptureFixture[s
     assert payload["status"] == "planned"
     assert payload["cloud_verified"] is False
     assert payload["bindings_applied"] is False
-    assert len(payload["binding_commands"]) == 3
+    assert len(payload["binding_commands"]) == 4
 
 
 def test_verify_accepts_exact_roles_and_ignores_other_principals() -> None:
@@ -184,6 +201,11 @@ def test_verify_rejects_condition_drift() -> None:
                 "role": "roles/secretmanager.secretAccessor",
                 "members": [MEMBER],
                 "condition": _secret_condition(),
+            },
+            {
+                "role": "roles/storage.objectUser",
+                "members": [MEMBER],
+                "condition": _storage_condition(),
             },
         )
     )

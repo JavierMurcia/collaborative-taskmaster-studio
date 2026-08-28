@@ -1,5 +1,6 @@
 """Firestore persistence."""
 
+from .agent_catalog import FirestoreAgentCatalog
 from .config import (
     FirestoreReadiness,
     FirestoreRuntime,
@@ -16,6 +17,7 @@ __all__ = [
     "FirestoreSettings",
     "FirestoreProjectRepository",
     "FirestoreConversationMemoryRepository",
+    "FirestoreAgentCatalog",
     "FirestoreTransactionExecutor",
     "TransactionRetryExhaustedError",
     "initialize_firestore",

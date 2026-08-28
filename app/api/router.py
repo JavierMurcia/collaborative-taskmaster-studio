@@ -28,11 +28,12 @@ from app.api.schemas import (
     InterviewAnswerRequest,
     RefreshIdentityRequest,
 )
-from studio.application.agent_catalog import AgentCatalog
+from studio.application.agent_catalog import AgentCatalogRepository
 from studio.application.agent_runtime_service import AgentRuntimeService
 from studio.application.approval_service import ApprovalService
 from studio.application.briefing_generator import StructuredBriefingGenerator
 from studio.application.builder_readiness import BuilderReadiness, inspect_builder_readiness
+from studio.application.catalog_agent_execution_service import CatalogAgentExecutionService
 from studio.application.chat_build_service import ChatBuildService
 from studio.application.collaborative_chat_service import (
     ChatTurn,
@@ -94,7 +95,8 @@ class ServiceContainer:
     conversation_memory: ConversationMemoryService
     documents: DocumentLibrary
     chat_builder: ChatBuildService | None
-    agent_catalog: AgentCatalog | None
+    agent_catalog: AgentCatalogRepository | None
+    catalog_agent_runtime: CatalogAgentExecutionService | None
     plugin_registry: PluginRegistry
     connections: ConnectionService
     google_drive: GoogleDriveReader | None
@@ -125,7 +127,8 @@ class ServiceContainer:
         conversation_memory: ConversationMemoryService | None = None,
         documents: DocumentLibrary | None = None,
         chat_builder: ChatBuildService | None = None,
-        agent_catalog: AgentCatalog | None = None,
+        agent_catalog: AgentCatalogRepository | None = None,
+        catalog_agent_runtime: CatalogAgentExecutionService | None = None,
         plugin_registry: PluginRegistry | None = None,
         connections: ConnectionService | None = None,
         google_drive: GoogleDriveReader | None = None,
@@ -183,6 +186,7 @@ class ServiceContainer:
             documents=documents,
             chat_builder=chat_builder,
             agent_catalog=agent_catalog,
+            catalog_agent_runtime=catalog_agent_runtime,
             plugin_registry=active_registry,
             connections=connections,
             google_drive=google_drive,
@@ -608,6 +612,27 @@ def create_router(services: ServiceContainer) -> APIRouter:
     def list_catalog_agents(session_id: SessionHeader) -> dict[str, Any]:
         agents = services.agent_catalog.list(session_id) if services.agent_catalog else ()
         return {"agents": [item.model_dump(mode="json") for item in agents]}
+
+    @router.post("/collaborative/agents/{agent_id}/messages")
+    def run_catalog_agent(
+        agent_id: str,
+        body: AgentMessageRequest,
+        request: Request,
+        session_id: SessionHeader,
+        idempotency_key: IdempotencyHeader,
+    ) -> dict[str, Any]:
+        if services.catalog_agent_runtime is None:
+            raise DomainError(
+                "CATALOG_AGENT_RUNTIME_UNAVAILABLE",
+                "La ejecución de Taskmasters publicados no está disponible.",
+            )
+        return services.catalog_agent_runtime.run(
+            agent_id,
+            message=body.message,
+            owner_session_id=session_id,
+            idempotency_key=idempotency_key,
+            identity=_identity(request),
+        ).model_dump(mode="json")
 
     @router.patch("/collaborative/agents/{agent_id}")
     def update_catalog_agent(

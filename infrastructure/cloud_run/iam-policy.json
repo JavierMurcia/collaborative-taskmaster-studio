@@ -17,6 +17,15 @@
       }
     },
     {
+      "role": "roles/storage.objectUser",
+      "purpose": "Read and write generated Taskmaster files only inside the private project bucket.",
+      "condition": {
+        "title": "taskmaster_projects_bucket_only",
+        "description": "Restrict runtime object access to the generated-project bucket.",
+        "expression_template": "resource.name.startsWith(\"projects/_/buckets/{project_id}-taskmaster-projects/objects/\")"
+      }
+    },
+    {
       "role": "roles/secretmanager.secretAccessor",
       "purpose": "Read only the six runtime secrets declared for identity and OAuth.",
       "condition": {
@@ -33,6 +42,7 @@
     "roles/aiplatform.admin",
     "roles/datastore.owner",
     "roles/datastore.indexAdmin",
+    "roles/storage.admin",
     "roles/iam.securityAdmin",
     "roles/iam.serviceAccountAdmin",
     "roles/iam.serviceAccountKeyAdmin",

@@ -17,7 +17,7 @@ localStorage.setItem(SESSION_KEY, sessionId);
 function conversationStorageKey(owner = state?.identity?.user_id || sessionId) { return `${PARTNER_CONVERSATIONS_KEY}:${owner}`; }
 
 const restoredConversations = readPartnerConversations(sessionId);
-const state = { projectId: localStorage.getItem(PROJECT_KEY), partnerConversations: restoredConversations, activeConversationId: null, partnerMessages: [], partnerPhase: "discovery", entryMode: "radar", documents: [], agents: [], connections: [], identity: null, identityConfig: { mode: "local" }, authReady: true, attachedDocumentIds: [], partnerPending: false, partnerTypingVisible: false, entryTransitionPending: false, runtimeLoaded: false, runtime: { mode: "local", label: "Comprobando Gemini", provider: "Vertex AI", model: "gemini-3.7-flash", model_calls_enabled: false } };
+const state = { projectId: localStorage.getItem(PROJECT_KEY), partnerConversations: restoredConversations, activeConversationId: null, activeCatalogAgent: null, partnerMessages: [], partnerPhase: "discovery", entryMode: "radar", documents: [], agents: [], connections: [], identity: null, identityConfig: { mode: "local" }, authReady: true, attachedDocumentIds: [], partnerPending: false, partnerTypingVisible: false, entryTransitionPending: false, runtimeLoaded: false, runtime: { mode: "local", label: "Comprobando Gemini", provider: "Vertex AI", model: "gemini-3.7-flash", model_calls_enabled: false } };
 const buildPollers = new Map();
 const conversationSyncTimers = new Map();
 const terminalBuildStates = new Set(["completed", "failed", "stopped"]);
@@ -216,6 +216,10 @@ async function transitionWelcomeToConversation() {
 }
 
 async function sendPartnerMessage(message) {
+  if (state.activeCatalogAgent) {
+    await sendCatalogAgentMessage(message);
+    return;
+  }
   if (!chatIsReady()) { notify("Gemini no está conectado. Reinicia el estudio con la verificación de Vertex AI.", "error"); return; }
   const firstConversationTurn = !state.partnerMessages.some((item) => item.role === "user");
   const firstTurnInBuilder = state.entryMode === "builder" && firstConversationTurn;
@@ -251,6 +255,42 @@ async function sendPartnerMessage(message) {
     state.partnerPending = false;
     state.partnerTypingVisible = false;
     $("#partner-chat-view").classList.remove("first-turn-lifting");
+    renderPartnerConversation();
+  }
+}
+
+async function sendCatalogAgentMessage(message) {
+  if (!message.trim() || state.partnerPending || !state.activeCatalogAgent) return;
+  const agent = state.activeCatalogAgent;
+  state.partnerMessages.push({ role: "user", content: message });
+  state.partnerPending = true;
+  state.partnerTypingVisible = true;
+  persistPartnerHistory();
+  showPartnerChat();
+  renderPartnerConversation();
+  try {
+    const payload = await api(`/api/v1/collaborative/agents/${encodeURIComponent(agent.id)}/messages`, {
+      method: "POST",
+      idempotent: "catalog-agent-run",
+      body: JSON.stringify({ message }),
+    });
+    const stepSummary = Array.isArray(payload.steps) && payload.steps.length
+      ? `\n\n**Ejecución controlada**\n${payload.steps.map((step) => `- ${step.name}: ${step.detail}`).join("\n")}`
+      : "";
+    state.partnerMessages.push({
+      role: "assistant",
+      sourceLabel: agent.name,
+      content: `${payload.reply}${stepSummary}`,
+      model: payload.model,
+      provider: "Taskmaster Runtime",
+      revealResponse: true,
+    });
+    persistPartnerHistory();
+  } catch (error) {
+    handle(error);
+  } finally {
+    state.partnerPending = false;
+    state.partnerTypingVisible = false;
     renderPartnerConversation();
   }
 }
@@ -445,7 +485,7 @@ function renderAgentBuild(message, index) {
   const tests = Array.isArray(build.tests) && build.tests.length ? `<div class="build-tests">${build.tests.map((test) => `<span class="${test.passed ? "pass" : "fail"}">${test.passed ? "✓" : "×"} ${escapeHtml(test.name)}</span>`).join("")}</div>` : "";
   const capabilities = Array.isArray(build.capabilities) && build.capabilities.length ? `<div class="build-capabilities"><span>Capacidades activas</span>${build.capabilities.map((capability) => `<b>${escapeHtml(capability)}</b>`).join("")}</div>` : "";
   const plugins = Array.isArray(build.plugins) && build.plugins.length ? `<div class="build-capabilities build-plugins"><span>Plugins seleccionados</span>${build.plugins.map((plugin) => `<b class="${escapeHtml(plugin.availability)}">${escapeHtml(plugin.title)} · ${plugin.availability === "available" ? "listo" : "requiere conexión"}</b>`).join("")}</div>` : `<div class="build-capabilities"><span>Plugins</span><b>Ninguno necesario</b></div>`;
-  const complete = build.state === "completed" ? `<section class="build-result"><span>AGENTE LISTO Y CATALOGADO</span><strong>${escapeHtml(build.agent_name || "Taskmaster")}</strong><p>${Number(build.file_count || 0)} archivos · ${build.tests?.filter((test) => test.passed).length || 0}/${build.tests?.length || 0} verificaciones aprobadas · ${escapeHtml(build.framework?.label || "Framework seleccionado")}</p>${capabilities}${plugins}${tests}<div><button type="button" class="secondary" data-toggle-build-index="${index}">${expanded ? "Ocultar actividad" : "Ver actividad"}</button><button type="button" data-download-build-index="${index}">Descargar agente .zip</button></div></section>` : "";
+  const complete = build.state === "completed" ? `<section class="build-result"><span>TASKMASTER GUARDADO EN PROYECTOS</span><strong>${escapeHtml(build.agent_name || "Taskmaster")}</strong><p>${Number(build.file_count || 0)} archivos · ${build.tests?.filter((test) => test.passed).length || 0}/${build.tests?.length || 0} verificaciones aprobadas · ${escapeHtml(build.framework?.label || "Framework seleccionado")}</p><p class="build-project-path">${escapeHtml(build.project_directory || "projects/")}</p>${capabilities}${plugins}${tests}<div><button type="button" class="secondary" data-toggle-build-index="${index}">${expanded ? "Ocultar actividad" : "Ver actividad"}</button><button type="button" data-open-built-agent-index="${index}">Usar Taskmaster</button></div></section>` : "";
   const stopped = ["failed", "stopped"].includes(build.state) ? `<section class="build-result build-stopped"><span>${build.state === "failed" ? "DETENIDO DE FORMA SEGURA" : "CONSTRUCCIÓN DETENIDA"}</span><strong>${escapeHtml(build.error || "No se realizaron efectos externos.")}</strong><button type="button" class="secondary" data-toggle-build-index="${index}">${expanded ? "Ocultar actividad" : "Ver actividad"}</button></section>` : "";
   return `<article class="partner-turn assistant-turn builder-turn"><div class="partner-avatar builder-avatar" aria-hidden="true">⌘</div><div><div class="builder-heading"><div><div class="turn-label">${escapeHtml(build.builder || "Ingeniero de agentes")}</div><strong>${escapeHtml(build.agent_name || "Construyendo agente")}</strong></div><span>${escapeHtml(runtimeLabel)}</span></div><p class="builder-boundary">Gemini terminó el diseño. Este constructor trabaja solo sobre la especificación confirmada y no muestra razonamiento privado.</p>${eventMarkup ? `<ol class="build-events ${terminal && !expanded ? "collapsed" : ""}">${eventMarkup}</ol>` : ""}${approval}${complete}${stopped}<div class="turn-meta"><small>${escapeHtml(build.framework?.label || "Selección automática")} · ${escapeHtml(build.state || "queued")}</small></div></div></article>`;
 }
@@ -455,7 +495,7 @@ function buildPhaseLabel(phase) {
 function persistPartnerHistory() {
   const first = state.partnerMessages.find((item) => item.role === "user")?.content || "Nueva conversación";
   if (!state.activeConversationId) state.activeConversationId = newConversationId();
-  const stored = { id: state.activeConversationId, title: conversationTitle(first), messages: state.partnerMessages.slice(-32), documentIds: [...state.attachedDocumentIds], phase: state.partnerPhase, updatedAt: new Date().toISOString() };
+  const stored = { id: state.activeConversationId, title: conversationTitle(first), messages: state.partnerMessages.slice(-32), documentIds: [...state.attachedDocumentIds], phase: state.partnerPhase, agentId: state.activeCatalogAgent?.id || "", updatedAt: new Date().toISOString() };
   state.partnerConversations = [stored, ...state.partnerConversations.filter((item) => item.id !== stored.id)].slice(0, 40);
   localStorage.setItem(conversationStorageKey(), JSON.stringify(state.partnerConversations));
   localStorage.removeItem(PARTNER_CHAT_KEY); renderConversationHistory();
@@ -638,8 +678,28 @@ function handleAgentCatalog(event) {
   if (remove) { archiveAgent(remove.dataset.deleteAgent); return; }
   const open = event.target.closest("[data-open-agent]"); if (!open) return;
   const agent = state.agents.find((item) => item.id === open.dataset.openAgent); if (!agent) return;
-  state.partnerMessages.push({ role: "assistant", sourceLabel: "Catálogo", content: `**${agent.name}** está listo.\n\nObjetivo: ${agent.purpose}\n\nFramework: ${agent.framework_label}\nConstructor: ${agent.builder_runtime}\nPlugins: ${(agent.plugins || []).map((item) => item.title).join(", ") || "ninguno"}\n\nEl paquete superó el laboratorio. La ejecución con herramientas externas permanece bloqueada hasta conectar y aprobar cada plugin.` });
-  persistPartnerHistory(); showPartnerChat(); renderPartnerConversation(); document.body.classList.remove("sidebar-open");
+  openCatalogAgent(agent);
+}
+
+function openCatalogAgent(agent) {
+  state.activeCatalogAgent = agent;
+  state.entryMode = "runtime";
+  state.activeConversationId = null;
+  state.partnerPhase = "runtime";
+  state.attachedDocumentIds = [];
+  state.partnerMessages = [{
+    role: "assistant",
+    sourceLabel: agent.name,
+    content: `**${agent.name} está activo.**\n\n${agent.purpose}\n\nProyecto persistente: ${agent.artifact_directory}\nFramework: ${agent.framework_label}\n\nEscribe una solicitud para ejecutar este Taskmaster. Sus herramientas respetarán las conexiones y aprobaciones disponibles.`,
+    provider: "Taskmaster Runtime",
+    model: state.runtime.model,
+    revealResponse: true,
+  }];
+  showPartnerChat();
+  renderPartnerConversation();
+  renderConversationHistory();
+  renderAttachments();
+  document.body.classList.remove("sidebar-open");
 }
 async function archiveAgent(agentId) {
   const agent = state.agents.find((item) => item.id === agentId); if (!agent || !window.confirm(`¿Archivar “${agent.name}”? El paquete generado no se eliminará.`)) return;
@@ -652,6 +712,8 @@ function handleConversationHistory(event) {
   const selectButton = event.target.closest("[data-conversation-id]"); if (!selectButton) return;
   const conversation = state.partnerConversations.find((item) => item.id === selectButton.dataset.conversationId); if (!conversation) return;
   state.activeConversationId = conversation.id; state.partnerMessages = [...conversation.messages]; state.partnerPhase = conversation.phase || "discovery";
+  state.activeCatalogAgent = state.agents.find((agent) => agent.id === conversation.agentId) || null;
+  state.entryMode = state.activeCatalogAgent ? "runtime" : "radar";
   state.attachedDocumentIds = [...(conversation.documentIds || [])];
   showPartnerChat(); renderPartnerConversation(); renderConversationHistory(); renderAttachments(); document.body.classList.remove("sidebar-open");
 }
@@ -664,6 +726,7 @@ function deleteConversation(conversationId) {
   api(`/api/v1/collaborative/conversations/${encodeURIComponent(conversationId)}`, { method: "DELETE", background: true }).catch((error) => console.warn("Server deletion will need to be retried.", error));
   if (state.activeConversationId === conversationId) {
     const next = state.partnerConversations[0]; state.activeConversationId = next?.id || null; state.partnerMessages = next ? [...next.messages] : []; state.partnerPhase = next?.phase || "discovery"; state.attachedDocumentIds = next ? [...(next.documentIds || [])] : [];
+    state.activeCatalogAgent = next ? state.agents.find((agent) => agent.id === next.agentId) || null : null;
     if (next) { showPartnerChat(); renderPartnerConversation(); } else showWelcome();
   }
   renderConversationHistory();
@@ -722,7 +785,7 @@ function handleAttachmentClick(event) {
   if (button) deleteDocument(button.dataset.deleteDocument);
 }
 function openChatHome() {
-  state.entryMode = "radar"; state.activeConversationId = null; state.partnerMessages = []; state.partnerPhase = "discovery"; state.attachedDocumentIds = [];
+  state.entryMode = "radar"; state.activeCatalogAgent = null; state.activeConversationId = null; state.partnerMessages = []; state.partnerPhase = "discovery"; state.attachedDocumentIds = [];
   renderConversationHistory(); renderAttachments(); showWelcome();
 }
 function enableComposerKeyboard(textarea, submit) {
@@ -748,8 +811,16 @@ async function handlePartnerConversationAction(event) {
   if (createButton) { await startAgentBuild(Number(createButton.dataset.createAgentIndex)); return; }
   const decisionButton = event.target.closest("[data-build-decision]");
   if (decisionButton) { await decideAgentBuild(Number(decisionButton.dataset.buildIndex), decisionButton.dataset.buildDecision); return; }
-  const downloadButton = event.target.closest("[data-download-build-index]");
-  if (downloadButton) { await downloadAgentBuild(Number(downloadButton.dataset.downloadBuildIndex)); return; }
+  const openBuiltButton = event.target.closest("[data-open-built-agent-index]");
+  if (openBuiltButton) {
+    const message = state.partnerMessages[Number(openBuiltButton.dataset.openBuiltAgentIndex)];
+    const agentId = message?.build?.catalog_agent_id;
+    if (!agentId) return;
+    if (!state.agents.some((agent) => agent.id === agentId)) await loadAgentCatalog();
+    const agent = state.agents.find((item) => item.id === agentId);
+    if (agent) openCatalogAgent(agent);
+    return;
+  }
   const toggleButton = event.target.closest("[data-toggle-build-index]");
   if (toggleButton) { const message = state.partnerMessages[Number(toggleButton.dataset.toggleBuildIndex)]; if (message) { message.activityExpanded = !message.activityExpanded; persistPartnerHistory(); renderPartnerConversation(); } return; }
   const button = event.target.closest("[data-copy-index]"); if (!button) return;
@@ -780,15 +851,6 @@ async function decideAgentBuild(messageIndex, decision) {
     message.build = await api(`/api/v1/collaborative/builds/${encodeURIComponent(buildId)}/test-decision`, { method: "POST", idempotent: "chat-build-decision", body: JSON.stringify({ decision }) });
     persistPartnerHistory(); renderPartnerConversation();
     if (!terminalBuildStates.has(message.build.state)) scheduleBuildPoll(buildId, 250);
-  } catch (error) { handle(error); }
-}
-async function downloadAgentBuild(messageIndex) {
-  const build = state.partnerMessages[messageIndex]?.build; if (!build?.download_ready) return;
-  try {
-    const response = await fetch(`/api/v1/collaborative/builds/${encodeURIComponent(build.build_id)}/download.zip`, { headers: identityHeaders() });
-    if (!response.ok) { const payload = await response.json(); throw new Error(payload.error?.message || "No se pudo descargar el agente."); }
-    const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement("a");
-    link.href = url; link.download = `${conversationTitle(build.agent_name || "taskmaster")}.zip`; document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
   } catch (error) { handle(error); }
 }
 function resumeBuildPolling() {

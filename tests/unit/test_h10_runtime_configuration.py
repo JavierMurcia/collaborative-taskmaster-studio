@@ -75,7 +75,10 @@ def test_definition_declares_production_identity_and_oauth_secrets() -> None:
     definition = load_runtime_configuration()
     environment = definition.rendered_environment(PROJECT_ID)
 
-    assert len(environment) == 27
+    assert len(environment) == 31
+    assert environment["STUDIO_ENABLE_CLOUD_STORAGE"] == "true"
+    assert environment["STUDIO_PROJECTS_BUCKET"] == f"{PROJECT_ID}-taskmaster-projects"
+    assert environment["STUDIO_PROJECTS_ROOT"] == "/tmp/projects"
     assert environment["GOOGLE_CLOUD_PROJECT"] == PROJECT_ID
     assert environment["GOOGLE_GENAI_USE_VERTEXAI"] == "true"
     assert environment["STUDIO_ENABLE_VERTEX"] == "true"

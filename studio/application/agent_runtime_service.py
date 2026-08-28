@@ -87,9 +87,33 @@ class AgentRuntimeService:
         )
         if revision is None:
             raise DomainError("REVISION_NOT_FOUND", "No existe una revisión ejecutable.")
+        result = self.run_specification(
+            revision.specification,
+            project_id=project_id,
+            message=message,
+            owner_session_id=owner_session_id,
+            idempotency_key=idempotency_key,
+            identity=identity,
+        )
+        self._record(project_id, owner_session_id, idempotency_key, result)
+        return result
+
+    def run_specification(
+        self,
+        specification: TaskmasterSpecification,
+        *,
+        project_id: str,
+        message: str,
+        owner_session_id: str,
+        idempotency_key: str,
+        identity: IdentityContext | None = None,
+    ) -> AgentRuntimeResult:
+        """Run an already-approved specification loaded from a catalog project."""
+
+        del project_id, owner_session_id
         normalized = message.strip()
         if any(marker in normalized.casefold() for marker in _UNTRUSTED_MARKERS):
-            result = AgentRuntimeResult(
+            return AgentRuntimeResult(
                 run_id=_run_id(idempotency_key),
                 reply=(
                     "He rechazado esta entrada porque intenta modificar las políticas o evitar "
@@ -106,18 +130,13 @@ class AgentRuntimeService:
                 runtime_mode="policy_guard",
                 model="guardia-determinista",
             )
-            self._record(project_id, owner_session_id, idempotency_key, result)
-            return result
-
-        drive_evidence = self._drive_evidence(revision.specification, normalized, identity)
-        result = self._run_model(
-            revision.specification,
+        drive_evidence = self._drive_evidence(specification, normalized, identity)
+        return self._run_model(
+            specification,
             normalized,
             idempotency_key,
             drive_evidence=drive_evidence,
         )
-        self._record(project_id, owner_session_id, idempotency_key, result)
-        return result
 
     def _run_model(
         self,

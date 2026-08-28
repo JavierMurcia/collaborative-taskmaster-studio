@@ -34,6 +34,7 @@ from infrastructure.cloud_run import (
     load_runtime_configuration,
 )
 from infrastructure.firestore import (
+    FirestoreAgentCatalog,
     FirestoreConversationMemoryRepository,
     FirestoreProjectRepository,
     FirestoreSettings,
@@ -49,13 +50,20 @@ from infrastructure.local.conversation_memory import (
     InMemoryConversationMemoryRepository,
     JsonConversationMemoryRepository,
 )
+from infrastructure.local.project_storage import LocalProjectArtifactStore
 from infrastructure.local.repositories import JsonLocalRepository
+from infrastructure.storage import (
+    CloudProjectArtifactStore,
+    CloudStorageSettings,
+    initialize_cloud_storage,
+)
 from infrastructure.vertex import VertexModelGateway, VertexSettings, inspect_vertex_readiness
 from sandbox import SandboxEvaluator
-from studio.application.agent_catalog import AgentCatalog
+from studio.application.agent_catalog import AgentCatalog, AgentCatalogRepository
 from studio.application.agent_runtime_service import AgentRuntimeService
 from studio.application.briefing_generator import StructuredBriefingGenerator
 from studio.application.builder_readiness import inspect_builder_readiness
+from studio.application.catalog_agent_execution_service import CatalogAgentExecutionService
 from studio.application.chat_build_service import ChatBuildService
 from studio.application.collaborative_chat_service import CollaborativeChatService
 from studio.application.connection_service import ConnectionService
@@ -171,6 +179,7 @@ def create_app(
     generated_root: Path | None = None,
     vertex_settings: VertexSettings | None = None,
     firestore_settings: FirestoreSettings | None = None,
+    cloud_storage_settings: CloudStorageSettings | None = None,
     conversation_memory: ConversationMemoryRepository | None = None,
     document_library: DocumentLibrary | None = None,
     identity_verifier: IdentityVerifier | None = None,
@@ -191,11 +200,14 @@ def create_app(
     cloud_run_deployment = load_deployment_definition()
     active_firestore_settings = firestore_settings or FirestoreSettings.from_environment()
     firestore_runtime = initialize_firestore(active_firestore_settings)
+    active_storage_settings = cloud_storage_settings or CloudStorageSettings.from_environment()
+    storage_runtime = initialize_cloud_storage(active_storage_settings)
     firestore_indexes = verify_index_manifest()
     retention_policy = DemoRetentionPolicy(active_firestore_settings.demo_retention_days)
     firestore_retention = verify_retention_manifest(retention_policy)
     app.state.firestore_settings = active_firestore_settings
     app.state.firestore_runtime = firestore_runtime
+    app.state.cloud_storage_runtime = storage_runtime
     active_vertex_settings = vertex_settings or VertexSettings.from_environment()
     vertex_readiness = inspect_vertex_readiness(active_vertex_settings)
     model_gateway = (
@@ -233,7 +245,8 @@ def create_app(
     data_directory = Path(os.getenv("STUDIO_DATA_DIRECTORY", ".studio-data"))
     if repository is None:
         persistence_ready = (
-            not active_firestore_settings.enabled or firestore_runtime.readiness.status == "ready"
+            (not active_firestore_settings.enabled or firestore_runtime.readiness.status == "ready")
+            and (not active_storage_settings.enabled or storage_runtime.readiness.status == "ready")
         )
         if firestore_runtime.client is not None and persistence_ready:
             repository = FirestoreProjectRepository(
@@ -279,7 +292,11 @@ def create_app(
     google_gmail = GoogleGmailReader(connection_service)
     google_calendar = GoogleCalendarReader(connection_service)
     github = GitHubReader(connection_service)
-    agent_catalog = AgentCatalog(data_directory)
+    agent_catalog: AgentCatalogRepository = (
+        FirestoreAgentCatalog(cast(Any, firestore_runtime.client))
+        if firestore_runtime.client is not None and persistence_ready
+        else AgentCatalog(data_directory)
+    )
     builder_readiness = inspect_builder_readiness()
     construction_orchestrator = (
         AntigravitySdkOrchestrator(os.environ["STUDIO_ANTIGRAVITY_PYTHON"])
@@ -287,6 +304,15 @@ def create_app(
         else ControlledConstructionOrchestrator()
     )
     output_root = generated_root or Path(os.getenv("STUDIO_GENERATED_ROOT", "generated"))
+    projects_root = Path(os.getenv("STUDIO_PROJECTS_ROOT", "projects"))
+    if not projects_root.is_absolute():
+        projects_root = (Path.cwd() / projects_root).resolve()
+    projects_root.mkdir(parents=True, exist_ok=True)
+    project_store = (
+        CloudProjectArtifactStore(cast(Any, storage_runtime.client), active_storage_settings)
+        if storage_runtime.client is not None and persistence_ready
+        else LocalProjectArtifactStore()
+    )
     framework_generators = FrameworkGeneratorRegistry(
         (
             GoogleAdkGenerator(output_root),
@@ -311,6 +337,15 @@ def create_app(
     )
     export = AgentExportService(repository, framework_generators, output_root)
     demo_reset = DemoResetService(repository, active_clock, output_root)
+    agent_runtime = AgentRuntimeService(
+        repository,
+        event_repository,
+        active_clock,
+        model_gateway,
+        active_vertex_settings.model,
+        active_vertex_settings.max_model_output_tokens,
+        google_drive,
+    )
     services = ServiceContainer.build(
         repository,
         event_repository,
@@ -324,15 +359,7 @@ def create_app(
         specification_generator,
         revision_generator,
         active_vertex_settings.max_model_questions_per_project,
-        agent_runtime=AgentRuntimeService(
-            repository,
-            event_repository,
-            active_clock,
-            model_gateway,
-            active_vertex_settings.model,
-            active_vertex_settings.max_model_output_tokens,
-            google_drive,
-        ),
+        agent_runtime=agent_runtime,
         collaborative_chat=CollaborativeChatService(
             model_gateway,
             active_vertex_settings.model,
@@ -361,12 +388,19 @@ def create_app(
         documents=document_library,
         chat_builder=ChatBuildService(
             framework_generators,
-            output_root,
+            projects_root,
             orchestrator=construction_orchestrator,
             plugin_registry=plugin_registry,
             agent_catalog=agent_catalog,
+            project_store=project_store,
         ),
         agent_catalog=agent_catalog,
+        catalog_agent_runtime=CatalogAgentExecutionService(
+            agent_catalog,
+            agent_runtime,
+            projects_root,
+            project_store,
+        ),
         plugin_registry=plugin_registry,
         connections=connection_service,
         google_drive=google_drive,
@@ -537,6 +571,7 @@ def create_app(
                 "exact_project_roles": runtime_iam.exact_project_roles,
                 "roles": [binding.role for binding in runtime_iam.bindings],
                 "firestore_database_scoped": True,
+                "storage_bucket_scoped": True,
                 "cloud_verified": False,
                 "bindings_applied": False,
             },
@@ -646,6 +681,14 @@ def create_app(
                 "repository_active": firestore_runtime.readiness.repository_active,
                 "cloud_calls_enabled": firestore_runtime.readiness.cloud_calls_enabled,
                 "credentials_source": firestore_runtime.readiness.credentials_source,
+            },
+            "project_storage": {
+                "status": storage_runtime.readiness.status,
+                "durable": storage_runtime.readiness.status == "ready",
+                "bucket": active_storage_settings.bucket,
+                "prefix": active_storage_settings.prefix,
+                "local_workspace": str(projects_root),
+                "archive_format": None,
             },
             "firestore_project_repository": {
                 "implemented": True,

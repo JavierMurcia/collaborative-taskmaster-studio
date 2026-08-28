@@ -9,8 +9,8 @@ La experiencia se está reconstruyendo desde su fundamento: la entrada principal
 **conversación continua y real con Gemini 3.7 Flash en Vertex AI**. Gemini
 explora el problema, hace preguntas adaptativas y mantiene el contexto. Cuando el borrador está
 completo, una confirmación humana entrega la especificación a un **Ingeniero de agentes** distinto:
-este genera el proyecto, muestra actividad observable, solicita permiso antes de probar y entrega
-un ZIP verificado sin abandonar el chat.
+este genera el proyecto, muestra actividad observable, solicita permiso antes de probar y guarda
+un Taskmaster ejecutable en la carpeta obligatoria `projects/`, sin abandonar el chat.
 
 La interfaz de esta conversación sigue patrones de un producto LLM: compositor persistente,
 `Enter` para enviar, `Shift+Enter` para una nueva línea, indicador de respuesta, historial local,
@@ -52,8 +52,8 @@ Collaborative Taskmaster Studio guía ese trabajo como un socio:
    Antigravity SDK o Genkit;
 8. ejecuta pruebas y escenarios normal, incompleto y adversarial;
 9. incorpora el agente validado a una biblioteca visual;
-10. permite usarlo en una conversación integrada, revisar el entregable y aprobarlo, solicitar
-    cambios o rechazarlo sin abandonar el estudio; también permite descargar su ZIP;
+10. guarda cada agente aprobado como un proyecto independiente en `projects/<nombre>/` y permite
+    abrirlo y utilizarlo desde el catálogo sin abandonar el estudio;
 11. conserva una trayectoria auditable de decisiones y resultados.
 
 El producto no es un chatbot que termina al producir texto: crea archivos, manifiestos, checksums,
@@ -71,7 +71,8 @@ Idea ambigua en el chat
   → proyecto ADK / Gen AI SDK / Antigravity / Genkit
   → progreso observable del Ingeniero de agentes
   → aprobación humana antes de 3 verificaciones aisladas
-  → catálogo persistente y ZIP descargable en la misma conversación
+  → proyecto persistente en projects/<nombre>/
+  → catálogo y ejecución integrada en la misma conversación
 ```
 
 El recorrido automático falla de forma cerrada ante preguntas fuera de alcance, contratos JSON
@@ -137,8 +138,8 @@ La ficha para copiar durante el video está en
 - herramientas simuladas protegidas por políticas de aprobación;
 - laboratorio temporal sin credenciales y con red bloqueada;
 - tres escenarios obligatorios y puerta de exportación basada en `ready`.
-- biblioteca de agentes aprobados, identidad visual editable y descarga ZIP reconstruible incluso
-  cuando el almacenamiento efímero de Cloud Run ya no conserva la generación original.
+- biblioteca de agentes aprobados, identidad visual editable, apertura directa del proyecto y
+  memoria de ejecución propia en `runtime-state.json`.
 - registro cerrado de plugins, selección por mínimo privilegio y gateway generado que bloquea por
   defecto plugins desconocidos, conexiones ausentes y escrituras sin aprobación.
 
@@ -167,8 +168,9 @@ El lector:
 - limita cada archivo a 256 KiB por defecto y nunca supera el límite duro de 1 MiB;
 - no escribe, elimina, ejecuta ni registra el contenido leído en la auditoría.
 
-La capacidad no se añade a agentes que no la soliciten. Antes de entregar el ZIP, el laboratorio
-ejecuta una verificación adicional que comprueba una lectura válida y el bloqueo del escape de ruta.
+La capacidad no se añade a agentes que no la soliciten. Antes de guardar el proyecto como listo,
+el laboratorio ejecuta una verificación adicional que comprueba una lectura válida y el bloqueo
+del escape de ruta.
 
 ### Investigación y contexto del socio colaborativo
 
@@ -215,6 +217,8 @@ duradero específico para adjuntos.
 
 - repositorio local JSON para desarrollo sin nube;
 - Firestore con revisiones, aprobaciones, eventos y artefactos en subcolecciones;
+- catálogo multiusuario en Firestore cuando la persistencia cloud está activa;
+- réplica durable, verificable y sin archivos comprimidos de `projects/` en Cloud Storage;
 - transacciones críticas con reintentos acotados y concurrencia optimista;
 - retención demo de siete días declarada para raíz y subcolecciones;
 - Cloud Run con mínimo cero, máximo una instancia y concurrencia uno;
@@ -236,8 +240,11 @@ flowchart LR
     REPO --> FIRESTORE[Firestore]
     USE --> GENERATOR[Generador Google ADK]
     GENERATOR --> LAB[Laboratorio aislado]
-    LAB --> LIBRARY[Contenedor de agentes]
-    LIBRARY --> ZIP[Paquete ZIP reproducible]
+    LAB --> PROJECTS[Carpeta projects]
+    PROJECTS --> LIBRARY[Catálogo de Taskmasters]
+    PROJECTS --> STORAGE[Cloud Storage durable]
+    LIBRARY --> FIRESTORE
+    LIBRARY --> RUNTIME[Ejecución integrada]
     USE --> AUDIT[Trayectoria auditable]
     APPROVAL[Aprobación humana] --> USE
 ```
@@ -371,6 +378,24 @@ python -m infrastructure.firestore.provisioning --project TU_PROJECT_ID
 La opción `--apply` crea o verifica recursos reales y debe utilizarse únicamente con autorización.
 Consulte [`docs/08_HITO_H9_FIRESTORE.md`](docs/08_HITO_H9_FIRESTORE.md) antes de habilitarla.
 
+### Proyectos durables en Cloud Storage
+
+El directorio `projects/` continúa siendo obligatorio y es el espacio de trabajo de cada instancia.
+En Cloud Run puede replicarse archivo por archivo, sin ZIP ni RAR, en un bucket privado. El
+manifiesto durable incluye propietario, huella SHA-256, cantidad de archivos y tamaño total. Una
+instancia nueva restaura el proyecto y verifica su integridad antes de ejecutarlo.
+
+```powershell
+$env:STUDIO_ENABLE_FIRESTORE = "true"
+$env:STUDIO_ENABLE_CLOUD_STORAGE = "true"
+$env:STUDIO_PROJECTS_BUCKET = "TU_BUCKET_PRIVADO"
+$env:STUDIO_PROJECTS_BUCKET_PREFIX = "taskmaster-projects"
+```
+
+El bucket debe existir previamente y la cuenta de servicio de Cloud Run necesita acceso de objetos
+solamente sobre ese bucket. Consulte
+[`docs/20_PERSISTENCIA_DURABLE_PROYECTOS.md`](docs/20_PERSISTENCIA_DURABLE_PROYECTOS.md).
+
 ## Configuración
 
 `.env.example` documenta todos los valores admitidos, pero la aplicación no carga ese archivo
@@ -387,7 +412,11 @@ Run.
 | `STUDIO_ENABLE_FIRESTORE` | `false` | Activa persistencia Firestore. |
 | `STUDIO_FIRESTORE_DATABASE` | `collaborative-taskmaster` | Selecciona la base nombrada. |
 | `STUDIO_FIRESTORE_DEMO_RETENTION_DAYS` | `7` | Limita retención de sesiones demo. |
-| `STUDIO_GENERATED_ROOT` | `generated` | Ubica proyectos generados. |
+| `STUDIO_PROJECTS_ROOT` | `projects` | Carpeta obligatoria para los Taskmasters construidos. |
+| `STUDIO_ENABLE_CLOUD_STORAGE` | `false` | Replica cada proyecto terminado en Cloud Storage. |
+| `STUDIO_PROJECTS_BUCKET` | vacío | Bucket privado que conserva los proyectos. |
+| `STUDIO_PROJECTS_BUCKET_PREFIX` | `taskmaster-projects` | Prefijo aislado de objetos. |
+| `STUDIO_GENERATED_ROOT` | `generated` | Salida heredada para exportaciones reproducibles. |
 | `STUDIO_AGENT_BUILDER` | `controlled_adk` | Activa `antigravity` solo cuando su SDK está instalado. |
 | `STUDIO_ANTIGRAVITY_PYTHON` | vacío | Python absoluto del trabajador Antigravity aislado. |
 | `STUDIO_SANDBOX_TIMEOUT` | `8` | Limita cada ejecución del laboratorio. |
@@ -523,8 +552,8 @@ aparecer con retraso. Consulte
   deben ampliarse después de validar el agente en el laboratorio.
 - Las herramientas de los Taskmasters generados son simuladas y no modifican sistemas productivos.
 - La demo pública no implementa gestión empresarial de usuarios ni debe recibir datos sensibles.
-- Los artefactos generados en Cloud Run usan almacenamiento efímero; Firestore conserva sus
-  metadatos, no un repositorio permanente de código.
+- La durabilidad de los proyectos en Cloud Run requiere activar Cloud Storage y conceder a la
+  identidad runtime permisos sobre el bucket; sin esa configuración, `projects/` es local y efímero.
 - El presupuesto alerta, pero no bloquea cargos.
 - En el equipo Windows usado para la entrega, el almacén local de certificados impide algunas
   consultas `gcloud`; Cloud Shell fue la superficie de verificación sin desactivar TLS.
@@ -541,7 +570,8 @@ sandbox/             laboratorio y políticas de ejecución
 schemas/             contrato JSON canónico
 tests/               unitarias, contrato, integración y API
 docs/                decisiones, hitos y evidencia
-generated/           salida local ignorada por Git
+projects/            Taskmasters construidos y ejecutables; contenido local ignorado por Git
+generated/           salida heredada de exportación ignorada por Git
 ```
 
 ## Documentación
@@ -564,8 +594,9 @@ generated/           salida local ignorada por Git
 | [`13_HITO_H11_INSTALACION_LIMPIA.md`](docs/13_HITO_H11_INSTALACION_LIMPIA.md) | Instalación aislada, recorrido local y evidencia. |
 | [`14_HITO_H11_DATOS_OFICIALES_DEMO.md`](docs/14_HITO_H11_DATOS_OFICIALES_DEMO.md) | Textos, requisitos y resultados oficiales de la demo. |
 | [`15_HITO_H11_REINICIO_SEGURO_DEMO.md`](docs/15_HITO_H11_REINICIO_SEGURO_DEMO.md) | Reinicio aislado, confirmado e idempotente de la demo. |
-| [`16_HITO_H11_CONTENEDOR_AGENTES.md`](docs/16_HITO_H11_CONTENEDOR_AGENTES.md) | Recorrido vertical, biblioteca visual y exportación ZIP reconstruible. |
+| [`16_HITO_H11_CONTENEDOR_AGENTES.md`](docs/16_HITO_H11_CONTENEDOR_AGENTES.md) | Recorrido vertical, biblioteca visual y proyectos ejecutables persistentes. |
 | [`17_ARQUITECTURA_INGENIERO_PLUGINS.md`](docs/17_ARQUITECTURA_INGENIERO_PLUGINS.md) | Relevo Gemini/Ingeniero, selector, plugins, catálogo y límites externos. |
+| [`20_PERSISTENCIA_DURABLE_PROYECTOS.md`](docs/20_PERSISTENCIA_DURABLE_PROYECTOS.md) | Catálogo Firestore y proyectos durables en Cloud Storage. |
 
 ## Licencia
 

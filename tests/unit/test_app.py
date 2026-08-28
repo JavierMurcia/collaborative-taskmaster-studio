@@ -202,11 +202,13 @@ def test_meta_reports_h10_10_with_firestore_disabled() -> None:
         "status": "declared",
         "exact_project_roles": True,
         "roles": [
-            "roles/aiplatform.user",
-            "roles/datastore.user",
-            "roles/secretmanager.secretAccessor",
-        ],
-        "firestore_database_scoped": True,
+                "roles/aiplatform.user",
+                "roles/datastore.user",
+                "roles/storage.objectUser",
+                "roles/secretmanager.secretAccessor",
+            ],
+            "firestore_database_scoped": True,
+            "storage_bucket_scoped": True,
         "cloud_verified": False,
         "bindings_applied": False,
     }
@@ -229,7 +231,7 @@ def test_meta_reports_h10_10_with_firestore_disabled() -> None:
     }
     assert response.json()["runtime_configuration"] == {
         "status": "declared",
-        "environment_variable_count": 27,
+        "environment_variable_count": 31,
         "secret_reference_count": 8,
         "secret_provider": "google_secret_manager",
         "plaintext_secrets_allowed": False,

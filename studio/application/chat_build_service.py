@@ -18,7 +18,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from studio.application.agent_catalog import AgentCatalog
+from infrastructure.local.project_storage import LocalProjectArtifactStore
+from studio.application.agent_catalog import AgentCatalogRepository
 from studio.application.capability_selection import requires_workspace_read
 from studio.application.collaborative_chat_service import AgentDraft
 from studio.application.framework_selector import FrameworkRecommendation, select_framework
@@ -33,6 +34,7 @@ from studio.ports.construction import (
     ControlledConstructionOrchestrator,
 )
 from studio.ports.generator import GeneratorAdapter
+from studio.ports.project_storage import ProjectArtifactStore
 
 BuildState = Literal[
     "queued",
@@ -109,6 +111,7 @@ class ChatBuildSnapshot(BaseModel):
     tests: tuple[BuildTestResult, ...] = ()
     download_ready: bool = False
     catalog_agent_id: str = ""
+    project_directory: str = ""
     error: str = ""
 
 
@@ -155,10 +158,12 @@ class ChatBuildService:
         executor: ThreadPoolExecutor | None = None,
         now: Callable[[], datetime] | None = None,
         plugin_registry: PluginRegistry | None = None,
-        agent_catalog: AgentCatalog | None = None,
+        agent_catalog: AgentCatalogRepository | None = None,
+        project_store: ProjectArtifactStore | None = None,
     ) -> None:
         self._adapter = adapter
         self._root = generated_root.resolve()
+        self._root.mkdir(parents=True, exist_ok=True)
         self._orchestrator = orchestrator or ControlledConstructionOrchestrator()
         self._delay = max(0.0, step_delay_seconds)
         self._executor = executor or ThreadPoolExecutor(
@@ -167,6 +172,7 @@ class ChatBuildService:
         self._now = now or (lambda: datetime.now(UTC))
         self._plugins = plugin_registry or PluginRegistry()
         self._catalog = agent_catalog
+        self._project_store = project_store or LocalProjectArtifactStore()
         self._records: dict[str, _BuildRecord] = {}
         self._lock = threading.RLock()
 
@@ -363,7 +369,7 @@ class ChatBuildService:
                         ),
                         status="passed",
                     )
-            destination = self._root / "chat-builds" / build_id
+            destination = self._project_directory(record)
             bundle = self._orchestrator.construct(
                 specification,
                 destination,
@@ -373,7 +379,11 @@ class ChatBuildService:
                     build_id, phase, message, status
                 ),
             )
-            managed_files = self._write_managed_artifacts(bundle.output_directory, record)
+            managed_files = self._write_managed_artifacts(
+                bundle.output_directory,
+                record,
+                specification,
+            )
             self._pause()
             with self._lock:
                 record = self._records[build_id]
@@ -466,6 +476,12 @@ class ChatBuildService:
                 record = self._records[build_id]
                 record.tests = results
                 if all(item.passed for item in results):
+                    stored = self._project_store.persist_directory(
+                        owner_session_id=record.owner_session_id,
+                        project_id=record.project_id,
+                        build_id=record.build_id,
+                        directory=root,
+                    )
                     record.state = "completed"
                     if self._catalog is not None:
                         catalog_agent = self._catalog.register(
@@ -480,6 +496,10 @@ class ChatBuildService:
                             contract_digest=record.contract.sha256,
                             plugins=record.plugins,
                             artifact_directory=root,
+                            artifact_uri=stored.uri,
+                            artifact_digest=stored.digest,
+                            artifact_file_count=stored.file_count,
+                            artifact_total_bytes=stored.total_bytes,
                         )
                         record.catalog_agent_id = catalog_agent.id
                     self._event(
@@ -591,12 +611,30 @@ class ChatBuildService:
             deep=True,
         )
 
+    def _project_directory(self, record: _BuildRecord) -> Path:
+        """Return a stable, collision-safe directory directly inside projects/."""
+
+        base = _slug(record.draft.name) or record.project_id
+        candidate = self._root / base
+        if not candidate.exists():
+            return candidate
+        return self._root / f"{base}-{record.project_id.removeprefix('agent_')[:8]}"
+
     @staticmethod
-    def _write_managed_artifacts(root: Path, record: _BuildRecord) -> int:
+    def _write_managed_artifacts(
+        root: Path,
+        record: _BuildRecord,
+        specification: TaskmasterSpecification,
+    ) -> int:
         """Attach the approved handoff and plugin plan to the checksummed bundle."""
 
         artifacts = {
             "studio-build-contract.json": record.contract.model_dump_json(indent=2) + "\n",
+            "taskmaster.specification.json": specification.model_dump_json(
+                indent=2,
+                by_alias=True,
+            )
+            + "\n",
             "plugins.json": json.dumps(
                 {
                     "schema_version": "1.0.0",
@@ -800,6 +838,9 @@ class ChatBuildService:
             tests=record.tests,
             download_ready=record.state == "completed",
             catalog_agent_id=record.catalog_agent_id,
+            project_directory=(
+                str(record.output_directory) if record.output_directory is not None else ""
+            ),
             error=record.error,
         )
 

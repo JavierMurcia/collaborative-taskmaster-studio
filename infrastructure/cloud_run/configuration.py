@@ -358,6 +358,8 @@ def _validate_definition(definition: RuntimeConfigurationDefinition) -> None:
         "GOOGLE_GENAI_USE_VERTEXAI",
         "STUDIO_ENABLE_VERTEX",
         "STUDIO_ENABLE_FIRESTORE",
+        "STUDIO_ENABLE_CLOUD_STORAGE",
+        "STUDIO_PROJECTS_BUCKET",
         "STUDIO_GEMINI_MODEL",
     }
     if not required <= set(variable_names):

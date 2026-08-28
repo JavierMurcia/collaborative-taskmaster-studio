@@ -8,7 +8,7 @@ import threading
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -34,10 +34,53 @@ class CatalogAgent(BaseModel):
     contract_digest: str
     plugins: tuple[PluginSelection, ...] = ()
     artifact_directory: str
+    artifact_uri: str | None = None
+    artifact_digest: str = ""
+    artifact_file_count: int = Field(default=0, ge=0)
+    artifact_total_bytes: int = Field(default=0, ge=0)
     version: int = Field(default=1, ge=1)
     status: Literal["ready", "archived"] = "ready"
     created_at: datetime
     updated_at: datetime
+
+
+class AgentCatalogRepository(Protocol):
+    def register(
+        self,
+        *,
+        build_id: str,
+        project_id: str,
+        owner_session_id: str,
+        name: str,
+        purpose: str,
+        framework: str,
+        framework_label: str,
+        builder_runtime: str,
+        contract_digest: str,
+        plugins: tuple[PluginSelection, ...],
+        artifact_directory: Path,
+        artifact_uri: str | None = None,
+        artifact_digest: str = "",
+        artifact_file_count: int = 0,
+        artifact_total_bytes: int = 0,
+    ) -> CatalogAgent: ...
+
+    def list(
+        self, owner_session_id: str, *, include_archived: bool = False
+    ) -> tuple[CatalogAgent, ...]: ...
+
+    def get(self, agent_id: str, owner_session_id: str) -> CatalogAgent: ...
+
+    def update(
+        self,
+        agent_id: str,
+        owner_session_id: str,
+        *,
+        name: str | None = None,
+        icon: AgentIcon | None = None,
+    ) -> CatalogAgent: ...
+
+    def archive(self, agent_id: str, owner_session_id: str) -> None: ...
 
 
 class AgentCatalog:
@@ -62,6 +105,10 @@ class AgentCatalog:
         contract_digest: str,
         plugins: tuple[PluginSelection, ...],
         artifact_directory: Path,
+        artifact_uri: str | None = None,
+        artifact_digest: str = "",
+        artifact_file_count: int = 0,
+        artifact_total_bytes: int = 0,
     ) -> CatalogAgent:
         now = datetime.now(UTC)
         with self._lock:
@@ -83,6 +130,10 @@ class AgentCatalog:
                 contract_digest=contract_digest,
                 plugins=plugins,
                 artifact_directory=str(artifact_directory.resolve()),
+                artifact_uri=artifact_uri,
+                artifact_digest=artifact_digest,
+                artifact_file_count=artifact_file_count,
+                artifact_total_bytes=artifact_total_bytes,
                 created_at=now,
                 updated_at=now,
             )

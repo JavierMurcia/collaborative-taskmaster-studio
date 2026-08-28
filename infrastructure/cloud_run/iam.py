@@ -18,6 +18,7 @@ EXPECTED_ROLES = frozenset(
     {
         "roles/aiplatform.user",
         "roles/datastore.user",
+        "roles/storage.objectUser",
         "roles/secretmanager.secretAccessor",
     }
 )
@@ -259,6 +260,15 @@ def _validate_definition(definition: RuntimeIamDefinition) -> None:
     )
     if firestore.condition is None or "{project_id}" not in firestore.condition.expression_template:
         raise ValueError("El acceso Firestore debe limitarse a la base declarada.")
+    storage = next(
+        binding for binding in definition.bindings if binding.role == "roles/storage.objectUser"
+    )
+    if (
+        storage.condition is None
+        or "{project_id}-taskmaster-projects/objects/"
+        not in storage.condition.expression_template
+    ):
+        raise ValueError("El acceso Storage debe limitarse al bucket de proyectos.")
     vertex = next(
         binding for binding in definition.bindings if binding.role == "roles/aiplatform.user"
     )
