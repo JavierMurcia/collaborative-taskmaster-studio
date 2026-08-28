@@ -62,7 +62,11 @@ def test_antigravity_orchestrator_uses_only_confined_tools_and_records_evidence(
 
     def fake_runner(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
         assert command[:3] == ["isolated-python", "-m", "adapters.antigravity.worker"]
-        assert cwd.name == "sentinel-taskmaster"
+        # Cloud Build checks the repository out at /workspace, while local
+        # development commonly uses a directory named sentinel-taskmaster.
+        # Verify the runner receives the actual repository root instead of
+        # coupling the test to a checkout directory name.
+        assert (cwd / "adapters" / "antigravity" / "worker.py").is_file()
         request = json.loads(Path(command[3]).read_text(encoding="utf-8"))
         workspace = Path(request["workspace"])
         (workspace / "ANTIGRAVITY.md").write_text(
