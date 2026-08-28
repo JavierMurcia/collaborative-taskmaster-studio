@@ -8,7 +8,8 @@ Gemini 3.7 Flash (socio colaborativo)
   → confirmación humana CONSTRUIR_AGENTE
   → contrato inmutable con SHA-256
   → selector automático de framework y plugins mínimos
-  → constructor controlado Google ADK / Gen AI SDK / Genkit
+  → orquestador Antigravity SDK o constructor local controlado
+  → generador Google ADK / Gen AI SDK / Antigravity / Genkit
   → paquete con manifiesto, contrato y gateway de plugins
   → aprobación humana antes del laboratorio
   → pruebas sin red ni credenciales
@@ -27,10 +28,20 @@ y la plantilla Antigravity. Que una plantilla exista no significa que su runtime
 `GET /api/v1/meta` publica el constructor realmente activo y la disponibilidad comprobada de cada
 backend.
 
-La ruta activa y reproducible es `controlled_adk`. Google Agents CLI solo puede activarse cuando el
-ejecutable esté instalado; en Windows se recomienda WSL2. Antigravity solo se declara activo si se
-detecta su runtime o SDK. El Studio nunca presenta una integración ausente como si hubiera sido
-utilizada.
+La ruta segura por defecto es `controlled_adk`, ejecutada por
+`ControlledConstructionOrchestrator`. Al instalar `google-antigravity` en un entorno Python
+separado y declarar `STUDIO_AGENT_BUILDER=antigravity` junto con
+`STUDIO_ANTIGRAVITY_PYTHON`, el Studio activa `AntigravitySdkOrchestrator`: primero genera
+una base reproducible y luego permite que el SDK la inspeccione y refine exclusivamente mediante
+tres herramientas confinadas (`list_project_files`, `read_project_file` y `write_project_file`).
+El SDK no recibe navegador, red, terminal, credenciales ni acceso fuera de la carpeta del paquete.
+
+El trabajador se inicia como un subproceso efímero para evitar el conflicto de `protobuf` entre el
+SDK Antigravity y Vertex AI. Cada lectura y escritura queda registrada en
+`.studio/antigravity-orchestration.json`; el
+manifiesto se vuelve a calcular con checksums después de la orquestación. Las pruebas siguen siendo
+una fase separada y requieren aprobación humana. Si el SDK no está instalado, el Studio no lo
+simula ni le atribuye la construcción al modelo.
 
 ## Registro y gateway de plugins
 
@@ -72,9 +83,14 @@ La implementación local está completa y verificable. Estas capacidades depende
 y no pueden activarse de manera honesta solo escribiendo código:
 
 1. instalar y configurar Google Agents CLI en un entorno compatible;
-2. disponer de un runtime/SDK válido de Antigravity;
+2. instalar el SDK Antigravity en su entorno aislado y declarar su intérprete absoluto;
 3. completar OAuth para Drive, GitHub, Gmail o Calendar;
 4. otorgar IAM y desplegar en Gemini Enterprise Agent Platform.
 
 Cada una permanece marcada como `setup_required` o `connection_required` hasta que exista la
 autorización y la credencial administrada correspondiente.
+
+La primera integración del SDK trabaja con un solo ingeniero y herramientas confinadas. La
+delegación a subagentes especializados, la ejecución de terminal y la publicación automática no
+están habilitadas en este hito; se incorporarán solo con presupuestos, políticas y aprobaciones
+específicas.

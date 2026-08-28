@@ -9,6 +9,7 @@ htmlcov/
 
 # Virtual environments and local configuration
 .venv/
+.antigravity-venv/
 venv/
 .env
 .env.*
@@ -19,6 +20,7 @@ generated/*
 !generated/.gitkeep
 .studio-data/
 logs/
+.local-server*.log
 
 # Editors and operating systems
 .idea/

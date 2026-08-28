@@ -319,6 +319,14 @@ python -m pip install -e ".[dev,vertex]"
 gcloud auth application-default login
 ```
 
+Antigravity debe instalarse en un entorno separado porque su dependencia de `protobuf` no es
+compatible con la versión requerida por Vertex AI en el proceso web:
+
+```powershell
+py -3.13 -m venv .antigravity-venv
+.\.antigravity-venv\Scripts\python.exe -m pip install "google-antigravity>=0.1.7,<1"
+```
+
 Configurar la terminal de desarrollo:
 
 ```powershell
@@ -332,6 +340,8 @@ $env:STUDIO_ENABLE_MODEL_SPECIFICATION = "true"
 $env:STUDIO_ENABLE_MODEL_REVISION = "true"
 $env:STUDIO_GEMINI_MODEL = "gemini-3.7-flash"
 $env:STUDIO_VERTEX_API_VERSION = "v1"
+$env:STUDIO_AGENT_BUILDER = "antigravity"
+$env:STUDIO_ANTIGRAVITY_PYTHON = (Resolve-Path ".\.antigravity-venv\Scripts\python.exe")
 
 python -m infrastructure.vertex.check
 python -m app.main
@@ -378,6 +388,8 @@ Run.
 | `STUDIO_FIRESTORE_DATABASE` | `collaborative-taskmaster` | Selecciona la base nombrada. |
 | `STUDIO_FIRESTORE_DEMO_RETENTION_DAYS` | `7` | Limita retención de sesiones demo. |
 | `STUDIO_GENERATED_ROOT` | `generated` | Ubica proyectos generados. |
+| `STUDIO_AGENT_BUILDER` | `controlled_adk` | Activa `antigravity` solo cuando su SDK está instalado. |
+| `STUDIO_ANTIGRAVITY_PYTHON` | vacío | Python absoluto del trabajador Antigravity aislado. |
 | `STUDIO_SANDBOX_TIMEOUT` | `8` | Limita cada ejecución del laboratorio. |
 
 `PORT`, `K_SERVICE`, `K_REVISION` y `K_CONFIGURATION` están reservadas para Cloud Run. API keys y
@@ -400,12 +412,17 @@ framework. Los destinos instalados son:
 | --- | --- | --- |
 | Google ADK | agentes de varios pasos, herramientas, estado y aprobaciones | Python |
 | Google Gen AI SDK | extracción, clasificación o transformación ligera | Python |
-| Antigravity SDK | trabajo sobre repositorios, archivos, terminal, navegador o MCP | Python |
+| Antigravity SDK | refinamiento autónomo y auditable del proyecto dentro de un workspace confinado | Python |
 | Genkit | aplicaciones web/API, Firebase, RAG, streaming y flujos full-stack | TypeScript |
 
 Cada adaptador produce código, configuración, Dockerfile, README, manifiesto y checksums dentro de
 `generated/`. Una generación existente se verifica y reutiliza; nunca se sobrescribe
 silenciosamente. Las plantillas iniciales no ejecutan herramientas ni incorporan secretos.
+
+Cuando `STUDIO_AGENT_BUILDER=antigravity`, el orquestador entrega al SDK únicamente herramientas
+de listado, lectura y escritura de texto dentro del paquete generado. Terminal, navegador, red y
+credenciales permanecen bloqueados. El laboratorio se ejecuta después y exige una aprobación
+humana independiente.
 
 El playground de ADK es solo para desarrollo local:
 

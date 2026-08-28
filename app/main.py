@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
+from adapters.antigravity import AntigravitySdkOrchestrator
 from adapters.frameworks import (
     AntigravityGenerator,
     FrameworkGeneratorRegistry,
@@ -81,6 +82,7 @@ from studio.capabilities.web import VertexWebResearcher
 from studio.capabilities.workspace import WorkspaceReader
 from studio.domain.errors import DomainError
 from studio.ports.clock import Clock
+from studio.ports.construction import ControlledConstructionOrchestrator
 from studio.ports.repositories import EventRepository, ProjectRepository
 from studio.security import IdentityVerifier
 from studio.security.credential_vault import build_credential_vault
@@ -279,6 +281,11 @@ def create_app(
     github = GitHubReader(connection_service)
     agent_catalog = AgentCatalog(data_directory)
     builder_readiness = inspect_builder_readiness()
+    construction_orchestrator = (
+        AntigravitySdkOrchestrator(os.environ["STUDIO_ANTIGRAVITY_PYTHON"])
+        if builder_readiness.active_builder == "antigravity"
+        else ControlledConstructionOrchestrator()
+    )
     output_root = generated_root or Path(os.getenv("STUDIO_GENERATED_ROOT", "generated"))
     framework_generators = FrameworkGeneratorRegistry(
         (
@@ -355,7 +362,7 @@ def create_app(
         chat_builder=ChatBuildService(
             framework_generators,
             output_root,
-            antigravity_available=builder_readiness.active_builder == "antigravity",
+            orchestrator=construction_orchestrator,
             plugin_registry=plugin_registry,
             agent_catalog=agent_catalog,
         ),

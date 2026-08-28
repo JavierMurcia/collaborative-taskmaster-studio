@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Descubre oportunidades de proyectos de sistemas con evidencia de GitHub, Google Drive y fuentes web verificadas.">
   <title>Collaborative Taskmaster Studio</title>
-  <link rel="stylesheet" href="/static/styles.css?v=20260825-taskmaster-access-v1">
+  <link rel="stylesheet" href="/static/styles.css?v=20260827-full-connection-icons-v16">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Saltar al contenido</a>
@@ -23,22 +23,24 @@
   </header>
 
   <aside id="conversation-sidebar" class="conversation-sidebar" aria-label="Historial de conversaciones">
-    <div class="sidebar-heading">
-      <strong>Conversaciones</strong>
-      <div><button id="sidebar-new-chat" class="sidebar-new-chat" type="button" aria-label="Crear una conversación nueva">＋</button><button id="sidebar-close" class="sidebar-close" type="button" aria-label="Cerrar historial">×</button></div>
-    </div>
-    <nav id="conversation-history" class="conversation-history" aria-label="Conversaciones guardadas"></nav>
-    <p id="history-empty" class="history-empty">Todavía no hay conversaciones guardadas.</p>
     <section class="agent-library" aria-labelledby="agent-library-title">
       <div class="agent-library-heading"><strong id="agent-library-title">Taskmaster Studio</strong><span id="agent-count" title="Agentes aprobados">0</span></div>
       <button id="taskmaster-studio-access" class="taskmaster-studio-access" type="button" aria-pressed="false">
         <span class="studio-access-icon" aria-hidden="true">✦</span>
-        <span><strong>Crear un agente</strong><small>Diseñar · evaluar · construir</small></span>
+        <span><strong>Ir al taller</strong><small>Diseñar · probar · publicar</small></span>
         <b aria-hidden="true">›</b>
       </button>
       <p class="catalog-label">AGENTES APROBADOS</p>
       <div id="agent-catalog" class="agent-catalog"></div>
       <p id="agent-catalog-empty" class="history-empty">Todavía no has publicado agentes.</p>
+    </section>
+    <section class="conversation-library" aria-labelledby="conversation-library-title">
+      <div class="sidebar-heading">
+        <strong id="conversation-library-title">Conversaciones</strong>
+        <div><button id="sidebar-new-chat" class="sidebar-new-chat" type="button" aria-label="Crear una conversación nueva">＋</button><button id="sidebar-close" class="sidebar-close" type="button" aria-label="Cerrar historial">×</button></div>
+      </div>
+      <nav id="conversation-history" class="conversation-history" aria-label="Conversaciones guardadas"></nav>
+      <p id="history-empty" class="history-empty">Todavía no hay conversaciones guardadas.</p>
     </section>
     <section class="connection-library" aria-labelledby="connection-library-title">
       <div class="agent-library-heading"><strong id="connection-library-title">Conexiones</strong></div>
@@ -92,15 +94,8 @@
     </section>
 
     <section id="partner-chat-view" class="partner-chat-view view" hidden>
-      <div class="partner-chat-heading">
-        <div><p class="chat-context-label">Conversación</p><h1 id="conversation-title">Nueva conversación</h1></div>
-        <div class="chat-model-chip"><span></span><strong data-runtime-model>Gemini 3.7 Flash</strong></div>
-      </div>
       <div id="partner-conversation" class="partner-conversation" aria-live="polite"></div>
-      <div id="partner-typing" class="partner-turn assistant-turn typing-turn" hidden>
-        <div class="partner-avatar" aria-hidden="true">✦</div>
-        <div><div class="turn-label">Gemini</div><div class="typing-dots" aria-label="Gemini está respondiendo"><span></span><span></span><span></span></div></div>
-      </div>
+      <div id="chat-attachments" class="attachment-list" aria-live="polite"></div>
       <form id="partner-message-form" class="composer partner-composer">
         <label class="sr-only" for="partner-message-input">Responder a Gemini</label>
         <textarea id="partner-message-input" rows="1" maxlength="6000" required disabled placeholder="Comprobando conexión con Gemini…"></textarea>
@@ -114,14 +109,12 @@
           </div>
         </div>
       </form>
-      <div id="chat-attachments" class="attachment-list" aria-live="polite"></div>
       <p class="trust-line">Gemini diseña contigo. El Ingeniero construye solo tras tu confirmación y pide permiso antes de probar.</p>
     </section>
 
   </main>
 
   <div id="loading" class="loading" role="status" aria-live="assertive" hidden><span></span><strong>Trabajando…</strong></div>
-  <footer class="shell">Gemini 3.7 Flash diseña · El Ingeniero construye con aprobación · Sin efectos externos</footer>
-    <script src="/static/app.js?v=20260825-taskmaster-access-v1" defer></script>
+    <script src="/static/app.js?v=20260827-full-connection-icons-v16" defer></script>
 </body>
 </html>

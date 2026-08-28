@@ -70,6 +70,22 @@ class RecordingGateway:
         )
 
 
+class CompleteDraftWithContradictoryFlagGateway(RecordingGateway):
+    def generate_structured(self, request: ModelRequest) -> ModelResult:
+        result = super().generate_structured(request)
+        payload = dict(result.payload)
+        draft = dict(payload["agent_draft"])
+        draft.update(
+            {
+                "missing_information": [],
+                "readiness": 100,
+                "ready_to_create": False,
+            }
+        )
+        payload["agent_draft"] = draft
+        return result.model_copy(update={"payload": payload})
+
+
 class ResearchGateway(RecordingGateway):
     def generate_structured(self, request: ModelRequest) -> ModelResult:
         result = super().generate_structured(request)
@@ -257,6 +273,30 @@ def test_collaborative_chat_uses_gemini_and_preserves_recent_context() -> None:
     assert "No existe fallback conversacional" in gateway.request.system_instruction
     assert '"automatic_model_fallback": false' in gateway.request.prompt
     assert '"collaborator_model": "gemini-3.7-flash"' in gateway.request.prompt
+
+
+def test_collaborative_chat_exposes_build_approval_for_a_complete_contract() -> None:
+    gateway = CompleteDraftWithContradictoryFlagGateway()
+    service = CollaborativeChatService(gateway, "gemini-3.7-flash")
+
+    result = service.reply("Confirmo el diseño y quiero construirlo.", ())
+
+    assert result.phase == "alignment"
+    assert result.agent_draft.readiness == 100
+    assert result.agent_draft.ready_to_create is True
+    assert result.agent_draft.recommended_framework is not None
+    assert "Aprobar diseño y construir en laboratorio" in result.reply
+    assert result.agent_draft.recommended_framework.label in result.reply
+
+
+def test_collaborative_chat_does_not_mark_a_contract_with_missing_information_ready() -> None:
+    gateway = RecordingGateway(readiness=100)
+    service = CollaborativeChatService(gateway, "gemini-3.7-flash")
+
+    result = service.reply("Todavía falta definir la fecha límite.", ())
+
+    assert result.agent_draft.readiness == 100
+    assert result.agent_draft.ready_to_create is False
 
 
 def test_collaborative_chat_grounds_questions_about_its_runtime_identity() -> None:

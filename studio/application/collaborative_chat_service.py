@@ -609,20 +609,36 @@ class CollaborativeChatService:
         phase = cast(Literal["discovery", "clarification", "alignment"], result.payload["phase"])
         intent = cast(Literal["conversation", "agent_creation"], result.payload["intent"])
         draft = AgentDraft.model_validate(result.payload["agent_draft"])
-        if intent == "agent_creation" and _framework_selection_ready(draft):
-            draft = draft.model_copy(
-                update={
-                    "recommended_framework": select_framework(
-                        purpose=draft.purpose,
-                        workflow=draft.workflow,
-                        external_actions=draft.external_actions,
-                        inputs=draft.inputs,
-                        outputs=draft.outputs,
-                        constraints=draft.constraints,
-                    )
-                }
-            )
+        if intent == "agent_creation":
+            draft = _normalize_build_readiness(draft)
+            if _framework_selection_ready(draft):
+                draft = draft.model_copy(
+                    update={
+                        "recommended_framework": select_framework(
+                            purpose=draft.purpose,
+                            workflow=draft.workflow,
+                            external_actions=draft.external_actions,
+                            inputs=draft.inputs,
+                            outputs=draft.outputs,
+                            constraints=draft.constraints,
+                        )
+                    }
+                )
         reply = str(result.payload["reply"])
+        if intent == "agent_creation" and draft.ready_to_create:
+            phase = "alignment"
+            framework_label = (
+                draft.recommended_framework.label
+                if draft.recommended_framework is not None
+                else "el framework seleccionado"
+            )
+            reply = (
+                f"El diseño de **{draft.name}** está completo y validado. "
+                f"La arquitectura verificada utilizará **{framework_label}**.\n\n"
+                "Revisa el contrato mostrado debajo y pulsa **Aprobar diseño y construir "
+                "en laboratorio**. El Ingeniero generará los archivos en un espacio aislado "
+                "y volverá a pedir autorización antes de ejecutar las pruebas."
+            )
         if _asks_connection_status(clean_message):
             reply = _verified_connection_reply(connection_facts)
         return CollaborativeChatResult(
@@ -1286,3 +1302,24 @@ def _framework_selection_ready(draft: AgentDraft) -> bool:
         and draft.outputs
         and draft.workflow
     )
+
+
+def _normalize_build_readiness(draft: AgentDraft) -> AgentDraft:
+    """Resolve contradictory model output only when the full build contract is present."""
+
+    complete_contract = bool(
+        draft.readiness == 100
+        and draft.name.strip()
+        and draft.purpose.strip()
+        and draft.intended_user.strip()
+        and draft.inputs
+        and draft.outputs
+        and draft.workflow
+        and draft.constraints
+        and draft.approval_rule.strip()
+        and draft.success_criteria
+        and not draft.missing_information
+    )
+    if complete_contract == draft.ready_to_create:
+        return draft
+    return draft.model_copy(update={"ready_to_create": complete_contract})

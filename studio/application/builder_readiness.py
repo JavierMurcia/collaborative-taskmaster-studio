@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib.util
 import os
 import shutil
+import subprocess
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -28,8 +30,9 @@ class BuilderReadiness(BaseModel):
 
 def inspect_builder_readiness() -> BuilderReadiness:
     agents_cli = shutil.which("agents-cli")
-    antigravity = shutil.which("antigravity") or importlib.util.find_spec("google.antigravity")
-    adk = importlib.util.find_spec("google.adk")
+    antigravity_python = os.getenv("STUDIO_ANTIGRAVITY_PYTHON", "").strip()
+    antigravity = _antigravity_worker_available(antigravity_python)
+    adk = _module_available("google.adk")
     requested = os.getenv("STUDIO_AGENT_BUILDER", "controlled_adk").casefold()
     active = "controlled_adk"
     if requested == "agents_cli" and agents_cli:
@@ -66,9 +69,12 @@ def inspect_builder_readiness() -> BuilderReadiness:
             if active == "antigravity"
             else ("available" if antigravity else "setup_required"),
             detail=(
-                "Runtime detectado y habilitable mediante STUDIO_AGENT_BUILDER=antigravity."
+                "Entorno aislado detectado y habilitable mediante STUDIO_AGENT_BUILDER=antigravity."
                 if antigravity
-                else "No hay un runtime o SDK de Antigravity instalado; no se simula su uso."
+                else (
+                    "Configura STUDIO_ANTIGRAVITY_PYTHON con un Python aislado que tenga "
+                    "google-antigravity; no se simula su uso."
+                )
             ),
         ),
         BuilderCapability(
@@ -79,3 +85,25 @@ def inspect_builder_readiness() -> BuilderReadiness:
         ),
     )
     return BuilderReadiness(active_builder=active, capabilities=capabilities)
+
+
+def _module_available(name: str) -> bool:
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return False
+
+
+def _antigravity_worker_available(python_executable: str) -> bool:
+    if not python_executable or not Path(python_executable).is_file():
+        return False
+    try:
+        result = subprocess.run(
+            [python_executable, "-c", "import google.antigravity"],
+            check=False,
+            capture_output=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0

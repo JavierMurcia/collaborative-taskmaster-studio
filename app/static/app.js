@@ -17,7 +17,7 @@ localStorage.setItem(SESSION_KEY, sessionId);
 function conversationStorageKey(owner = state?.identity?.user_id || sessionId) { return `${PARTNER_CONVERSATIONS_KEY}:${owner}`; }
 
 const restoredConversations = readPartnerConversations(sessionId);
-const state = { projectId: localStorage.getItem(PROJECT_KEY), partnerConversations: restoredConversations, activeConversationId: null, partnerMessages: [], partnerPhase: "discovery", entryMode: "radar", documents: [], agents: [], connections: [], identity: null, identityConfig: { mode: "local" }, authReady: true, attachedDocumentIds: [], partnerPending: false, runtimeLoaded: false, runtime: { mode: "local", label: "Comprobando Gemini", provider: "Vertex AI", model: "gemini-3.7-flash", model_calls_enabled: false } };
+const state = { projectId: localStorage.getItem(PROJECT_KEY), partnerConversations: restoredConversations, activeConversationId: null, partnerMessages: [], partnerPhase: "discovery", entryMode: "radar", documents: [], agents: [], connections: [], identity: null, identityConfig: { mode: "local" }, authReady: true, attachedDocumentIds: [], partnerPending: false, partnerTypingVisible: false, entryTransitionPending: false, runtimeLoaded: false, runtime: { mode: "local", label: "Comprobando Gemini", provider: "Vertex AI", model: "gemini-3.7-flash", model_calls_enabled: false } };
 const buildPollers = new Map();
 const conversationSyncTimers = new Map();
 const terminalBuildStates = new Set(["completed", "failed", "stopped"]);
@@ -165,35 +165,93 @@ async function handleIdentityAction() {
 
 async function createProject(event) {
   event.preventDefault();
-  const message = $("#project-description").value.trim();
+  if (state.entryTransitionPending) return;
+  const input = $("#project-description");
+  const submit = $("#project-form").querySelector('button[type="submit"]');
+  const message = input.value.trim();
   if (!message) return;
-  $("#project-description").value = "";
-  $("#char-count").textContent = "0 / 6000";
-  await sendPartnerMessage(message);
+  state.entryTransitionPending = true;
+  input.disabled = true;
+  submit.disabled = true;
+  try {
+    await transitionWelcomeToConversation();
+    input.value = "";
+    $("#char-count").textContent = "0 / 6000";
+    await sendPartnerMessage(message);
+  } finally {
+    state.entryTransitionPending = false;
+    input.disabled = !chatIsReady();
+  }
+}
+
+function transitionDelay(milliseconds) {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return Promise.resolve();
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+async function transitionWelcomeToConversation() {
+  const welcome = $("#welcome-view");
+  const chat = $("#partner-chat-view");
+  if (welcome.hidden) return;
+  // Taskmaster Studio is a single persistent canvas. Replace the welcome
+  // content in place instead of replaying the general chat transition.
+  if (state.entryMode === "builder") {
+    renderPartnerConversation();
+    showPartnerChat();
+    return;
+  }
+  document.body.classList.add("chat-transitioning");
+  welcome.classList.add("welcome-exit");
+  await transitionDelay(280);
+  // The hidden chat may still contain markup from the previously opened
+  // conversation. Render the current (usually empty) state before revealing
+  // it so an old draft never flashes during the first-turn transition.
+  renderPartnerConversation();
+  showPartnerChat();
+  chat.classList.add("chat-entering");
+  await transitionDelay(620);
+  welcome.classList.remove("welcome-exit");
+  chat.classList.remove("chat-entering");
+  document.body.classList.remove("chat-transitioning");
 }
 
 async function sendPartnerMessage(message) {
   if (!chatIsReady()) { notify("Gemini no está conectado. Reinicia el estudio con la verificación de Vertex AI.", "error"); return; }
-  const firstTurnInBuilder = state.entryMode === "builder" && !state.partnerMessages.some((item) => item.role === "user");
+  const firstConversationTurn = !state.partnerMessages.some((item) => item.role === "user");
+  const firstTurnInBuilder = state.entryMode === "builder" && firstConversationTurn;
   const requestMessage = firstTurnInBuilder
     ? `Quiero diseñar y construir un agente Taskmaster en Taskmaster Studio. Mi solicitud es: ${message}`
     : message;
   const history = state.partnerMessages.filter((item) => ["user", "assistant"].includes(item.role)).slice(-16).map(({ role, content, toolActivity }) => ({ role, content, evidence: Array.isArray(toolActivity) ? toolActivity.slice(0, 8).map((entry) => `${entry.capability || "unknown"} | ${entry.status || "unknown"} | ${entry.path || "."} | ${entry.query || ""}`.slice(0, 500)) : [] }));
   state.partnerMessages.push({ role: "user", content: message });
-  state.partnerPending = true; persistPartnerHistory(); showPartnerChat(); renderPartnerConversation();
+  state.partnerPending = true;
+  state.partnerTypingVisible = !firstConversationTurn;
+  persistPartnerHistory();
+  showPartnerChat();
+  if (firstConversationTurn) $("#partner-chat-view").classList.add("first-turn-lifting");
+  renderPartnerConversation();
+  if (firstConversationTurn) {
+    await transitionDelay(560);
+    $("#partner-chat-view").classList.remove("first-turn-lifting");
+    state.partnerTypingVisible = true;
+    renderPartnerConversation();
+  }
   try {
     const payload = await api("/api/v1/collaborative/messages", {
       method: "POST",
       background: true,
       body: JSON.stringify({ message: requestMessage, history, conversation_id: state.activeConversationId, document_ids: state.attachedDocumentIds }),
     });
-    state.partnerMessages.push({ role: "assistant", content: payload.reply, model: payload.model, provider: payload.provider, intent: payload.intent, agentDraft: payload.agent_draft, toolActivity: payload.tool_activity, connectionOffers: payload.connection_offers || [] });
+    state.partnerMessages.push({ role: "assistant", content: payload.reply, model: payload.model, provider: payload.provider, intent: payload.intent, agentDraft: payload.agent_draft, toolActivity: payload.tool_activity, connectionOffers: payload.connection_offers || [], revealResponse: true });
     state.partnerPhase = payload.phase;
     persistPartnerHistory();
   } catch (error) {
     handle(error);
   } finally {
-    state.partnerPending = false; renderPartnerConversation();
+    state.partnerPending = false;
+    state.partnerTypingVisible = false;
+    $("#partner-chat-view").classList.remove("first-turn-lifting");
+    renderPartnerConversation();
   }
 }
 
@@ -242,19 +300,26 @@ function openTaskmasterStudio() {
 
 function renderPartnerConversation() {
   const phaseLabels = { discovery: "Explorando", clarification: "Aclarando", alignment: "Alineados" };
-  $("#partner-conversation").innerHTML = state.partnerMessages.map((item, index) => {
+  const turns = state.partnerMessages.map((item, index) => {
     if (item.role === "user") return `<article class="partner-turn user-turn"><div class="turn-label">Tú</div><div class="turn-content">${formatChatText(item.content)}</div></article>`;
     if (item.kind === "agent_build") return renderAgentBuild(item, index);
-    return `<article class="partner-turn assistant-turn"><div class="partner-avatar" aria-hidden="true">${item.sourceLabel === "Studio" ? "C" : "✦"}</div><div><div class="turn-label">${escapeHtml(item.sourceLabel || "Gemini")}</div><div class="turn-content">${formatChatText(item.content)}</div>${renderAgentDraft(item, index)}${renderConnectionOffers(item.connectionOffers)}${renderToolActivity(item.toolActivity)}<div class="turn-meta"><small>${escapeHtml(item.model || state.runtime.model)} · ${escapeHtml(item.provider || "Vertex AI")}</small><button class="copy-response" type="button" data-copy-index="${index}" aria-label="Copiar respuesta">Copiar</button></div></div></article>`;
+    return `<article class="partner-turn assistant-turn${item.revealResponse ? " response-arrival" : ""}"><div class="partner-avatar" aria-hidden="true">${item.sourceLabel === "Studio" ? "C" : "✦"}</div><div><div class="turn-label">${escapeHtml(item.sourceLabel || "Gemini")}</div><div class="turn-content">${formatChatText(item.content)}</div>${renderAgentDraft(item, index)}${renderConnectionOffers(item.connectionOffers)}${renderToolActivity(item.toolActivity)}<div class="turn-meta"><small>${escapeHtml(item.model || state.runtime.model)} · ${escapeHtml(item.provider || "Vertex AI")}</small><button class="copy-response" type="button" data-copy-index="${index}" aria-label="Copiar respuesta">Copiar</button></div></div></article>`;
   }).join("");
-  $("#partner-typing").hidden = !state.partnerPending;
+  const typingTurn = state.partnerPending && state.partnerTypingVisible
+    ? `<article class="partner-turn assistant-turn typing-turn inline-typing-turn" aria-live="polite"><div class="partner-avatar" aria-hidden="true">✦</div><div><div class="turn-label">Gemini</div><div class="typing-dots" aria-label="Gemini está respondiendo"><span></span><span></span><span></span></div></div></article>`
+    : "";
+  $("#partner-conversation").innerHTML = turns + typingTurn;
+  // The marker is consumed by this render. Keeping it out of later renders
+  // prevents old answers from replaying their entrance animation.
+  state.partnerMessages.forEach((item) => { if (item.revealResponse) item.revealResponse = false; });
   $("#partner-message-input").disabled = state.partnerPending || !chatIsReady();
   $("#partner-message-form").querySelector('button[type="submit"]').disabled = state.partnerPending || !chatIsReady();
-  const firstMessage = state.partnerMessages.find((item) => item.role === "user")?.content || "Nueva conversación";
-  $("#conversation-title").textContent = firstMessage.length > 56 ? `${firstMessage.slice(0, 56)}…` : firstMessage;
   $("#partner-chat-view").dataset.phase = phaseLabels[state.partnerPhase] || "Conversando";
   requestAnimationFrame(() => {
-    $("#partner-message-form").scrollIntoView({ behavior: "smooth", block: "end" });
+    // The transcript owns its scroll. Never move the page or the composer:
+    // the input remains docked while only previous turns move underneath it.
+    const conversation = $("#partner-conversation");
+    conversation.scrollTo({ top: conversation.scrollHeight, behavior: "smooth" });
     $("#partner-message-input").focus({ preventScroll: true });
   });
   resumeBuildPolling();
@@ -362,7 +427,7 @@ function renderAgentDraft(message, index) {
     ? `<section class="draft-section draft-integrations"><div class="draft-section-heading"><span>Accesos y herramientas</span><b class="draft-status warning">Requiere configuración</b></div><ul>${draft.external_actions.map((value) => `<li>${escapeHtml(value)}</li>`).join("")}</ul><small>Estos accesos todavía no están conectados. Cada uno requerirá permisos explícitos y aprobación antes de producir efectos externos.</small></section>`
     : `<section class="draft-section draft-capabilities"><div class="draft-section-heading"><span>Accesos y herramientas</span><b class="draft-status">Sin conectar</b></div><p>El agente todavía no tiene acceso a directorios, Internet, documentos privados, correo ni tickets.</p></section>`;
   const missingPanel = missing.length ? `<section class="draft-missing"><span>Decisiones pendientes</span><div>${missing.slice(0, 4).map((value) => `<em>${escapeHtml(value)}</em>`).join("")}</div></section>` : "";
-  return `<section class="agent-draft-card"><header><div><span>DISEÑO PROPUESTO POR GEMINI</span><strong>${escapeHtml(draft.name || "Sin nombre todavía")}</strong></div><b>${readiness}%</b></header><div class="draft-progress" aria-label="Diseño completado al ${readiness}%"><i style="width:${readiness}%"></i></div>${draft.purpose ? `<section class="draft-purpose"><span>Objetivo</span><p>${escapeHtml(draft.purpose)}</p></section>` : ""}${metricsPanel}${frameworkPanel}${integrations}${missingPanel}<footer>${created ? `<span class="draft-created">✓ Construcción iniciada · ${escapeHtml(framework?.label || "framework pendiente")}</span>` : ready && framework ? `<button type="button" data-create-agent-index="${index}">Confirmar y construir con ${escapeHtml(framework.label)}</button>` : `<span>Continúa conversando con Gemini para completar el diseño.</span>`}</footer></section>`;
+  return `<section class="agent-draft-card"><header><div><span>DISEÑO PROPUESTO POR GEMINI</span><strong>${escapeHtml(draft.name || "Sin nombre todavía")}</strong></div><b>${readiness}%</b></header><div class="draft-progress" aria-label="Diseño completado al ${readiness}%"><i style="width:${readiness}%"></i></div>${draft.purpose ? `<section class="draft-purpose"><span>Objetivo</span><p>${escapeHtml(draft.purpose)}</p></section>` : ""}${metricsPanel}${frameworkPanel}${integrations}${missingPanel}<footer>${created ? `<span class="draft-created">✓ Construcción iniciada · ${escapeHtml(framework?.label || "framework pendiente")}</span>` : ready && framework ? `<button type="button" data-create-agent-index="${index}">Aprobar diseño y construir en laboratorio</button>` : `<span>Continúa conversando con Gemini para completar el diseño.</span>`}</footer></section>`;
 }
 function renderAgentBuild(message, index) {
   const build = message.build || {};
@@ -501,15 +566,27 @@ function renderConnections() {
     if (!currentByPlugin.has(item.plugin_id)) currentByPlugin.set(item.plugin_id, item);
   }
   const catalog = CONNECTION_CATALOG.map((available) => ({ ...available, connection: currentByPlugin.get(available.plugin_id) }));
-  target.innerHTML = catalog.map(({ plugin_id, title, provider, connection }) => {
+  target.innerHTML = catalog.map(({ plugin_id, title, connection }) => {
     const status = connection?.status || "not_connected";
-    const canConnect = status !== "connected" && status !== "pending";
-    const action = canConnect
-      ? `<button class="connection-action" type="button" data-connect-plugin="${escapeHtml(plugin_id)}">${status === "not_connected" || status === "revoked" ? "Conectar" : "Reintentar"}</button>`
-      : `<button class="connection-action danger" type="button" data-revoke-connection="${escapeHtml(connection.id)}">${status === "connected" ? "Desconectar" : "Cancelar"}</button>`;
-    return `<article class="connection-entry"><div><strong>${escapeHtml(title)}</strong><small>${escapeHtml(connection?.account_label || connectionStatusLabel(status))} · ${escapeHtml(provider)}</small></div>${action}</article>`;
+    const connected = status === "connected";
+    const pending = status === "pending";
+    const action = connected || pending
+      ? `data-revoke-connection="${escapeHtml(connection.id)}"`
+      : `data-connect-plugin="${escapeHtml(plugin_id)}"`;
+    const verb = connected ? "Desconectar" : pending ? "Cancelar autorización de" : status === "not_connected" || status === "revoked" ? "Conectar" : "Reintentar conexión con";
+    return `<button class="connection-icon-button ${connected ? "is-connected" : pending ? "is-pending" : ""}" type="button" ${action} aria-label="${escapeHtml(`${verb} ${title}`)}" title="${escapeHtml(`${title} · ${connection?.account_label || connectionStatusLabel(status)}`)}"><span class="connection-brand" aria-hidden="true">${connectionBrandIcon(plugin_id)}</span><i aria-hidden="true"></i></button>`;
   }).join("");
   $("#connection-empty").hidden = true;
+}
+
+function connectionBrandIcon(pluginId) {
+  const icons = {
+    "google.drive": `<svg viewBox="0 0 24 24"><path fill="#0F9D58" d="M8.1 3h5.2l7.7 13.3h-5.2z"/><path fill="#F4B400" d="M8.1 3 3 11.9l2.6 4.4 7.7-13.3z"/><path fill="#4285F4" d="M5.6 16.3h15L18 21H3z"/></svg>`,
+    "google.gmail": `<svg viewBox="0 0 24 24"><path fill="#EA4335" d="M3 5.2 12 12l9-6.8v2.7l-9 6.8-9-6.8z"/><path fill="#4285F4" d="M3 7.9v10.9H7V11z"/><path fill="#34A853" d="M17 11v7.8h4V7.9z"/><path fill="#C5221F" d="M3 5.2V8l4 3V8.2z"/><path fill="#FBBC04" d="M21 5.2V8l-4 3V8.2z"/></svg>`,
+    "google.calendar": `<svg viewBox="0 0 24 24"><path fill="#fff" d="M4 4h16v16H4z"/><path fill="#4285F4" d="M4 4h16v5H4z"/><path fill="#34A853" d="M4 9h5v11H4z"/><path fill="#FBBC04" d="M9 16h11v4H9z"/><path fill="#EA4335" d="M16 9h4v7h-4z"/><text x="12.3" y="15.2" text-anchor="middle" font-size="6.4" font-weight="800" fill="#4285F4">31</text></svg>`,
+    github: `<svg viewBox="0 0 24 24"><path fill="#fff" d="M12 2.7a9.6 9.6 0 0 0-3 18.7c.5.1.7-.2.7-.5v-1.8c-2.8.6-3.4-1.2-3.4-1.2-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 0 1.6 1 1.6 1 .9 1.6 2.4 1.1 3 .9.1-.7.4-1.1.7-1.3-2.3-.3-4.7-1.1-4.7-5.1 0-1.1.4-2 1-2.8-.1-.3-.4-1.3.1-2.7 0 0 .9-.3 2.8 1.1a9.7 9.7 0 0 1 5.1 0c1.9-1.3 2.8-1.1 2.8-1.1.5 1.4.2 2.4.1 2.7.6.8 1 1.7 1 2.8 0 4-2.4 4.8-4.7 5.1.4.3.7 1 .7 1.9v2.8c0 .3.2.6.7.5A9.6 9.6 0 0 0 12 2.7z"/></svg>`,
+  };
+  return icons[pluginId] || `<span>↗</span>`;
 }
 
 function connectionStatusLabel(status) { return ({ connected: "Conectada", pending: "Autorización pendiente", setup_required: "Configuración requerida", error: "Requiere atención", revoked: "Desconectada", not_connected: "Disponible" })[status] || status; }
@@ -774,6 +851,29 @@ $("#welcome-document-input").addEventListener("change", (event) => { uploadDocum
 $("#chat-document-input").addEventListener("change", (event) => { uploadDocuments(event.target.files); event.target.value = ""; });
 $("#welcome-attachments").addEventListener("click", handleAttachmentClick);
 $("#chat-attachments").addEventListener("click", handleAttachmentClick);
+const builderCanvas = $("#main-content");
+const builderWelcome = $("#welcome-view");
+let builderPointerFrame = 0;
+builderCanvas.addEventListener("pointermove", (event) => {
+  if (!document.body.classList.contains("taskmaster-studio-mode")) return;
+  if (builderPointerFrame) cancelAnimationFrame(builderPointerFrame);
+  builderPointerFrame = requestAnimationFrame(() => {
+    const bounds = builderCanvas.getBoundingClientRect();
+    const x = Math.max(0, Math.min(100, ((event.clientX - bounds.left) / bounds.width) * 100));
+    const y = Math.max(0, Math.min(100, ((event.clientY - bounds.top) / bounds.height) * 100));
+    [builderCanvas, builderWelcome].forEach((item) => {
+      item.style.setProperty("--grid-focus-x", `${x.toFixed(2)}%`);
+      item.style.setProperty("--grid-focus-y", `${y.toFixed(2)}%`);
+    });
+    builderPointerFrame = 0;
+  });
+}, { passive: true });
+builderCanvas.addEventListener("pointerleave", () => {
+  [builderCanvas, builderWelcome].forEach((item) => {
+    item.style.setProperty("--grid-focus-x", "50%");
+    item.style.setProperty("--grid-focus-y", "44%");
+  });
+});
 function bindExampleButtons() {
   $$('[data-example]').forEach((button) => button.addEventListener("click", () => {
     $("#project-description").value = button.dataset.example;

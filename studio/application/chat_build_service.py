@@ -27,6 +27,11 @@ from studio.application.plugin_registry import PluginRegistry, PluginSelection
 from studio.domain.enums import ApprovalStatus
 from studio.domain.errors import DomainError
 from studio.domain.models import Approval, Briefing, Policy, TaskmasterSpecification, Tool
+from studio.ports.construction import (
+    BuilderRuntime,
+    ConstructionOrchestrator,
+    ControlledConstructionOrchestrator,
+)
 from studio.ports.generator import GeneratorAdapter
 
 BuildState = Literal[
@@ -93,7 +98,7 @@ class ChatBuildSnapshot(BaseModel):
     project_id: str
     state: BuildState
     builder: str
-    builder_runtime: Literal["antigravity_sdk", "controlled_local_builder"]
+    builder_runtime: BuilderRuntime
     framework: FrameworkRecommendation
     agent_name: str
     capabilities: tuple[str, ...] = ()
@@ -118,7 +123,7 @@ class _BuildRecord:
         framework: FrameworkRecommendation,
         contract: AgentBuildContract,
         plugins: tuple[PluginSelection, ...],
-        builder_runtime: Literal["antigravity_sdk", "controlled_local_builder"],
+        builder_runtime: BuilderRuntime,
     ) -> None:
         self.build_id = build_id
         self.project_id = project_id
@@ -145,7 +150,7 @@ class ChatBuildService:
         adapter: GeneratorAdapter,
         generated_root: Path,
         *,
-        antigravity_available: bool = False,
+        orchestrator: ConstructionOrchestrator | None = None,
         step_delay_seconds: float = 0.12,
         executor: ThreadPoolExecutor | None = None,
         now: Callable[[], datetime] | None = None,
@@ -154,7 +159,7 @@ class ChatBuildService:
     ) -> None:
         self._adapter = adapter
         self._root = generated_root.resolve()
-        self._antigravity_available = antigravity_available
+        self._orchestrator = orchestrator or ControlledConstructionOrchestrator()
         self._delay = max(0.0, step_delay_seconds)
         self._executor = executor or ThreadPoolExecutor(
             max_workers=2, thread_name_prefix="taskmaster-builder"
@@ -217,9 +222,7 @@ class ChatBuildService:
             framework=recommendation,
             contract=contract,
             plugins=plugin_selection,
-            builder_runtime=(
-                "antigravity_sdk" if self._antigravity_available else "controlled_local_builder"
-            ),
+            builder_runtime=self._orchestrator.runtime_id,
         )
         with self._lock:
             self._records[build_id] = record
@@ -361,7 +364,15 @@ class ChatBuildService:
                         status="passed",
                     )
             destination = self._root / "chat-builds" / build_id
-            bundle = self._adapter.generate(specification, destination)
+            bundle = self._orchestrator.construct(
+                specification,
+                destination,
+                generator=self._adapter,
+                contract=record.contract.model_dump(mode="json"),
+                progress=lambda phase, message, status: self._construction_progress(
+                    build_id, phase, message, status
+                ),
+            )
             managed_files = self._write_managed_artifacts(bundle.output_directory, record)
             self._pause()
             with self._lock:
@@ -505,6 +516,23 @@ class ChatBuildService:
                     transient=False,
                     details={"error_type": type(error).__name__},
                 )
+
+    def _construction_progress(
+        self,
+        build_id: str,
+        phase: str,
+        message: str,
+        status: Literal["running", "passed"],
+    ) -> None:
+        with self._lock:
+            record = self._records[build_id]
+            self._event(
+                record,
+                kind="status",
+                phase=phase,
+                message=message,
+                status=status,
+            )
 
     def _specification(self, record: _BuildRecord) -> TaskmasterSpecification:
         draft = record.draft

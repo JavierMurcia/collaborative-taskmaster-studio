@@ -209,7 +209,7 @@ def _render_antigravity(specification: TaskmasterSpecification) -> dict[str, str
             "import asyncio\nfrom google.antigravity import Agent, LocalAgentConfig\n\n"
             f"INSTRUCTION = {instruction!r}\n\n"
             "async def main() -> None:\n"
-            "    async with Agent(LocalAgentConfig(system_instruction=INSTRUCTION)) as agent:\n"
+            "    async with Agent(LocalAgentConfig(system_instructions=INSTRUCTION)) as agent:\n"
             "        response = await agent.chat('Describe la siguiente acción segura.')\n"
             "        print(await response.text())\n\n"
             "if __name__ == '__main__':\n    asyncio.run(main())\n"

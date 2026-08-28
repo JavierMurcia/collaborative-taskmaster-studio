@@ -110,8 +110,7 @@ footer{color:#555863}
 body.chat-active{height:100dvh;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 body.chat-active .topbar{flex:0 0 auto}
 body.chat-active #main-content{flex:1 1 auto;min-height:0;overflow:hidden}
-body.chat-active .partner-chat-view:not([hidden]){height:100%;margin:0 auto;padding:22px 0 14px;display:grid;grid-template-rows:auto minmax(0,1fr) auto auto auto}
-body.chat-active .partner-chat-heading{margin:0 0 20px}
+body.chat-active .partner-chat-view:not([hidden]){height:100%;margin:0 auto;padding:22px 0 14px;display:grid;grid-template-rows:minmax(0,1fr) auto auto auto}
 body.chat-active .partner-conversation{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:4px 8px 28px;scrollbar-gutter:stable}
 body.chat-active .partner-conversation{scrollbar-width:thin;scrollbar-color:#373a46 transparent}
 body.chat-active .partner-conversation::-webkit-scrollbar{width:7px}
@@ -121,7 +120,7 @@ body.chat-active .typing-turn{margin-bottom:12px}
 body.chat-active .partner-composer{position:static;bottom:auto}
 body.chat-active .partner-chat-view>.trust-line{margin:9px 0 0}
 body.chat-active footer{display:none}
-@media(max-width:700px){body.chat-active .partner-chat-view:not([hidden]){padding:14px 0 8px}body.chat-active .partner-chat-heading{margin-bottom:14px}body.chat-active .partner-conversation{padding-bottom:18px}}
+@media(max-width:700px){body.chat-active .partner-chat-view:not([hidden]){padding:14px 0 8px}body.chat-active .partner-conversation{padding-bottom:18px}}
 
 /* Historial LLM y desplazamiento principal en el extremo derecho. */
 .conversation-sidebar{position:fixed;inset:0 auto 0 0;z-index:30;width:272px;display:flex;flex-direction:column;padding:20px 14px;border-right:1px solid #22252e;background:#0a0c11}
@@ -153,3 +152,454 @@ body.chat-active .partner-composer{position:static;bottom:auto;margin-top:auto}
 .research-sources article>div{display:grid;gap:3px;min-width:0}.research-sources strong{color:#dddde5;font-size:11px}.research-sources small{color:#737783;font-size:9px;line-height:1.35}
 .hero>.trust-line{margin-top:14px}.hero{max-width:840px;padding-top:12vh}.hero .lead{max-width:720px}.hero .eyebrow{font-size:10px;letter-spacing:.15em}
 @media(max-width:720px){.research-sources{grid-template-columns:1fr}.hero{padding-top:8vh}.research-sources article{padding:9px 11px}}
+
+/* Taskmaster Studio: lienzo digital con el chat como consola inferior. */
+.builder-grid-preview{display:none}
+.taskmaster-studio-mode #main-content{padding-bottom:0}
+.taskmaster-studio-mode #welcome-view{position:relative;isolation:isolate;width:100%;max-width:none;min-height:calc(100dvh - 68px);padding:34px clamp(18px,4vw,64px) 22px;overflow:hidden;background-color:#0c0e14;background-image:linear-gradient(rgba(139,124,246,.09) 1px,transparent 1px),linear-gradient(90deg,rgba(139,124,246,.09) 1px,transparent 1px),linear-gradient(rgba(139,124,246,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(139,124,246,.035) 1px,transparent 1px),radial-gradient(circle at 50% 44%,rgba(94,73,194,.22),transparent 34%);background-size:128px 128px,128px 128px,32px 32px,32px 32px,auto;background-position:center;display:flex;align-items:center;flex-direction:column}
+.taskmaster-studio-mode #welcome-view::before{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;background:linear-gradient(180deg,#0c0e14 0,transparent 15%,transparent 78%,#0c0e14 100%),linear-gradient(90deg,#0c0e14 0,transparent 12%,transparent 88%,#0c0e14 100%)}
+.taskmaster-studio-mode .welcome-orb{width:42px;height:42px;margin:0 auto 14px;border-radius:13px}
+.taskmaster-studio-mode .hero .eyebrow{margin:0}
+.taskmaster-studio-mode .hero h1{margin:8px 0 7px;font-size:clamp(30px,4vw,43px)}
+.taskmaster-studio-mode .hero .lead{max-width:680px;margin:0 auto 15px;font-size:13px;line-height:1.55}
+.taskmaster-studio-mode .builder-grid-preview{position:relative;width:min(100%,960px);min-height:260px;margin:0 auto 18px;display:grid;grid-template-columns:1fr 170px 1fr;grid-template-rows:1fr 1fr;align-items:center;gap:20px 54px}
+.taskmaster-studio-mode .builder-grid-preview::before,.taskmaster-studio-mode .builder-grid-preview::after{content:"";position:absolute;left:17%;right:17%;top:50%;z-index:-1;border-top:1px solid rgba(143,128,255,.38);box-shadow:0 0 18px rgba(122,104,255,.23)}
+.taskmaster-studio-mode .builder-grid-preview::after{left:50%;right:auto;top:13%;bottom:13%;border-top:0;border-left:1px solid rgba(143,128,255,.38)}
+.builder-grid-node{display:flex;align-items:center;gap:11px;width:min(100%,245px);padding:12px 14px;border:1px solid rgba(111,102,164,.5);border-radius:12px;background:rgba(15,17,25,.88);box-shadow:0 12px 35px rgba(0,0,0,.28);text-align:left;backdrop-filter:blur(8px)}
+.builder-grid-node:nth-child(even){justify-self:end}.builder-grid-node>span{display:grid;place-items:center;flex:0 0 29px;width:29px;height:29px;border:1px solid #6256a7;border-radius:9px;background:#211d37;color:#aa9dff;font-size:9px;font-weight:850}.builder-grid-node>div{display:grid;gap:3px}.builder-grid-node small{color:#70699b;font-size:7px;font-weight:850;letter-spacing:.13em}.builder-grid-node strong{color:#dcdae9;font-size:10px;font-weight:650}.node-objective{grid-column:1;grid-row:1}.node-architecture{grid-column:3;grid-row:1}.node-tools{grid-column:1;grid-row:2}.node-validation{grid-column:3;grid-row:2}
+.builder-grid-core{grid-column:2;grid-row:1/3;align-self:center;justify-self:center;width:142px;height:142px;display:grid;place-content:center;justify-items:center;border:1px solid #7769cb;border-radius:50%;background:radial-gradient(circle,#292247 0,#171523 58%,#0e1017 70%);box-shadow:0 0 0 9px rgba(108,91,206,.07),0 0 65px rgba(105,86,219,.28)}.builder-grid-core i{width:9px;height:9px;margin-bottom:9px;border-radius:50%;background:#8f80ff;box-shadow:0 0 18px #8f80ff}.builder-grid-core span{color:#7e73bd;font-size:7px;font-style:normal;font-weight:850;letter-spacing:.17em}.builder-grid-core b{margin-top:3px;color:#f0eff8;font-size:15px;font-weight:650}
+.taskmaster-studio-mode #project-form{order:20;width:min(100%,840px);margin-top:auto;background:rgba(24,25,34,.96);box-shadow:0 -16px 65px rgba(0,0,0,.36),0 0 0 1px rgba(139,124,246,.08)}
+.taskmaster-studio-mode #welcome-attachments{order:21;width:min(100%,840px)}
+.taskmaster-studio-mode #welcome-examples{order:19;margin:0 auto 12px}
+.taskmaster-studio-mode #welcome-sources{display:none}
+.taskmaster-studio-mode #welcome-trust{order:22;margin:10px 0 0}
+@media(max-height:820px) and (min-width:721px){.taskmaster-studio-mode #welcome-view{padding-top:20px}.taskmaster-studio-mode .welcome-orb{display:none}.taskmaster-studio-mode .builder-grid-preview{min-height:210px}.taskmaster-studio-mode .hero .lead{margin-bottom:8px}}
+@media(max-width:720px){.taskmaster-studio-mode #welcome-view{min-height:calc(100dvh - 62px);padding:22px 14px 12px;background-size:96px 96px,96px 96px,24px 24px,24px 24px,auto}.taskmaster-studio-mode .builder-grid-preview{min-height:auto;margin:10px 0 18px;grid-template-columns:1fr 1fr;grid-template-rows:auto auto;gap:8px}.taskmaster-studio-mode .builder-grid-preview::before,.taskmaster-studio-mode .builder-grid-preview::after,.taskmaster-studio-mode .builder-grid-core{display:none}.builder-grid-node,.builder-grid-node:nth-child(even){width:100%;justify-self:stretch;padding:10px}.node-objective{grid-column:1;grid-row:1}.node-architecture{grid-column:2;grid-row:1}.node-tools{grid-column:1;grid-row:2}.node-validation{grid-column:2;grid-row:2}.taskmaster-studio-mode #welcome-examples{display:none}.taskmaster-studio-mode #welcome-trust{font-size:9px}}
+
+/* El constructor parte de un tablero limpio, no de una portada promocional. */
+.taskmaster-studio-mode #welcome-view{padding-top:18px}
+.taskmaster-studio-mode .welcome-orb,.taskmaster-studio-mode #welcome-eyebrow,.taskmaster-studio-mode #welcome-title,.taskmaster-studio-mode #welcome-lead,.taskmaster-studio-mode #welcome-examples,.taskmaster-studio-mode #welcome-trust{display:none}
+.taskmaster-studio-mode .builder-grid-preview{flex:1 1 auto;width:100%;min-height:360px;margin:0;grid-template-columns:repeat(5,minmax(125px,1fr));grid-template-rows:1fr;gap:34px;align-items:center}
+.taskmaster-studio-mode .builder-grid-preview::before{left:4%;right:4%;top:50%;border-top-color:rgba(143,128,255,.48)}
+.taskmaster-studio-mode .builder-grid-preview::after{display:none}
+.taskmaster-studio-mode .builder-grid-node,.taskmaster-studio-mode .builder-grid-core{position:relative;grid-row:1;grid-column:auto;justify-self:stretch;width:100%;height:auto;min-height:96px;padding:16px;border:1px solid #40395e;border-radius:10px;background:rgba(13,15,22,.94);box-shadow:0 15px 38px rgba(0,0,0,.28);place-content:initial;justify-items:initial}
+.taskmaster-studio-mode .builder-grid-node{display:flex}
+.taskmaster-studio-mode .builder-grid-node:nth-child(even){justify-self:stretch}
+.taskmaster-studio-mode .builder-grid-node::before,.taskmaster-studio-mode .builder-grid-node::after,.taskmaster-studio-mode .builder-grid-core::before,.taskmaster-studio-mode .builder-grid-core::after{content:"";position:absolute;top:50%;width:7px;height:7px;border:1px solid #7769cb;border-radius:50%;background:#0c0e14;transform:translateY(-50%)}
+.taskmaster-studio-mode .builder-grid-node::before,.taskmaster-studio-mode .builder-grid-core::before{left:-4px}.taskmaster-studio-mode .builder-grid-node::after,.taskmaster-studio-mode .builder-grid-core::after{right:-4px}
+.taskmaster-studio-mode .builder-grid-core{display:flex;align-items:center;justify-content:center;flex-direction:column;border-color:#7568c7;border-radius:10px;background:linear-gradient(145deg,#1d1931,#11131b);box-shadow:0 0 0 4px rgba(116,101,207,.06),0 15px 45px rgba(68,50,157,.22)}
+.taskmaster-studio-mode .builder-grid-core i{width:7px;height:7px;margin-bottom:7px}.taskmaster-studio-mode .builder-grid-core b{font-size:13px}
+.taskmaster-studio-mode #project-form{flex:0 0 auto;margin:0 auto 6px}
+@media(max-width:1100px) and (min-width:721px){.taskmaster-studio-mode .builder-grid-preview{grid-template-columns:repeat(5,minmax(105px,1fr));gap:18px}.taskmaster-studio-mode .builder-grid-node,.taskmaster-studio-mode .builder-grid-core{min-height:88px;padding:11px}.taskmaster-studio-mode .builder-grid-node>span{display:none}.taskmaster-studio-mode .builder-grid-node strong{font-size:9px}}
+@media(max-width:720px){.taskmaster-studio-mode #welcome-view{padding:10px 12px}.taskmaster-studio-mode .builder-grid-preview{flex:1 1 auto;width:100%;min-height:310px;margin:0 0 10px;padding:0 20px;display:grid;grid-template-columns:repeat(5,180px);grid-template-rows:1fr;gap:26px;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity}.taskmaster-studio-mode .builder-grid-preview::before{left:40px;right:auto;width:calc(5 * 180px + 4 * 26px - 40px)}.taskmaster-studio-mode .builder-grid-node,.taskmaster-studio-mode .builder-grid-core{display:flex;grid-row:1;grid-column:auto;min-height:92px;scroll-snap-align:center}.taskmaster-studio-mode .builder-grid-core{flex-direction:column}.taskmaster-studio-mode #project-form{width:100%}}
+
+/* Estado vivo del constructor: el mismo contrato alimenta el tablero y el chat. */
+.builder-grid-node{font:inherit;color:inherit;cursor:pointer}
+.builder-grid-node:hover:not(:disabled){border-color:#7669c9;background:rgba(25,22,42,.97);transform:translateY(-2px);filter:none}
+.builder-grid-node p{max-width:180px;margin:3px 0 0;overflow:hidden;color:#777b8b;font-size:8px;line-height:1.35;text-overflow:ellipsis;white-space:nowrap}
+.builder-grid-core em{margin-top:7px;color:#8b7cf6;font-size:9px;font-style:normal;font-weight:800}
+[data-builder-node][data-status="active"],[data-builder-node][data-status="running"]{border-color:#7769cb!important;box-shadow:0 0 0 3px rgba(119,105,203,.08),0 14px 38px rgba(0,0,0,.28)!important}
+[data-builder-node][data-status="complete"]{border-color:#397968!important;background:linear-gradient(145deg,rgba(22,50,43,.92),rgba(13,20,22,.96))!important}
+[data-builder-node][data-status="waiting"]{border-color:#9b7632!important;background:linear-gradient(145deg,rgba(57,43,20,.92),rgba(20,18,17,.96))!important}
+[data-builder-node][data-status="failed"]{border-color:#82404e!important;background:linear-gradient(145deg,rgba(55,24,31,.92),rgba(21,16,19,.96))!important}
+[data-builder-node][data-status="complete"] small{color:#69d9bc!important}[data-builder-node][data-status="waiting"] small{color:#efc36d!important}[data-builder-node][data-status="failed"] small{color:#ff8d9d!important}
+
+/* Lienzo vivo de Taskmaster Studio. La cuadrícula comunica profundidad sin competir con el chat. */
+.taskmaster-studio-mode #welcome-view{
+  --grid-focus-x:50%;
+  --grid-focus-y:44%;
+  position:relative;
+  isolation:isolate;
+  padding:18px clamp(18px,4vw,64px) clamp(24px,5vh,56px);
+  background-color:#090b11;
+  background-image:
+    linear-gradient(rgba(145,129,255,.06) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(145,129,255,.06) 1px,transparent 1px),
+    linear-gradient(rgba(145,129,255,.022) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(145,129,255,.022) 1px,transparent 1px),
+    radial-gradient(circle,rgba(169,155,255,.12) 1px,transparent 1.35px);
+  background-size:128px 128px,128px 128px,32px 32px,32px 32px,64px 64px;
+  background-position:0 0,0 0,0 0,0 0,16px 16px;
+  animation:studio-grid-drift 30s linear infinite;
+}
+.taskmaster-studio-mode #welcome-view>*{position:relative;z-index:2}
+.taskmaster-studio-mode #welcome-view::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:0;
+  pointer-events:none;
+  background:
+    radial-gradient(circle 4px at var(--grid-focus-x) var(--grid-focus-y),rgba(195,185,255,.9) 0 42%,transparent 58%),
+    radial-gradient(circle 34px at var(--grid-focus-x) var(--grid-focus-y),transparent 0 77%,rgba(139,124,246,.5) 79%,transparent 84%),
+    radial-gradient(ellipse at 50% 115%,rgba(77,53,181,.14),transparent 54%),
+    linear-gradient(180deg,rgba(9,11,17,.78) 0,transparent 17%,transparent 78%,rgba(9,11,17,.9) 100%),
+    linear-gradient(90deg,rgba(9,11,17,.38) 0,transparent 4%,transparent 96%,rgba(9,11,17,.38) 100%);
+  filter:drop-shadow(0 0 9px rgba(139,124,246,.22));
+}
+.taskmaster-studio-mode #welcome-view::after{
+  content:"";
+  position:absolute;
+  left:12%;
+  right:12%;
+  top:0;
+  z-index:1;
+  height:1px;
+  pointer-events:none;
+  opacity:.18;
+  background:linear-gradient(90deg,transparent,rgba(167,151,255,.48),transparent);
+  box-shadow:0 0 14px rgba(139,124,246,.12);
+  animation:studio-scan 14s cubic-bezier(.45,0,.55,1) infinite;
+}
+.taskmaster-studio-mode #project-form{
+  position:relative;
+  flex:0 0 auto;
+  width:min(100%,840px);
+  margin:auto auto 0;
+  overflow:hidden;
+  border-color:rgba(127,111,220,.56);
+  background:linear-gradient(145deg,rgba(27,28,39,.94),rgba(18,19,28,.93));
+  box-shadow:0 22px 80px rgba(0,0,0,.5),0 0 0 1px rgba(139,124,246,.08),0 0 52px rgba(91,69,205,.1);
+  backdrop-filter:blur(18px);
+}
+.taskmaster-studio-mode #project-form::before{
+  content:"";
+  position:absolute;
+  left:9%;
+  right:9%;
+  top:0;
+  height:1px;
+  background:linear-gradient(90deg,transparent,#8b7cf6,transparent);
+  opacity:.65;
+  animation:studio-composer-pulse 4.8s ease-in-out infinite;
+}
+.taskmaster-studio-mode #project-form:focus-within{
+  border-color:#8b7cf6;
+  box-shadow:0 24px 90px rgba(0,0,0,.54),0 0 0 3px rgba(139,124,246,.11),0 0 70px rgba(91,69,205,.17);
+}
+.taskmaster-studio-mode .send-button{box-shadow:0 0 0 1px rgba(255,255,255,.09),0 8px 24px rgba(119,99,255,.34)}
+
+@keyframes studio-grid-drift{
+  0%{background-position:0 0,0 0,0 0,0 0,16px 16px}
+  100%{background-position:128px 128px,128px 128px,-32px 32px,-32px 32px,80px 80px}
+}
+@keyframes studio-scan{
+  0%,12%{transform:translateY(0);opacity:0}
+  24%{opacity:.18}
+  76%{opacity:.12}
+  92%,100%{transform:translateY(calc(100dvh - 190px));opacity:0}
+}
+@keyframes studio-composer-pulse{0%,100%{opacity:.28;transform:scaleX(.72)}50%{opacity:.86;transform:scaleX(1)}}
+
+@media(max-width:720px){
+  .taskmaster-studio-mode #welcome-view{padding:12px 14px 22px;background-size:96px 96px,96px 96px,24px 24px,24px 24px,48px 48px;animation-duration:36s}
+  .taskmaster-studio-mode #project-form{width:100%;margin:auto 0 0}
+  .taskmaster-studio-mode #welcome-view::after{animation-duration:11s}
+}
+@media(prefers-reduced-motion:reduce){
+  .taskmaster-studio-mode #welcome-view,.taskmaster-studio-mode #welcome-view::after,.taskmaster-studio-mode #project-form::before{animation:none}
+  .taskmaster-studio-mode #welcome-view::before{transition:none}
+}
+
+/* Navegación priorizada y conexiones visuales compactas. */
+.conversation-sidebar{padding:16px 14px 20px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#30333e transparent}
+.agent-library{max-height:34vh;margin:0;padding:0;border-top:0}
+.conversation-library{flex:1 1 180px;min-height:118px;margin-top:12px;padding-top:13px;border-top:1px solid #20232b;display:flex;flex-direction:column}
+.conversation-library .sidebar-heading{padding-bottom:9px}
+.connection-catalog{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;max-height:220px;overflow-y:auto}
+.connection-entry{min-width:0;display:grid;grid-template-columns:28px minmax(0,1fr);align-items:center;gap:7px;padding:9px 8px;border-radius:11px}
+.connection-brand{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:#080a0f;box-shadow:inset 0 0 0 1px #ffffff0b}
+.connection-brand svg{display:block;width:21px;height:21px}
+.connection-copy{min-width:0;display:grid;gap:2px}
+.connection-entry .connection-copy strong{font-size:9px}
+.connection-entry .connection-copy small{font-size:7px}
+.connection-entry .connection-action{grid-column:1/-1;width:100%;height:25px;padding:0 6px;font-size:8px}
+@media(max-width:900px){.conversation-sidebar{overflow-y:auto}}
+
+/* El lienzo llega a ambos bordes y el cursor se comporta como un nodo de diagrama. */
+.taskmaster-studio-mode #main-content{padding-inline:0}
+
+/* La primera intervención se transforma en conversación dentro del mismo lienzo. */
+body.chat-transitioning #main-content{overflow:hidden}
+body.chat-transitioning #welcome-view{pointer-events:none}
+#welcome-view.welcome-exit>.welcome-orb,
+#welcome-view.welcome-exit>.eyebrow,
+#welcome-view.welcome-exit>h1,
+#welcome-view.welcome-exit>.lead,
+#welcome-view.welcome-exit>.examples,
+#welcome-view.welcome-exit>.research-sources,
+#welcome-view.welcome-exit>.trust-line,
+#welcome-view.welcome-exit>.attachment-list{animation:welcome-content-out .28s ease both}
+#welcome-view.welcome-exit>.composer{animation:welcome-composer-out .24s ease both}
+.partner-chat-view.chat-entering .partner-chat-heading,
+.partner-chat-view.chat-entering .partner-conversation,
+.partner-chat-view.chat-entering .typing-turn,
+.partner-chat-view.chat-entering>.trust-line{animation:conversation-content-in .52s .1s cubic-bezier(.2,.75,.2,1) both}
+.partner-chat-view.chat-entering .partner-composer{animation:composer-dock-in .62s cubic-bezier(.2,.75,.2,1) both}
+@keyframes welcome-content-out{to{opacity:0;transform:translateY(-18px);filter:blur(5px)}}
+@keyframes welcome-composer-out{to{opacity:0;filter:blur(2px)}}
+@keyframes conversation-content-in{from{opacity:0;transform:translateY(54px)}to{opacity:1;transform:none}}
+@keyframes composer-dock-in{from{opacity:0;transform:translateY(120px) scale(.985)}to{opacity:1;transform:none}}
+.assistant-turn.response-arrival{animation:assistant-response-in .52s cubic-bezier(.2,.72,.2,1) both}
+.assistant-turn.response-arrival .agent-draft-card{animation:draft-response-in .58s .12s cubic-bezier(.2,.72,.2,1) both}
+@keyframes assistant-response-in{from{opacity:0;transform:translateY(24px);filter:blur(4px)}to{opacity:1;transform:none;filter:none}}
+@keyframes draft-response-in{from{opacity:0;transform:translateY(18px) scale(.992)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){
+  #welcome-view.welcome-exit>*,
+  .partner-chat-view.chat-entering>*,
+  .assistant-turn.response-arrival,
+  .assistant-turn.response-arrival .agent-draft-card{animation:none!important}
+}
+.taskmaster-studio-mode #welcome-view{width:100%;max-width:none}
+
+/* En el catálogo de conexiones, el icono es toda la acción. */
+.connection-catalog{grid-template-columns:repeat(4,48px);justify-content:start;gap:8px;max-height:none;overflow:visible;padding:0 8px 2px}
+.connection-icon-button{position:relative;display:grid;place-items:center;width:48px;height:48px;padding:0;overflow:hidden;border:1px solid #303440;border-radius:13px;background:#11141b;color:#fff;box-shadow:0 8px 22px #0003;cursor:pointer}
+.connection-icon-button:hover:not(:disabled){border-color:#7468c5;background:#191624;transform:translateY(-2px);filter:none}
+.connection-icon-button .connection-brand{position:absolute;inset:0;width:auto;height:auto;border:0;border-radius:inherit;background:linear-gradient(145deg,#11151e,#080a0f);box-shadow:inset 0 0 0 1px #ffffff08;transition:background .18s ease,transform .18s ease}
+.connection-icon-button .connection-brand svg{width:32px;height:32px;filter:drop-shadow(0 3px 7px #0008);transition:transform .18s ease}
+.connection-icon-button:hover:not(:disabled) .connection-brand{background:linear-gradient(145deg,#191724,#0b0d13)}
+.connection-icon-button:hover:not(:disabled) .connection-brand svg{transform:scale(1.06)}
+.connection-icon-button>i{position:absolute;right:4px;bottom:4px;width:7px;height:7px;border:2px solid #11141b;border-radius:50%;background:#555a66}
+.connection-icon-button.is-pending{border-color:#a17934;background:#241d12}
+.connection-icon-button.is-pending>i{background:#f3bd53;box-shadow:0 0 8px #f3bd5377}
+.connection-icon-button.is-connected{border-color:#3aa679;background:#102119;box-shadow:0 0 0 2px #35c98a18,0 8px 24px #0004}
+.connection-icon-button.is-connected>i{background:#42d596;box-shadow:0 0 9px #42d59699}
+
+/* El Taller conserva su lienzo de diagrama cuando la conversación comienza. */
+body.taskmaster-studio-mode.chat-active #main-content{
+  --grid-focus-x:50%;
+  --grid-focus-y:44%;
+  position:relative;
+  isolation:isolate;
+  padding-inline:0;
+  background-color:#090b11;
+  background-image:
+    linear-gradient(rgba(145,129,255,.06) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(145,129,255,.06) 1px,transparent 1px),
+    linear-gradient(rgba(145,129,255,.022) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(145,129,255,.022) 1px,transparent 1px),
+    radial-gradient(circle,rgba(169,155,255,.12) 1px,transparent 1.35px);
+  background-size:128px 128px,128px 128px,32px 32px,32px 32px,64px 64px;
+  background-position:0 0,0 0,0 0,0 0,16px 16px;
+  animation:studio-grid-drift 30s linear infinite;
+}
+body.taskmaster-studio-mode.chat-active #main-content::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:0;
+  pointer-events:none;
+  background:
+    radial-gradient(circle 4px at var(--grid-focus-x) var(--grid-focus-y),rgba(195,185,255,.9) 0 42%,transparent 58%),
+    radial-gradient(circle 34px at var(--grid-focus-x) var(--grid-focus-y),transparent 0 77%,rgba(139,124,246,.5) 79%,transparent 84%),
+    radial-gradient(ellipse at 50% 115%,rgba(77,53,181,.14),transparent 54%),
+    linear-gradient(180deg,rgba(9,11,17,.78) 0,transparent 17%,transparent 78%,rgba(9,11,17,.9) 100%);
+  filter:drop-shadow(0 0 9px rgba(139,124,246,.22));
+}
+body.taskmaster-studio-mode.chat-active .partner-chat-view:not([hidden]){
+  position:relative;
+  z-index:2;
+  background:transparent;
+}
+@media(max-width:720px){
+  body.taskmaster-studio-mode.chat-active #main-content{background-size:96px 96px,96px 96px,24px 24px,24px 24px,48px 48px;animation-duration:36s}
+}
+@media(prefers-reduced-motion:reduce){
+body.taskmaster-studio-mode.chat-active #main-content{animation:none}
+}
+
+/* Taskmaster Studio always uses one canvas. The welcome and conversation
+   layers are transparent children of the same persistent grid. */
+body.taskmaster-studio-mode #main-content{
+  --grid-focus-x:50%;
+  --grid-focus-y:44%;
+  position:relative;
+  isolation:isolate;
+  padding-inline:0;
+  background-color:#090b11;
+  background-image:
+    linear-gradient(rgba(145,129,255,.06) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(145,129,255,.06) 1px,transparent 1px),
+    linear-gradient(rgba(145,129,255,.022) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(145,129,255,.022) 1px,transparent 1px),
+    radial-gradient(circle,rgba(169,155,255,.12) 1px,transparent 1.35px);
+  background-size:128px 128px,128px 128px,32px 32px,32px 32px,64px 64px;
+  background-position:0 0,0 0,0 0,0 0,16px 16px;
+  animation:none;
+}
+body.taskmaster-studio-mode #main-content::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:0;
+  pointer-events:none;
+  background:
+    radial-gradient(circle 4px at var(--grid-focus-x) var(--grid-focus-y),rgba(195,185,255,.9) 0 42%,transparent 58%),
+    radial-gradient(circle 34px at var(--grid-focus-x) var(--grid-focus-y),transparent 0 77%,rgba(139,124,246,.5) 79%,transparent 84%),
+    radial-gradient(ellipse at 50% 115%,rgba(77,53,181,.14),transparent 54%),
+    linear-gradient(180deg,rgba(9,11,17,.78) 0,transparent 17%,transparent 78%,rgba(9,11,17,.9) 100%);
+  filter:drop-shadow(0 0 9px rgba(139,124,246,.22));
+}
+body.taskmaster-studio-mode #welcome-view{
+  background-color:transparent;
+  background-image:none;
+  animation:none;
+}
+body.taskmaster-studio-mode #welcome-view::before,
+body.taskmaster-studio-mode #welcome-view::after{display:none}
+body.taskmaster-studio-mode #welcome-view,
+body.taskmaster-studio-mode .partner-chat-view:not([hidden]){
+  position:relative;
+  z-index:2;
+}
+
+@media (max-width:760px){
+  body.taskmaster-studio-mode #main-content{
+    background-size:96px 96px,96px 96px,24px 24px,24px 24px,48px 48px;
+  }
+}
+
+/* Un compositor, una geometria y un solo efecto visual durante todo el Taller. */
+body.taskmaster-studio-mode #project-form,
+body.taskmaster-studio-mode #partner-message-form{
+  box-sizing:border-box;
+  width:min(calc(100% - 32px),840px);
+  height:137px;
+  min-height:137px;
+  margin-inline:auto;
+  padding:14px 15px 11px;
+  overflow:hidden;
+  border:1px solid rgba(127,111,220,.66);
+  border-radius:22px;
+  background:linear-gradient(145deg,rgba(27,28,39,.96),rgba(18,19,28,.95));
+  box-shadow:0 22px 80px rgba(0,0,0,.5),0 0 0 1px rgba(139,124,246,.08),0 0 52px rgba(91,69,205,.1);
+  backdrop-filter:blur(18px);
+}
+body.taskmaster-studio-mode #project-form::before,
+body.taskmaster-studio-mode #partner-message-form::before{
+  content:"";
+  position:absolute;
+  left:9%;
+  right:9%;
+  top:0;
+  height:1px;
+  pointer-events:none;
+  background:linear-gradient(90deg,transparent,#8b7cf6,transparent);
+  opacity:.65;
+  animation:studio-composer-pulse 4.8s ease-in-out infinite;
+}
+body.taskmaster-studio-mode #project-form:focus-within,
+body.taskmaster-studio-mode #partner-message-form:focus-within{
+  border-color:#8b7cf6;
+  box-shadow:0 24px 90px rgba(0,0,0,.54),0 0 0 3px rgba(139,124,246,.11),0 0 70px rgba(91,69,205,.17);
+}
+body.taskmaster-studio-mode #project-form textarea,
+body.taskmaster-studio-mode #partner-message-form textarea{
+  min-height:60px;
+  max-height:220px;
+  padding:10px 8px;
+}
+body.taskmaster-studio-mode #partner-message-form{
+  position:relative;
+  flex:0 0 auto;
+  margin-top:14px;
+}
+body.taskmaster-studio-mode .partner-chat-view{
+  width:min(872px,calc(100% - 48px));
+}
+body.taskmaster-studio-mode .partner-chat-view>.trust-line{display:none}
+@media(max-width:720px){
+  body.taskmaster-studio-mode #project-form,
+  body.taskmaster-studio-mode #partner-message-form{width:calc(100% - 24px);height:116px;min-height:116px}
+}
+@media(prefers-reduced-motion:reduce){
+  body.taskmaster-studio-mode #project-form::before,
+  body.taskmaster-studio-mode #partner-message-form::before{animation:none}
+}
+
+/* El historial se desplaza; el compositor del Taller permanece anclado abajo. */
+body.taskmaster-studio-mode.chat-active{
+  height:100dvh;
+  min-height:100dvh;
+  overflow:hidden;
+}
+body.taskmaster-studio-mode.chat-active #main-content{
+  height:calc(100dvh - 68px);
+  min-height:0;
+  overflow:hidden;
+}
+body.taskmaster-studio-mode.chat-active .partner-chat-view:not([hidden]){
+  box-sizing:border-box;
+  width:100%;
+  max-width:none;
+  height:100%;
+  min-height:0;
+  margin:0;
+  padding:20px 0 22px;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+body.taskmaster-studio-mode.chat-active .partner-conversation{
+  display:grid;
+  grid-template-columns:minmax(24px,1fr) minmax(0,872px) minmax(24px,1fr);
+  align-content:start;
+  gap:36px 0;
+  flex:1 1 auto;
+  min-height:0;
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  padding:8px 0 26px;
+  scrollbar-gutter:stable;
+  scrollbar-width:thin;
+  scrollbar-color:#3b3d49 transparent;
+}
+body.taskmaster-studio-mode.chat-active .partner-conversation>.partner-turn{
+  grid-column:2;
+}
+body.taskmaster-studio-mode.chat-active .partner-conversation>.user-turn{
+  justify-self:end;
+}
+body.taskmaster-studio-mode.chat-active .partner-conversation>.assistant-turn{
+  justify-self:start;
+}
+body.taskmaster-studio-mode.chat-active .typing-turn{
+  flex:0 0 auto;
+  margin:10px 8px 0;
+}
+body.taskmaster-studio-mode.chat-active .partner-conversation .inline-typing-turn{
+  margin:22px 0 6px;
+  animation:first-turn-typing-in .28s cubic-bezier(.2,.75,.2,1) both;
+}
+body.taskmaster-studio-mode.chat-active .partner-chat-view.first-turn-lifting .partner-conversation .user-turn:first-child{
+  animation:first-turn-lift .56s cubic-bezier(.18,.76,.2,1) both;
+}
+@keyframes first-turn-lift{
+  from{opacity:.36;transform:translateY(clamp(170px,34vh,390px))}
+  to{opacity:1;transform:translateY(0)}
+}
+@keyframes first-turn-typing-in{
+  from{opacity:0;transform:translateY(12px)}
+  to{opacity:1;transform:translateY(0)}
+}
+body.taskmaster-studio-mode.chat-active #chat-attachments{
+  flex:0 0 auto;
+  width:min(840px,calc(100% - 48px));
+  margin:8px auto 0;
+}
+body.taskmaster-studio-mode.chat-active #partner-message-form{
+  position:relative;
+  bottom:auto;
+  flex:0 0 auto;
+  margin-top:14px;
+}
+@media(max-width:720px){
+  body.taskmaster-studio-mode.chat-active .partner-chat-view:not([hidden]){padding:12px 0 12px}
+  body.taskmaster-studio-mode.chat-active .partner-conversation{grid-template-columns:12px minmax(0,1fr) 12px}
+}
+@media(prefers-reduced-motion:reduce){
+  body.taskmaster-studio-mode.chat-active .partner-chat-view.first-turn-lifting .partner-conversation .user-turn:first-child,
+  body.taskmaster-studio-mode.chat-active .partner-conversation .inline-typing-turn{animation:none}
+}

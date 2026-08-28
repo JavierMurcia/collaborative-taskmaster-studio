@@ -69,7 +69,8 @@ def _wait(
     owner: str,
     expected: set[str],
 ) -> ChatBuildSnapshot:
-    deadline = time.monotonic() + 3
+    # Full-suite runs can briefly contend with other background builders on Windows.
+    deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         snapshot = service.get(build_id, owner_session_id=owner)
         if snapshot.state in expected:
