@@ -17,7 +17,7 @@ localStorage.setItem(SESSION_KEY, sessionId);
 function conversationStorageKey(owner = state?.identity?.user_id || sessionId) { return `${PARTNER_CONVERSATIONS_KEY}:${owner}`; }
 
 const restoredConversations = readPartnerConversations(sessionId);
-const state = { projectId: localStorage.getItem(PROJECT_KEY), partnerConversations: restoredConversations, activeConversationId: null, activeCatalogAgent: null, partnerMessages: [], partnerPhase: "discovery", entryMode: "radar", documents: [], agents: [], connections: [], identity: null, identityConfig: { mode: "local" }, authReady: true, attachedDocumentIds: [], partnerPending: false, partnerTypingVisible: false, entryTransitionPending: false, runtimeLoaded: false, runtime: { mode: "local", label: "Comprobando Gemini", provider: "Vertex AI", model: "gemini-3.7-flash", model_calls_enabled: false } };
+const state = { projectId: localStorage.getItem(PROJECT_KEY), partnerConversations: restoredConversations, activeConversationId: null, activeCatalogAgent: null, partnerMessages: [], partnerPhase: "discovery", entryMode: "radar", documents: [], agents: [], connections: [], identity: null, identityConfig: { mode: "local" }, authReady: true, attachedDocumentIds: [], partnerPending: false, partnerTypingVisible: false, entryTransitionPending: false, runtimeLoaded: false, buildRuntime: "", runtime: { mode: "local", label: "Comprobando Gemini", provider: "Vertex AI", model: "gemini-3.7-flash", model_calls_enabled: false } };
 const buildPollers = new Map();
 const conversationSyncTimers = new Map();
 const terminalBuildStates = new Set(["completed", "failed", "stopped"]);
@@ -97,6 +97,7 @@ async function loadRuntimeInfo() {
     if (!response.ok) throw new Error("runtime metadata unavailable");
     const payload = await response.json();
     if (payload.runtime_ui) state.runtime = payload.runtime_ui;
+    state.buildRuntime = payload.build_orchestration?.runtime || "";
     if (payload.identity) state.identityConfig = payload.identity;
     await initializeIdentity();
   } catch (error) {
@@ -454,6 +455,7 @@ function renderAgentDraft(message, index) {
   const ready = Boolean(draft.ready_to_create && draft.name && draft.purpose);
   const created = Boolean(message.createdProjectId);
   const readiness = Math.max(0, Math.min(100, Number(draft.readiness || 0)));
+  const builderLabel = state.buildRuntime === "antigravity_sdk" ? "Constructor: Antigravity SDK" : "Constructor seguro";
   const metrics = [
     ["Entradas", Array.isArray(draft.inputs) ? draft.inputs.length : 0],
     ["Resultados", Array.isArray(draft.outputs) ? draft.outputs.length : 0],
@@ -467,7 +469,7 @@ function renderAgentDraft(message, index) {
     ? `<section class="draft-section draft-integrations"><div class="draft-section-heading"><span>Accesos y herramientas</span><b class="draft-status warning">Requiere configuración</b></div><ul>${draft.external_actions.map((value) => `<li>${escapeHtml(value)}</li>`).join("")}</ul><small>Estos accesos todavía no están conectados. Cada uno requerirá permisos explícitos y aprobación antes de producir efectos externos.</small></section>`
     : `<section class="draft-section draft-capabilities"><div class="draft-section-heading"><span>Accesos y herramientas</span><b class="draft-status">Sin conectar</b></div><p>El agente todavía no tiene acceso a directorios, Internet, documentos privados, correo ni tickets.</p></section>`;
   const missingPanel = missing.length ? `<section class="draft-missing"><span>Decisiones pendientes</span><div>${missing.slice(0, 4).map((value) => `<em>${escapeHtml(value)}</em>`).join("")}</div></section>` : "";
-  return `<section class="agent-draft-card"><header><div><span>DISEÑO PROPUESTO POR GEMINI</span><strong>${escapeHtml(draft.name || "Sin nombre todavía")}</strong></div><b>${readiness}%</b></header><div class="draft-progress" aria-label="Diseño completado al ${readiness}%"><i style="width:${readiness}%"></i></div>${draft.purpose ? `<section class="draft-purpose"><span>Objetivo</span><p>${escapeHtml(draft.purpose)}</p></section>` : ""}${metricsPanel}${frameworkPanel}${integrations}${missingPanel}<footer>${created ? `<span class="draft-created">✓ Construcción iniciada · ${escapeHtml(framework?.label || "framework pendiente")}</span>` : ready && framework ? `<button type="button" data-create-agent-index="${index}">Aprobar diseño y construir en laboratorio</button>` : `<span>Continúa conversando con Gemini para completar el diseño.</span>`}</footer></section>`;
+  return `<section class="agent-draft-card"><header><div><span>DISEÑO PROPUESTO POR GEMINI</span><strong>${escapeHtml(draft.name || "Sin nombre todavía")}</strong></div><b>${readiness}%</b></header><div class="draft-progress" aria-label="Diseño completado al ${readiness}%"><i style="width:${readiness}%"></i></div>${draft.purpose ? `<section class="draft-purpose"><span>Objetivo</span><p>${escapeHtml(draft.purpose)}</p></section>` : ""}${metricsPanel}${frameworkPanel}${integrations}${missingPanel}<footer><small class="draft-builder-runtime">${escapeHtml(builderLabel)}</small>${created ? `<span class="draft-created">✓ Construcción iniciada · ${escapeHtml(framework?.label || "framework pendiente")}</span>` : ready && framework ? `<button type="button" data-create-agent-index="${index}">Aprobar diseño y construir en laboratorio</button>` : `<span>Continúa conversando con Gemini para completar el diseño.</span>`}</footer></section>`;
 }
 function renderAgentBuild(message, index) {
   const build = message.build || {};

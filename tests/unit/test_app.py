@@ -155,6 +155,18 @@ def test_taskmaster_conversation_stays_on_the_grid_without_status_board() -> Non
     assert "body.taskmaster-studio-mode.chat-active .partner-conversation>.partner-turn" in styles
 
 
+def test_chat_keeps_the_draft_approval_footer_visible_and_names_the_builder() -> None:
+    root = Path(__file__).parents[2]
+    script = (root / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    styles = (root / "app" / "static" / "styles.css").read_text(encoding="utf-8")
+
+    assert "body.chat-active>footer{display:none}" in styles
+    assert "body.chat-active footer{display:none}" not in styles
+    assert 'state.buildRuntime = payload.build_orchestration?.runtime || ""' in script
+    assert "Constructor: Antigravity SDK" in script
+    assert "Aprobar diseño y construir en laboratorio" in script
+
+
 def test_startup_keeps_the_entry_chat_instead_of_opening_latest_history() -> None:
     script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(
         encoding="utf-8"
