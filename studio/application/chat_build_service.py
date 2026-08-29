@@ -993,6 +993,14 @@ class ChatBuildService:
             else:
                 record.state = "failed"
                 record.error = "El trabajador aislado se detuvo de forma segura."
+                diagnostic = (
+                    {
+                        "error_code": error.code,
+                        "error_context": error.context,
+                    }
+                    if isinstance(error, DomainError)
+                    else {}
+                )
                 self._event(
                     record,
                     kind="failed",
@@ -1003,6 +1011,7 @@ class ChatBuildService:
                     details={
                         "attempt": record.attempts,
                         "error_type": type(error).__name__,
+                        **diagnostic,
                     },
                 )
         if retry and self._dispatcher is None:

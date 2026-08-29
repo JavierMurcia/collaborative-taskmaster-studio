@@ -140,11 +140,16 @@ def test_antigravity_removes_an_incomplete_scaffold_after_worker_failure(tmp_pat
     destination = root / "failed-build"
 
     def failed_runner(command: list[str], _cwd: Path) -> subprocess.CompletedProcess[str]:
+        error_path = Path(command[-1]).parent / "antigravity-error.json"
+        error_path.write_text(
+            json.dumps({"error_type": "PermissionError", "message": "Vertex denied"}),
+            encoding="utf-8",
+        )
         return subprocess.CompletedProcess(command, 1, stdout="", stderr="safe failure")
 
     orchestrator = AntigravitySdkOrchestrator("isolated-python", runner=failed_runner)
 
-    with pytest.raises(DomainError, match="trabajador aislado"):
+    with pytest.raises(DomainError, match="trabajador aislado") as captured:
         orchestrator.construct(
             _specification(),
             destination,
@@ -153,6 +158,11 @@ def test_antigravity_removes_an_incomplete_scaffold_after_worker_failure(tmp_pat
             progress=lambda *_args: None,
         )
 
+    assert captured.value.context == {
+        "return_code": 1,
+        "worker_error_type": "PermissionError",
+        "worker_message": "Vertex denied",
+    }
     assert not destination.exists()
 
 

@@ -188,11 +188,23 @@ class AntigravitySdkOrchestrator:
         finally:
             request_path.unlink(missing_ok=True)
         if result.returncode != 0:
+            worker_error: dict[str, object] = {}
+            error_path = studio_directory / "antigravity-error.json"
+            try:
+                payload = json.loads(error_path.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    worker_error = payload
+            except (OSError, ValueError, json.JSONDecodeError):
+                pass
             shutil.rmtree(seed.output_directory, ignore_errors=True)
             raise DomainError(
                 "ANTIGRAVITY_WORKER_FAILED",
                 "El trabajador aislado de Antigravity se detuvo de forma segura.",
-                context={"return_code": result.returncode},
+                context={
+                    "return_code": result.returncode,
+                    "worker_error_type": str(worker_error.get("error_type", ""))[:120],
+                    "worker_message": str(worker_error.get("message", ""))[:500],
+                },
             )
         try:
             evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
