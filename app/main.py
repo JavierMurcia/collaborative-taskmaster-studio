@@ -353,6 +353,14 @@ def create_app(
             GenkitGenerator(output_root),
         )
     )
+    project_framework_generators = FrameworkGeneratorRegistry(
+        (
+            GoogleAdkGenerator(projects_root),
+            GenAiSdkGenerator(projects_root),
+            AntigravityGenerator(projects_root),
+            GenkitGenerator(projects_root),
+        )
+    )
     generation = GenerationService(
         repository,
         event_repository,
@@ -419,7 +427,7 @@ def create_app(
         conversation_memory=ConversationMemoryService(conversation_memory, active_clock),
         documents=document_library,
         chat_builder=ChatBuildService(
-            framework_generators,
+            project_framework_generators,
             projects_root,
             orchestrator=construction_orchestrator,
             plugin_registry=plugin_registry,
