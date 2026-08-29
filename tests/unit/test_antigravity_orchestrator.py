@@ -76,6 +76,7 @@ def test_antigravity_orchestrator_uses_only_confined_tools_and_records_evidence(
             json.dumps(
                 {
                     "runtime": "antigravity_sdk",
+                    "sdk_version": "0.1.15",
                     "summary": "Proyecto inspeccionado.",
                     "operations": [
                         {"tool": "list_project_files", "count": 10},
@@ -105,6 +106,7 @@ def test_antigravity_orchestrator_uses_only_confined_tools_and_records_evidence(
         )
     )
     assert evidence["runtime"] == "antigravity_sdk"
+    assert evidence["sdk_version"] == "0.1.15"
     assert [item["tool"] for item in evidence["operations"]] == [
         "list_project_files",
         "read_project_file",

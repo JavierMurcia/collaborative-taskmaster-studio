@@ -172,6 +172,7 @@ class ChatBuildService:
         build_queue: BuildQueueStore | None = None,
         dispatcher: BuildDispatcher | None = None,
         external_dispatch_required: bool = False,
+        builder_runtime: BuilderRuntime | None = None,
         max_attempts: int = 2,
     ) -> None:
         self._adapter = adapter
@@ -189,6 +190,7 @@ class ChatBuildService:
         self._build_queue = build_queue
         self._dispatcher = dispatcher
         self._external_dispatch_required = external_dispatch_required
+        self._builder_runtime = builder_runtime or self._orchestrator.runtime_id
         self._max_attempts = min(3, max(1, max_attempts))
         self._records: dict[str, _BuildRecord] = {}
         self._lock = threading.RLock()
@@ -197,9 +199,9 @@ class ChatBuildService:
     def readiness(self) -> dict[str, object]:
         return {
             "durable_queue": bool(self._build_queue and self._build_queue.durable),
-            "worker_isolated": self._orchestrator.runtime_id
+            "worker_isolated": self._builder_runtime
             in {"isolated_controlled_builder", "antigravity_sdk"},
-            "runtime": self._orchestrator.runtime_id,
+            "runtime": self._builder_runtime,
             "max_attempts": self._max_attempts,
             "restart_recovery": self._build_queue is not None,
             "external_dispatch": bool(self._dispatcher and self._dispatcher.external),
@@ -263,7 +265,7 @@ class ChatBuildService:
             framework=recommendation,
             contract=contract,
             plugins=plugin_selection,
-            builder_runtime=self._orchestrator.runtime_id,
+            builder_runtime=self._builder_runtime,
         )
         record.max_attempts = self._max_attempts
         with self._lock:

@@ -54,6 +54,23 @@ def test_environment_builds_the_exact_internal_api_target(
     assert configured.audience == "https://studio.example.test"
 
 
+def test_environment_can_target_a_dedicated_private_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("STUDIO_ENABLE_CLOUD_TASKS", "true")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "collaborative-taskmaster-dev")
+    monkeypatch.setenv("STUDIO_PUBLIC_BASE_URL", "https://studio.example.test")
+    monkeypatch.setenv("STUDIO_BUILD_WORKER_URL", "https://worker.example.test/")
+    monkeypatch.setenv("STUDIO_BUILD_WORKER_AUDIENCE", "https://worker.example.test/")
+
+    configured = CloudTasksSettings.from_environment()
+
+    assert configured.target_url == (
+        "https://worker.example.test/api/v1/internal/build-worker"
+    )
+    assert configured.audience == "https://worker.example.test"
+
+
 def test_dispatcher_creates_minimal_oidc_task() -> None:
     client = FakeTasksClient()
     dispatcher = CloudTasksBuildDispatcher(settings(), client)

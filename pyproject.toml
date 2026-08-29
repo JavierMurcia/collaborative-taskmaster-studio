@@ -37,6 +37,9 @@ storage = [
 tasks = [
   "google-cloud-tasks>=2.19,<3",
 ]
+antigravity = [
+  "google-antigravity==0.1.15",
+]
 cloud = [
   "google-cloud-firestore>=2.28,<3",
   "google-cloud-storage>=3.4,<4",

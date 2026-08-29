@@ -29,6 +29,10 @@ class CloudTasksSettings:
     def from_environment(cls) -> CloudTasksSettings:
         project = os.getenv("GOOGLE_CLOUD_PROJECT", "").strip()
         base_url = os.getenv("STUDIO_PUBLIC_BASE_URL", "").strip().rstrip("/")
+        worker_base_url = os.getenv("STUDIO_BUILD_WORKER_URL", base_url).strip().rstrip("/")
+        worker_audience = os.getenv(
+            "STUDIO_BUILD_WORKER_AUDIENCE", worker_base_url
+        ).strip().rstrip("/")
         worker = os.getenv(
             "STUDIO_BUILD_WORKER_SERVICE_ACCOUNT",
             f"taskmaster-build-worker@{project}.iam.gserviceaccount.com" if project else "",
@@ -39,8 +43,12 @@ class CloudTasksSettings:
             project=project,
             location=os.getenv("STUDIO_CLOUD_TASKS_LOCATION", "us-central1").strip(),
             queue=os.getenv("STUDIO_CLOUD_TASKS_QUEUE", "taskmaster-builds").strip(),
-            target_url=f"{base_url}/api/v1/internal/build-worker" if base_url else "",
-            audience=base_url,
+            target_url=(
+                f"{worker_base_url}/api/v1/internal/build-worker"
+                if worker_base_url
+                else ""
+            ),
+            audience=worker_audience,
             worker_service_account=worker,
         )
 

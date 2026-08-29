@@ -21,7 +21,7 @@ COPY sandbox ./sandbox
 COPY schemas ./schemas
 
 RUN python -m pip install --no-cache-dir ".[vertex,firestore,laboratory]"
-RUN python -m pip install --no-cache-dir ".[storage,tasks]"
+RUN python -m pip install --no-cache-dir ".[storage,tasks,antigravity]"
 
 
 FROM python:3.13-slim AS runtime

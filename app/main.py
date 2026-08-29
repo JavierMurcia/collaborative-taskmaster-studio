@@ -95,6 +95,7 @@ from studio.capabilities.web import VertexWebResearcher
 from studio.capabilities.workspace import WorkspaceReader
 from studio.domain.errors import DomainError
 from studio.ports.clock import Clock
+from studio.ports.construction import BuilderRuntime
 from studio.ports.repositories import EventRepository, ProjectRepository
 from studio.security import IdentityVerifier, WorkerIdentitySettings, WorkerTokenVerifier
 from studio.security.credential_vault import build_credential_vault
@@ -310,6 +311,13 @@ def create_app(
         if builder_readiness.active_builder == "antigravity"
         else IsolatedControlledConstructionOrchestrator(sys.executable)
     )
+    configured_builder_runtime = os.getenv("STUDIO_EXTERNAL_BUILDER_RUNTIME", "").strip()
+    external_builder_runtime: BuilderRuntime | None = (
+        cast(BuilderRuntime, configured_builder_runtime)
+        if configured_builder_runtime
+        in {"antigravity_sdk", "controlled_local_builder", "isolated_controlled_builder"}
+        else None
+    )
     output_root = generated_root or Path(os.getenv("STUDIO_GENERATED_ROOT", "generated"))
     projects_root = Path(os.getenv("STUDIO_PROJECTS_ROOT", "projects"))
     if not projects_root.is_absolute():
@@ -420,6 +428,11 @@ def create_app(
             build_queue=build_queue,
             dispatcher=cloud_tasks_runtime.dispatcher,
             external_dispatch_required=cloud_tasks_settings.enabled,
+            builder_runtime=(
+                external_builder_runtime
+                if cloud_tasks_runtime.dispatcher is not None
+                else construction_orchestrator.runtime_id
+            ),
         ),
         agent_catalog=agent_catalog,
         catalog_agent_runtime=CatalogAgentExecutionService(

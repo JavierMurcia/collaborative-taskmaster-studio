@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import json
+import os
 import re
 import subprocess
 from collections.abc import Callable, Mapping
@@ -43,6 +45,18 @@ def _load_sdk() -> _SdkBindings:
             "El SDK de Antigravity no está instalado en el entorno de construcción.",
         ) from error
     return _SdkBindings(agent=Agent, config=LocalAgentConfig, deny=deny, allow=allow)
+
+
+def sdk_version() -> str:
+    """Return the installed SDK version for auditable construction evidence."""
+
+    try:
+        return importlib.metadata.version("google-antigravity")
+    except importlib.metadata.PackageNotFoundError as error:
+        raise DomainError(
+            "ANTIGRAVITY_SDK_UNAVAILABLE",
+            "El SDK de Antigravity no está instalado en el entorno de construcción.",
+        ) from error
 
 
 class _ConfinedWorkspace:
@@ -196,6 +210,13 @@ async def orchestrate_workspace(
     contract: Mapping[str, object],
 ) -> str:
     sdk = _load_sdk()
+    project = os.getenv("GOOGLE_CLOUD_PROJECT", "").strip()
+    location = os.getenv("STUDIO_ANTIGRAVITY_VERTEX_LOCATION", "us-central1").strip()
+    if not project or not location:
+        raise DomainError(
+            "ANTIGRAVITY_VERTEX_CONFIGURATION_REQUIRED",
+            "Antigravity requiere un proyecto y una región de Vertex AI explícitos.",
+        )
     policies = [
         sdk.deny("*"),
         sdk.allow("list_project_files"),
@@ -210,6 +231,9 @@ async def orchestrate_workspace(
         "project. Do not modify managed Studio artifacts."
     )
     config = sdk.config(
+        vertex=True,
+        project=project,
+        location=location,
         system_instructions=instructions,
         tools=[
             workspace.list_project_files,

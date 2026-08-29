@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-from adapters.antigravity.builder import _ConfinedWorkspace, orchestrate_workspace
+from adapters.antigravity.builder import _ConfinedWorkspace, orchestrate_workspace, sdk_version
 
 
 def main() -> int:
@@ -32,6 +32,7 @@ def main() -> int:
             json.dumps(
                 {
                     "runtime": "antigravity_sdk",
+                    "sdk_version": sdk_version(),
                     "summary": summary[:4_000],
                     "operations": workspace.operations,
                 },
@@ -42,7 +43,23 @@ def main() -> int:
             encoding="utf-8",
         )
         return 0
-    except Exception:
+    except Exception as error:
+        try:
+            error_path = request_path.parent / "antigravity-error.json"
+            error_path.write_text(
+                json.dumps(
+                    {
+                        "error_type": type(error).__name__,
+                        "message": str(error)[:2_000],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
         return 1
 
 

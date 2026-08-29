@@ -61,6 +61,7 @@ def _service(
     catalog: AgentCatalog | None = None,
     queue: JsonBuildQueueStore | None = None,
     dispatcher=None,
+    builder_runtime=None,
 ) -> ChatBuildService:
     root = tmp_path / "projects"
     registry = FrameworkGeneratorRegistry(
@@ -79,6 +80,7 @@ def _service(
         build_queue=queue,
         dispatcher=dispatcher,
         external_dispatch_required=dispatcher is not None,
+        builder_runtime=builder_runtime,
     )
 
 
@@ -230,6 +232,29 @@ def test_external_dispatch_runs_each_phase_only_when_delivered(tmp_path: Path) -
     service.execute_dispatched(started.build_id, "test")
     completed = service.get(started.build_id, owner_session_id="owner_one")
     assert completed.state == "completed"
+
+
+def test_external_dispatch_reports_the_dedicated_worker_runtime(tmp_path: Path) -> None:
+    class RecordingDispatcher:
+        external = True
+
+        def dispatch(self, build_id: str, operation: BuildOperation, attempt: int) -> str:
+            return f"queues/taskmaster-builds/tasks/{build_id}-{operation}-a{attempt}"
+
+    service = _service(
+        tmp_path,
+        dispatcher=RecordingDispatcher(),
+        builder_runtime="antigravity_sdk",
+    )
+
+    readiness = service.readiness()
+    started = service.start(
+        _draft(), owner_session_id="owner_one", confirmation="CONSTRUIR_AGENTE"
+    )
+
+    assert readiness["runtime"] == "antigravity_sdk"
+    assert readiness["worker_isolated"] is True
+    assert started.builder_runtime == "antigravity_sdk"
 
 
 def test_chat_build_adds_and_verifies_confined_workspace_reader(tmp_path: Path) -> None:
