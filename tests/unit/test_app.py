@@ -33,8 +33,9 @@ def test_home_serves_the_chat_only_experience() -> None:
     assert "Ejecutar 3 escenarios" not in response.text
     assert 'id="taskmaster-studio-access"' in response.text
     assert "Taskmaster Studio" in response.text
-    assert '/static/styles.css?v=20260829-build-status-v18' in response.text
-    assert '/static/app.js?v=20260829-build-status-v18' in response.text
+    assert '/static/styles.css?v=20260829-document-tray-v19' in response.text
+    assert '/static/app.js?v=20260829-document-tray-v19' in response.text
+    assert 'id="document-inspector"' in response.text
     assert 'id="partner-typing"' not in response.text
     assert "Gemini 3.7 Flash diseña · El Ingeniero construye con aprobación · Sin efectos externos" not in response.text
     assert 'id="conversation-title"' not in response.text
@@ -57,6 +58,18 @@ def test_identity_uses_same_origin_server_oauth_instead_of_firebase_iframe() -> 
     assert "firebase-auth.js" not in script
     assert "onAuthStateChanged" not in script
     assert "signInWithPopup" not in script
+
+
+def test_document_tray_reports_progress_and_supports_inspection_and_deletion() -> None:
+    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'request.upload.addEventListener("progress"' in script
+    assert "Cargando · ${item.progress}%" in script
+    assert 'data-inspect-document="${escapeHtml(item.id)}"' in script
+    assert 'data-delete-document="${escapeHtml(item.id)}"' in script
+    assert '/api/v1/collaborative/documents/${encodeURIComponent(documentId)}' in script
 
 
 def test_taskmaster_chat_keeps_the_composer_docked_below_a_scrolling_transcript() -> None:

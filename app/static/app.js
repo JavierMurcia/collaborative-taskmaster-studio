@@ -17,9 +17,10 @@ localStorage.setItem(SESSION_KEY, sessionId);
 function conversationStorageKey(owner = state?.identity?.user_id || sessionId) { return `${PARTNER_CONVERSATIONS_KEY}:${owner}`; }
 
 const restoredConversations = readPartnerConversations(sessionId);
-const state = { projectId: localStorage.getItem(PROJECT_KEY), partnerConversations: restoredConversations, activeConversationId: null, activeCatalogAgent: null, partnerMessages: [], partnerPhase: "discovery", entryMode: "radar", documents: [], agents: [], builds: [], connections: [], identity: null, identityConfig: { mode: "local" }, authReady: true, attachedDocumentIds: [], partnerPending: false, partnerTypingVisible: false, entryTransitionPending: false, runtimeLoaded: false, buildRuntime: "", runtime: { mode: "local", label: "Comprobando Gemini", provider: "Vertex AI", model: "gemini-3.7-flash", model_calls_enabled: false } };
+const state = { projectId: localStorage.getItem(PROJECT_KEY), partnerConversations: restoredConversations, activeConversationId: null, activeCatalogAgent: null, partnerMessages: [], partnerPhase: "discovery", entryMode: "radar", documents: [], documentUploads: [], agents: [], builds: [], connections: [], identity: null, identityConfig: { mode: "local" }, authReady: true, attachedDocumentIds: [], partnerPending: false, partnerTypingVisible: false, entryTransitionPending: false, runtimeLoaded: false, buildRuntime: "", runtime: { mode: "local", label: "Comprobando Gemini", provider: "Vertex AI", model: "gemini-3.7-flash", model_calls_enabled: false } };
 const buildPollers = new Map();
 const conversationSyncTimers = new Map();
+const activeDocumentUploads = new Map();
 const terminalBuildStates = new Set(["completed", "failed", "stopped"]);
 
 function operationKey(prefix) { return `${prefix}-${crypto.randomUUID()}`; }
@@ -789,18 +790,62 @@ async function loadDocumentLibrary() {
 }
 
 async function uploadDocuments(files) {
-  for (const file of [...files].slice(0, 8)) {
-    const form = new FormData(); form.append("file", file);
-    try {
-      const response = await fetch("/api/v1/collaborative/documents", { method: "POST", headers: identityHeaders(), body: form });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error?.message || `No se pudo leer ${file.name}.`);
-      state.documents = [payload, ...state.documents.filter((item) => item.id !== payload.id)];
-      if (!state.attachedDocumentIds.includes(payload.id)) state.attachedDocumentIds.push(payload.id);
-    } catch (error) { handle(error); }
-  }
+  const uploads = [...files].slice(0, 8).map((file) => ({ id: `upload_${crypto.randomUUID()}`, file, name: file.name, size_bytes: file.size, progress: 0, status: "uploading", error: "" }));
+  state.documentUploads.push(...uploads);
   renderAttachments();
-  if (state.partnerMessages.length) persistPartnerHistory();
+  for (const upload of uploads) {
+    try {
+      const payload = await uploadDocumentWithProgress(upload);
+      state.documentUploads = state.documentUploads.filter((item) => item.id !== upload.id);
+      state.documents = [payload, ...state.documents.filter((item) => item.id !== payload.id)];
+      if (!state.attachedDocumentIds.includes(payload.id) && state.attachedDocumentIds.length < 8) state.attachedDocumentIds.push(payload.id);
+      renderAttachments();
+      if (state.partnerMessages.length) persistPartnerHistory();
+    } catch (error) {
+      if (upload.status === "cancelled") continue;
+      upload.status = "failed";
+      upload.error = error.message || `No se pudo leer ${upload.name}.`;
+      renderAttachments();
+      handle(error);
+    }
+  }
+}
+
+function uploadDocumentWithProgress(upload) {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    const form = new FormData(); form.append("file", upload.file);
+    activeDocumentUploads.set(upload.id, request);
+    request.open("POST", "/api/v1/collaborative/documents");
+    request.withCredentials = true;
+    Object.entries(identityHeaders()).forEach(([name, value]) => request.setRequestHeader(name, value));
+    request.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable) return;
+      upload.progress = Math.min(99, Math.round((event.loaded / event.total) * 100));
+      renderAttachments();
+    });
+    request.addEventListener("load", () => {
+      activeDocumentUploads.delete(upload.id);
+      let payload = {};
+      try { payload = request.responseText ? JSON.parse(request.responseText) : {}; }
+      catch { reject(new Error("El servidor devolvió una respuesta inesperada.")); return; }
+      if (request.status < 200 || request.status >= 300) { reject(new Error(payload.error?.message || `No se pudo leer ${upload.name}.`)); return; }
+      upload.progress = 100;
+      renderAttachments();
+      resolve(payload);
+    });
+    request.addEventListener("error", () => { activeDocumentUploads.delete(upload.id); reject(new Error(`No se pudo cargar ${upload.name}.`)); });
+    request.addEventListener("abort", () => { activeDocumentUploads.delete(upload.id); reject(new Error("Carga cancelada.")); });
+    request.send(form);
+  });
+}
+
+function cancelDocumentUpload(uploadId) {
+  const upload = state.documentUploads.find((item) => item.id === uploadId);
+  if (upload) upload.status = "cancelled";
+  activeDocumentUploads.get(uploadId)?.abort();
+  state.documentUploads = state.documentUploads.filter((item) => item.id !== uploadId);
+  renderAttachments();
 }
 
 async function deleteDocument(documentId) {
@@ -818,14 +863,50 @@ async function deleteDocument(documentId) {
 }
 
 function renderAttachments() {
-  const selected = state.documents.filter((item) => state.attachedDocumentIds.includes(item.id));
-  const markup = selected.map((item) => `<span class="attachment-chip"><b>▤</b><span>${escapeHtml(item.name)}</span><small>${Math.max(1, Math.round(item.size_bytes / 1024))} KB</small><button type="button" data-delete-document="${escapeHtml(item.id)}" aria-label="Eliminar ${escapeHtml(item.name)}">×</button></span>`).join("");
+  const uploads = state.documentUploads.map((item) => `<article class="document-card ${escapeHtml(item.status)}"><b aria-hidden="true">▤</b><div class="document-card-copy"><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong><small>${item.status === "failed" ? escapeHtml(item.error) : `Cargando · ${item.progress}%`}</small><span class="document-progress"><i style="width:${item.progress}%"></i></span></div><button type="button" class="document-icon-action danger-action" data-cancel-upload="${escapeHtml(item.id)}" aria-label="${item.status === "failed" ? "Quitar" : "Cancelar carga de"} ${escapeHtml(item.name)}">×</button></article>`).join("");
+  const documents = [...state.documents].sort((left, right) => Number(state.attachedDocumentIds.includes(right.id)) - Number(state.attachedDocumentIds.includes(left.id))).map((item) => {
+    const attached = state.attachedDocumentIds.includes(item.id);
+    return `<article class="document-card ready${attached ? " attached" : ""}"><b aria-hidden="true">▤</b><button type="button" class="document-card-copy" data-inspect-document="${escapeHtml(item.id)}" aria-label="Inspeccionar ${escapeHtml(item.name)}"><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong><small>${Math.max(1, Math.round(item.size_bytes / 1024))} KB · ${attached ? "Adjunto a este chat" : "Disponible en la sesión"}</small></button><div class="document-card-actions"><button type="button" class="document-icon-action" data-toggle-document="${escapeHtml(item.id)}" aria-label="${attached ? "Quitar del chat" : "Adjuntar al chat"} ${escapeHtml(item.name)}" title="${attached ? "Quitar del chat" : "Adjuntar al chat"}">${attached ? "✓" : "+"}</button><button type="button" class="document-icon-action" data-inspect-document="${escapeHtml(item.id)}" aria-label="Inspeccionar ${escapeHtml(item.name)}" title="Inspeccionar">⌕</button><button type="button" class="document-icon-action danger-action" data-delete-document="${escapeHtml(item.id)}" aria-label="Eliminar ${escapeHtml(item.name)}" title="Eliminar">×</button></div></article>`;
+  }).join("");
+  const count = state.documents.length;
+  const markup = uploads || documents ? `<div class="document-tray-heading"><strong>Archivos de la sesión</strong><small>${count} / 12</small></div><div class="document-cards">${uploads}${documents}</div>` : "";
   ["#welcome-attachments", "#chat-attachments"].forEach((selector) => { const target = $(selector); if (target) target.innerHTML = markup; });
 }
 
 function handleAttachmentClick(event) {
-  const button = event.target.closest("[data-delete-document]");
-  if (button) deleteDocument(button.dataset.deleteDocument);
+  const cancel = event.target.closest("[data-cancel-upload]");
+  if (cancel) { cancelDocumentUpload(cancel.dataset.cancelUpload); return; }
+  const inspect = event.target.closest("[data-inspect-document]");
+  if (inspect) { inspectDocument(inspect.dataset.inspectDocument); return; }
+  const toggle = event.target.closest("[data-toggle-document]");
+  if (toggle) { toggleDocumentAttachment(toggle.dataset.toggleDocument); return; }
+  const remove = event.target.closest("[data-delete-document]");
+  if (remove) deleteDocument(remove.dataset.deleteDocument);
+}
+
+function toggleDocumentAttachment(documentId) {
+  if (state.attachedDocumentIds.includes(documentId)) state.attachedDocumentIds = state.attachedDocumentIds.filter((id) => id !== documentId);
+  else {
+    if (state.attachedDocumentIds.length >= 8) { notify("Puedes adjuntar hasta 8 archivos a una conversación. Quita uno para añadir otro.", "error"); return; }
+    state.attachedDocumentIds.push(documentId);
+  }
+  renderAttachments();
+  if (state.partnerMessages.length) persistPartnerHistory();
+}
+
+async function inspectDocument(documentId) {
+  const document = state.documents.find((item) => item.id === documentId);
+  if (!document) return;
+  const dialog = $("#document-inspector");
+  $("#document-inspector-title").textContent = document.name;
+  $("#document-inspector-meta").textContent = "Preparando vista segura…";
+  $("#document-inspector-content").textContent = "Cargando contenido extraído…";
+  if (!dialog.open) dialog.showModal();
+  try {
+    const payload = await api(`/api/v1/collaborative/documents/${encodeURIComponent(documentId)}`, { background: true });
+    $("#document-inspector-meta").textContent = `${Math.max(1, Math.round(payload.size_bytes / 1024))} KB · ${payload.characters.toLocaleString()} caracteres${payload.truncated ? " · vista recortada" : ""}`;
+    $("#document-inspector-content").textContent = payload.content || "El documento no contiene texto visible.";
+  } catch (error) { dialog.close(); handle(error); }
 }
 function openChatHome() {
   state.entryMode = "radar"; state.activeCatalogAgent = null; state.activeConversationId = null; state.partnerMessages = []; state.partnerPhase = "discovery"; state.attachedDocumentIds = [];
@@ -956,6 +1037,8 @@ $("#welcome-document-input").addEventListener("change", (event) => { uploadDocum
 $("#chat-document-input").addEventListener("change", (event) => { uploadDocuments(event.target.files); event.target.value = ""; });
 $("#welcome-attachments").addEventListener("click", handleAttachmentClick);
 $("#chat-attachments").addEventListener("click", handleAttachmentClick);
+$("#document-inspector").addEventListener("click", (event) => { if (event.target === event.currentTarget) event.currentTarget.close(); });
+$(".document-inspector-close").addEventListener("click", () => $("#document-inspector").close());
 const builderCanvas = $("#main-content");
 const builderWelcome = $("#welcome-view");
 let builderPointerFrame = 0;

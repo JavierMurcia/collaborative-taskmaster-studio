@@ -269,6 +269,13 @@ def create_router(services: ServiceContainer) -> APIRouter:
     def list_collaborative_documents(session_id: SessionHeader) -> dict[str, Any]:
         return {"documents": list(services.documents.list(session_id))}
 
+    @router.get("/collaborative/documents/{document_id}")
+    def inspect_collaborative_document(
+        document_id: str,
+        session_id: SessionHeader,
+    ) -> dict[str, Any]:
+        return services.documents.inspect(session_id, document_id)
+
     @router.delete("/collaborative/documents/{document_id}", status_code=204)
     def delete_collaborative_document(
         document_id: str,

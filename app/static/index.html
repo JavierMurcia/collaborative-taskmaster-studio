@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Descubre oportunidades de proyectos de sistemas con evidencia de GitHub, Google Drive y fuentes web verificadas.">
   <title>Collaborative Taskmaster Studio</title>
-  <link rel="stylesheet" href="/static/styles.css?v=20260829-build-status-v18">
+  <link rel="stylesheet" href="/static/styles.css?v=20260829-document-tray-v19">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Saltar al contenido</a>
@@ -73,7 +73,7 @@
           <span id="char-count">0 / 6000</span>
           <div class="composer-controls">
             <label class="attach-button" for="welcome-document-input" title="Adjuntar documento">＋<span>Documento</span></label>
-            <input id="welcome-document-input" class="sr-only" type="file" accept=".pdf,.docx,.txt,.md,.csv,.json,.yaml,.yml" multiple>
+            <input id="welcome-document-input" class="sr-only" type="file" accept=".pdf,.docx,.xlsx,.pptx,.txt,.md,.csv,.json,.yaml,.yml" multiple>
             <span class="composer-hint">Enter para enviar · Shift + Enter para nueva línea</span>
             <button class="send-button" type="submit" disabled aria-label="Enviar mensaje"><span aria-hidden="true">↑</span></button>
           </div>
@@ -103,7 +103,7 @@
           <span id="partner-char-count">0 / 6000</span>
           <div class="composer-controls">
             <label class="attach-button" for="chat-document-input" title="Adjuntar documento">＋<span>Documento</span></label>
-            <input id="chat-document-input" class="sr-only" type="file" accept=".pdf,.docx,.txt,.md,.csv,.json,.yaml,.yml" multiple>
+            <input id="chat-document-input" class="sr-only" type="file" accept=".pdf,.docx,.xlsx,.pptx,.txt,.md,.csv,.json,.yaml,.yml" multiple>
             <span class="composer-hint">Enter para enviar · Shift + Enter para nueva línea</span>
             <button class="send-button" type="submit" disabled aria-label="Enviar a Gemini"><span aria-hidden="true">↑</span></button>
           </div>
@@ -114,7 +114,16 @@
 
   </main>
 
+  <dialog id="document-inspector" class="document-inspector" aria-labelledby="document-inspector-title">
+    <header>
+      <div><span>INSPECCIÓN SEGURA</span><h2 id="document-inspector-title">Documento</h2></div>
+      <button type="button" class="document-inspector-close" aria-label="Cerrar inspección">×</button>
+    </header>
+    <p id="document-inspector-meta" class="document-inspector-meta"></p>
+    <pre id="document-inspector-content" tabindex="0"></pre>
+  </dialog>
+
   <div id="loading" class="loading" role="status" aria-live="assertive" hidden><span></span><strong>Trabajando…</strong></div>
-    <script src="/static/app.js?v=20260829-build-status-v18" defer></script>
+    <script src="/static/app.js?v=20260829-document-tray-v19" defer></script>
 </body>
 </html>

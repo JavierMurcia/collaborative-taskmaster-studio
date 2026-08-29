@@ -60,6 +60,9 @@ def test_document_upload_api_lists_and_deletes(tmp_path: Path) -> None:
     assert uploaded.status_code == 201
     document_id = uploaded.json()["id"]
     assert api.get("/api/v1/collaborative/documents", headers=headers).json()["documents"][0]["id"] == document_id
+    inspected = api.get(f"/api/v1/collaborative/documents/{document_id}", headers=headers)
+    assert inspected.status_code == 200
+    assert inspected.json()["content"] == "contenido verificable"
     assert api.delete(f"/api/v1/collaborative/documents/{document_id}", headers=headers).status_code == 204
 
 
