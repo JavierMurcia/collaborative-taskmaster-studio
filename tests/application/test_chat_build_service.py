@@ -223,6 +223,9 @@ def test_external_dispatch_runs_each_phase_only_when_delivered(tmp_path: Path) -
     assert started.state == "queued"
     assert dispatcher.calls == [(started.build_id, "construct", 0)]
 
+    # A long-lived worker may still cache a prior state while Firestore already
+    # contains the recovered queued record. Deliveries must trust durable state.
+    service._records[started.build_id].state = "failed"
     service.execute_dispatched(started.build_id, "construct")
     waiting = service.get(started.build_id, owner_session_id="owner_one")
     assert waiting.state == "awaiting_test_approval"

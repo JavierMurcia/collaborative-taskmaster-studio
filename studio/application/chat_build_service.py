@@ -1098,12 +1098,14 @@ class ChatBuildService:
                     continue
 
     def _internal_record(self, build_id: str) -> _BuildRecord:
-        record = self._records.get(build_id)
-        if record is None and self._build_queue is not None:
+        record = None
+        if self._build_queue is not None:
             payload = self._build_queue.load_internal(build_id)
             if payload is not None:
                 record = self._record_from_payload(payload)
                 self._records[build_id] = record
+        if record is None:
+            record = self._records.get(build_id)
         if record is None:
             raise DomainError("BUILD_NOT_FOUND", "La construcción solicitada no existe.")
         return record
