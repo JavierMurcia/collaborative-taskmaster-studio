@@ -30,9 +30,9 @@ personales ni información confidencial.
 
 - H0–H10 completados: producto vertical, Gemini, Google ADK, Firestore y Cloud Run.
 - H11 en curso: pulido, reproducibilidad final, accesibilidad, seguridad, video y entrega Devpost.
-- Última revisión validada: `collaborative-taskmaster-studio-00004-fqp`.
+- Última revisión validada: `collaborative-taskmaster-studio-00027-9qq`.
 - Recorrido desplegado: 13 pasos HTTP, revisión humana 2, artefacto ADK válido y laboratorio `ready`.
-- Calidad local: 481 pruebas automatizadas aprobadas con todos los extras.
+- Calidad local: suite automatizada completa y análisis estático aprobados.
 
 ## Qué problema resuelve
 
