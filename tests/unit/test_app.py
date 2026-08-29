@@ -33,8 +33,8 @@ def test_home_serves_the_chat_only_experience() -> None:
     assert "Ejecutar 3 escenarios" not in response.text
     assert 'id="taskmaster-studio-access"' in response.text
     assert "Taskmaster Studio" in response.text
-    assert '/static/styles.css?v=20260827-full-connection-icons-v16' in response.text
-    assert '/static/app.js?v=20260827-full-connection-icons-v16' in response.text
+    assert '/static/styles.css?v=20260829-build-recovery-v17' in response.text
+    assert '/static/app.js?v=20260829-build-recovery-v17' in response.text
     assert 'id="partner-typing"' not in response.text
     assert "Gemini 3.7 Flash diseña · El Ingeniero construye con aprobación · Sin efectos externos" not in response.text
     assert 'id="conversation-title"' not in response.text
