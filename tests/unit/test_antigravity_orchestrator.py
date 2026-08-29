@@ -18,6 +18,7 @@ from adapters.antigravity.builder import (
 from adapters.google_adk import GoogleAdkGenerator
 from studio.application.builder_readiness import inspect_builder_readiness
 from studio.application.official_designer import OfficialAcademicDesigner
+from studio.domain.errors import DomainError
 from studio.domain.models import Briefing, TaskmasterSpecification
 
 
