@@ -11,7 +11,7 @@ from pathlib import Path
 from studio.ports.build_queue import BuildQueueStore
 
 _BUILD_ID = re.compile(r"^build_[a-f0-9]{16}$")
-_PENDING = {"queued", "building", "testing"}
+_PENDING = {"queued", "building", "awaiting_test_approval", "testing"}
 
 
 class JsonBuildQueueStore(BuildQueueStore):

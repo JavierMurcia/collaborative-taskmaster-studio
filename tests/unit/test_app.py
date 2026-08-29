@@ -165,6 +165,9 @@ def test_chat_keeps_the_draft_approval_footer_visible_and_names_the_builder() ->
     assert 'state.buildRuntime = payload.build_orchestration?.runtime || ""' in script
     assert "Constructor: Antigravity SDK" in script
     assert "Aprobar diseño y construir en laboratorio" in script
+    assert 'api("/api/v1/collaborative/builds", { background: true })' in script
+    assert "reconcileOrphanBuilds()" in script
+    assert 'kind: "agent_build"' in script
 
 
 def test_startup_keeps_the_entry_chat_instead_of_opening_latest_history() -> None:

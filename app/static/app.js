@@ -17,7 +17,7 @@ localStorage.setItem(SESSION_KEY, sessionId);
 function conversationStorageKey(owner = state?.identity?.user_id || sessionId) { return `${PARTNER_CONVERSATIONS_KEY}:${owner}`; }
 
 const restoredConversations = readPartnerConversations(sessionId);
-const state = { projectId: localStorage.getItem(PROJECT_KEY), partnerConversations: restoredConversations, activeConversationId: null, activeCatalogAgent: null, partnerMessages: [], partnerPhase: "discovery", entryMode: "radar", documents: [], agents: [], connections: [], identity: null, identityConfig: { mode: "local" }, authReady: true, attachedDocumentIds: [], partnerPending: false, partnerTypingVisible: false, entryTransitionPending: false, runtimeLoaded: false, buildRuntime: "", runtime: { mode: "local", label: "Comprobando Gemini", provider: "Vertex AI", model: "gemini-3.7-flash", model_calls_enabled: false } };
+const state = { projectId: localStorage.getItem(PROJECT_KEY), partnerConversations: restoredConversations, activeConversationId: null, activeCatalogAgent: null, partnerMessages: [], partnerPhase: "discovery", entryMode: "radar", documents: [], agents: [], builds: [], connections: [], identity: null, identityConfig: { mode: "local" }, authReady: true, attachedDocumentIds: [], partnerPending: false, partnerTypingVisible: false, entryTransitionPending: false, runtimeLoaded: false, buildRuntime: "", runtime: { mode: "local", label: "Comprobando Gemini", provider: "Vertex AI", model: "gemini-3.7-flash", model_calls_enabled: false } };
 const buildPollers = new Map();
 const conversationSyncTimers = new Map();
 const terminalBuildStates = new Set(["completed", "failed", "stopped"]);
@@ -107,6 +107,7 @@ async function loadRuntimeInfo() {
   renderRuntimeInfo();
   if (!state.authReady) return;
   await loadConversationMemory();
+  await loadBuildHistory();
   await loadDocumentLibrary();
   await loadAgentCatalog();
   await loadIdentity();
@@ -567,6 +568,39 @@ async function loadConversationMemory() {
     renderAttachments();
   } catch (error) {
     console.warn("Using browser conversation memory until server sync is available.", error);
+  }
+}
+
+async function loadBuildHistory() {
+  try {
+    const payload = await api("/api/v1/collaborative/builds", { background: true });
+    state.builds = Array.isArray(payload.builds) ? payload.builds : [];
+    reconcileOrphanBuilds();
+  } catch (error) {
+    console.warn("Build recovery is temporarily unavailable.", error);
+  }
+}
+
+function reconcileOrphanBuilds() {
+  const claimed = new Set(state.partnerConversations.flatMap((conversation) => conversation.messages.map((message) => message.buildId || message.build?.build_id).filter(Boolean)));
+  const conversations = [...state.partnerConversations].sort((left, right) => Date.parse(right.updatedAt || 0) - Date.parse(left.updatedAt || 0));
+  for (const build of state.builds) {
+    if (!build?.build_id || claimed.has(build.build_id)) continue;
+    const conversation = conversations.find((item) => [...item.messages].reverse().some((message) => message.role === "assistant" && message.agentDraft?.ready_to_create && message.agentDraft?.name === build.agent_name && !message.createdProjectId));
+    if (!conversation) continue;
+    const source = [...conversation.messages].reverse().find((message) => message.role === "assistant" && message.agentDraft?.ready_to_create && message.agentDraft?.name === build.agent_name && !message.createdProjectId);
+    source.createdProjectId = build.project_id;
+    source.buildId = build.build_id;
+    conversation.messages.push({ role: "assistant", kind: "agent_build", content: "Construcción del agente", build, activityExpanded: true });
+    conversation.updatedAt = new Date().toISOString();
+    claimed.add(build.build_id);
+    scheduleConversationSync(conversation);
+  }
+  localStorage.setItem(conversationStorageKey(), JSON.stringify(state.partnerConversations));
+  const active = state.partnerConversations.find((item) => item.id === state.activeConversationId);
+  if (active) {
+    state.partnerMessages = [...active.messages];
+    renderPartnerConversation();
   }
 }
 function renderConversationHistory() {

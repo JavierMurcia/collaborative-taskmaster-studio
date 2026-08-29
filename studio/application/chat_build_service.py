@@ -302,6 +302,28 @@ class ChatBuildService:
             }
         )
 
+    def list_open(self, *, owner_session_id: str) -> tuple[ChatBuildSnapshot, ...]:
+        """Return durable, unfinished builds owned by the current studio session."""
+
+        payloads = self._build_queue.list_pending() if self._build_queue is not None else ()
+        records: list[_BuildRecord] = []
+        for payload in payloads:
+            if payload.get("owner_session_id") != owner_session_id:
+                continue
+            try:
+                records.append(self._record_from_payload(payload))
+            except (KeyError, TypeError, ValueError):
+                continue
+        if self._build_queue is None:
+            records = [
+                record
+                for record in self._records.values()
+                if record.owner_session_id == owner_session_id
+                and record.state not in {"completed", "failed", "stopped"}
+            ]
+        records.sort(key=lambda record: record.events[-1].occurred_at if record.events else record.contract.confirmed_at, reverse=True)
+        return tuple(self._snapshot(record) for record in records[:20])
+
     def decide_tests(
         self,
         build_id: str,

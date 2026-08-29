@@ -324,6 +324,19 @@ def create_router(services: ServiceContainer) -> APIRouter:
             confirmation=body.confirmation,
         ).model_dump(mode="json")
 
+    @router.get("/collaborative/builds")
+    def list_chat_builds(session_id: SessionHeader) -> dict[str, Any]:
+        if services.chat_builder is None:
+            raise DomainError(
+                "CHAT_BUILDER_UNAVAILABLE", "El Ingeniero de agentes no está disponible."
+            )
+        return {
+            "builds": [
+                build.model_dump(mode="json")
+                for build in services.chat_builder.list_open(owner_session_id=session_id)
+            ]
+        }
+
     @router.get("/collaborative/builds/{build_id}")
     def get_chat_build(
         build_id: str,

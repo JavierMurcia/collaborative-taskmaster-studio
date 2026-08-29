@@ -8,7 +8,7 @@ from typing import Any
 from studio.ports.build_queue import BuildQueueStore
 
 _COLLECTION = "agent_build_queue"
-_PENDING = ("queued", "building", "testing")
+_PENDING = ("queued", "building", "awaiting_test_approval", "testing")
 
 
 def _owner_key(owner_session_id: str) -> str:
