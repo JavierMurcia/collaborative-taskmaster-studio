@@ -33,8 +33,8 @@ def test_home_serves_the_chat_only_experience() -> None:
     assert "Ejecutar 3 escenarios" not in response.text
     assert 'id="taskmaster-studio-access"' in response.text
     assert "Taskmaster Studio" in response.text
-    assert '/static/styles.css?v=20260829-agent-documents-v20' in response.text
-    assert '/static/app.js?v=20260829-agent-documents-v20' in response.text
+    assert '/static/styles.css?v=20260829-rich-results-v21' in response.text
+    assert '/static/app.js?v=20260829-rich-results-v21' in response.text
     assert 'id="document-inspector"' in response.text
     assert 'id="partner-typing"' not in response.text
     assert "Gemini 3.7 Flash diseña · El Ingeniero construye con aprobación · Sin efectos externos" not in response.text
@@ -72,6 +72,18 @@ def test_document_tray_reports_progress_and_supports_inspection_and_deletion() -
     assert '/api/v1/collaborative/documents/${encodeURIComponent(documentId)}' in script
     assert 'JSON.stringify({ message, document_ids: state.attachedDocumentIds })' in script
     assert "agent_id: conversation.agentId || null" in script
+
+
+def test_taskmaster_results_render_markdown_sections_and_comparison_tables() -> None:
+    root = Path(__file__).parents[2]
+    script = (root / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    styles = (root / "app" / "static" / "styles.css").read_text(encoding="utf-8")
+
+    assert "function renderMarkdownTable" in script
+    assert 'class="chat-table-wrap"' in script
+    assert "isMarkdownTableDivider" in script
+    assert ".chat-table-wrap table" in styles
+    assert ".turn-content h3" in styles
 
 
 def test_taskmaster_chat_keeps_the_composer_docked_below_a_scrolling_transcript() -> None:

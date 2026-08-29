@@ -1011,17 +1011,48 @@ function formatInline(value) {
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
+function markdownTableCells(line) {
+  const normalized = String(line ?? "").trim().replace(/^\|/, "").replace(/\|$/, "");
+  return normalized.split(/(?<!\\)\|/).map((cell) => cell.replace(/\\\|/g, "|").trim());
+}
+function isMarkdownTableDivider(line) {
+  const cells = markdownTableCells(line);
+  return cells.length > 1 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+}
+function renderMarkdownTable(lines, start) {
+  if (start + 1 >= lines.length || !lines[start].includes("|") || !isMarkdownTableDivider(lines[start + 1])) return null;
+  const header = markdownTableCells(lines[start]);
+  const rows = [];
+  let cursor = start + 2;
+  while (cursor < lines.length && lines[cursor].trim() && lines[cursor].includes("|")) {
+    const cells = markdownTableCells(lines[cursor]);
+    if (cells.length < 2) break;
+    rows.push(cells);
+    cursor += 1;
+  }
+  const width = Math.max(header.length, ...rows.map((row) => row.length));
+  const pad = (row) => Array.from({ length: width }, (_, index) => row[index] || "");
+  const heading = pad(header).map((cell) => `<th scope="col">${formatInline(cell)}</th>`).join("");
+  const body = rows.map((row) => `<tr>${pad(row).map((cell, index) => `<${index === 0 ? "th scope=\"row\"" : "td"}>${formatInline(cell)}</${index === 0 ? "th" : "td"}>`).join("")}</tr>`).join("");
+  return { html: `<div class="chat-table-wrap" role="region" aria-label="Tabla comparativa" tabindex="0"><table><thead><tr>${heading}</tr></thead><tbody>${body}</tbody></table></div>`, next: cursor };
+}
 function formatChatText(value) {
   const lines = String(value ?? "").split("\n"); const output = []; let paragraph = []; let list = null; let code = false; let codeLines = [];
   const closeParagraph = () => { if (paragraph.length) { output.push(`<p>${paragraph.map(formatInline).join("<br>")}</p>`); paragraph = []; } };
   const closeList = () => { if (list) { output.push(`</${list}>`); list = null; } };
-  for (const line of lines) {
-    if (line.trim().startsWith("```")) { closeParagraph(); closeList(); if (code) { output.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`); codeLines = []; } code = !code; continue; }
-    if (code) { codeLines.push(line); continue; }
+  for (let index = 0; index < lines.length;) {
+    const line = lines[index];
+    if (line.trim().startsWith("```")) { closeParagraph(); closeList(); if (code) { output.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`); codeLines = []; } code = !code; index += 1; continue; }
+    if (code) { codeLines.push(line); index += 1; continue; }
+    const table = renderMarkdownTable(lines, index);
+    if (table) { closeParagraph(); closeList(); output.push(table.html); index = table.next; continue; }
+    const heading = line.match(/^\s*(#{1,4})\s+(.+?)\s*#*\s*$/);
+    if (heading) { closeParagraph(); closeList(); const level = Math.min(4, heading[1].length + 1); output.push(`<h${level}>${formatInline(heading[2])}</h${level}>`); index += 1; continue; }
+    if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) { closeParagraph(); closeList(); output.push("<hr>"); index += 1; continue; }
     const bullet = line.match(/^\s*[-*]\s+(.+)/); const numbered = line.match(/^\s*(\d+)[.)]\s+(.+)/);
-    if (bullet || numbered) { closeParagraph(); const nextList = bullet ? "ul" : "ol"; if (list !== nextList) { closeList(); list = nextList; output.push(`<${list}>`); } output.push(numbered ? `<li value="${Number(numbered[1])}">${formatInline(numbered[2])}</li>` : `<li>${formatInline(bullet[1])}</li>`); continue; }
-    if (!line.trim()) { closeParagraph(); closeList(); continue; }
-    paragraph.push(line);
+    if (bullet || numbered) { closeParagraph(); const nextList = bullet ? "ul" : "ol"; if (list !== nextList) { closeList(); list = nextList; output.push(`<${list}>`); } output.push(numbered ? `<li value="${Number(numbered[1])}">${formatInline(numbered[2])}</li>` : `<li>${formatInline(bullet[1])}</li>`); index += 1; continue; }
+    if (!line.trim()) { closeParagraph(); closeList(); index += 1; continue; }
+    paragraph.push(line); index += 1;
   }
   if (code) output.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`); closeParagraph(); closeList(); return output.join("");
 }
