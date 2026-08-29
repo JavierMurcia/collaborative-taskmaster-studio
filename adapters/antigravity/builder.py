@@ -21,6 +21,7 @@ from studio.ports.generator import GeneratedBundle, GeneratedFile, GeneratorAdap
 _MAX_WRITES = 32
 _MAX_FILE_BYTES = 256_000
 _MAX_PROJECT_FILES = 96
+_DEFAULT_VERTEX_MODEL = "gemini-2.5-flash"
 _SECRET_PATTERN = re.compile(
     r"(-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|"
     r"AIza[0-9A-Za-z_-]{20,}|sk-[0-9A-Za-z]{20,})"
@@ -217,6 +218,10 @@ async def orchestrate_workspace(
     sdk = _load_sdk()
     project = os.getenv("GOOGLE_CLOUD_PROJECT", "").strip()
     location = os.getenv("STUDIO_ANTIGRAVITY_VERTEX_LOCATION", "us-central1").strip()
+    model = (
+        os.getenv("STUDIO_ANTIGRAVITY_MODEL", _DEFAULT_VERTEX_MODEL).strip()
+        or _DEFAULT_VERTEX_MODEL
+    )
     if not project or not location:
         raise DomainError(
             "ANTIGRAVITY_VERTEX_CONFIGURATION_REQUIRED",
@@ -239,6 +244,7 @@ async def orchestrate_workspace(
         vertex=True,
         project=project,
         location=location,
+        model=model,
         system_instructions=instructions,
         tools=[
             workspace.list_project_files,

@@ -161,6 +161,7 @@ def test_antigravity_starts_with_deny_all_before_allowing_confined_tools(
 
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "verified-project")
     monkeypatch.setenv("STUDIO_ANTIGRAVITY_VERTEX_LOCATION", "us-central1")
+    monkeypatch.setenv("STUDIO_ANTIGRAVITY_MODEL", "gemini-2.5-flash")
     monkeypatch.setattr(
         antigravity_builder,
         "_load_sdk",
@@ -187,6 +188,7 @@ def test_antigravity_starts_with_deny_all_before_allowing_confined_tools(
         "allow:read_project_file",
         "allow:write_project_file",
     ]
+    assert captured["model"] == "gemini-2.5-flash"
 
 
 def test_readiness_activates_only_a_verified_isolated_python(
