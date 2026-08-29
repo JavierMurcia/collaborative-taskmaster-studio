@@ -44,7 +44,8 @@ degrada silenciosamente al ejecutor residente en el proceso web.
 - `taskmaster-studio-runtime`: `roles/cloudtasks.enqueuer` limitado a la cola y permiso para usar la
   cuenta de servicio del trabajador.
 - `taskmaster-build-worker`: `roles/run.invoker` sobre el servicio.
-- agente de servicio de Cloud Tasks: capacidad de firmar el token OIDC de la cuenta del trabajador.
+- agente de servicio administrado de Cloud Tasks: `roles/cloudtasks.serviceAgent`, creado por Google
+  al habilitar la API y verificado antes del despliegue.
 
 La configuración reproducible está en `infrastructure/cloud_tasks/queue.json`; el plan validado está
 en `infrastructure/cloud_tasks/provisioning.py`.

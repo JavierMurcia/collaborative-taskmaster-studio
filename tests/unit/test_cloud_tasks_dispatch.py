@@ -112,4 +112,7 @@ def test_declarative_queue_plan_is_bounded_and_uses_dedicated_identity() -> None
     assert definition.max_concurrent_dispatches == 1
     assert definition.max_attempts == 2
     assert plan.worker_email.startswith("taskmaster-build-worker@")
-    assert "gcp-sa-cloudtasks" in " ".join(plan.token_creator_command("760216344589"))
+    serialized = " ".join(part for command in plan.setup_commands for part in command)
+    assert "roles/iam.serviceAccountUser" in serialized
+    assert "roles/run.invoker" in serialized
+    assert "roles/iam.serviceAccountTokenCreator" not in serialized

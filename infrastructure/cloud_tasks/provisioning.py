@@ -36,23 +36,6 @@ class BuildQueuePlan:
     worker_email: str
     runtime_email: str
     setup_commands: tuple[tuple[str, ...], ...]
-    project_number_command: tuple[str, ...]
-
-    def token_creator_command(self, project_number: str) -> tuple[str, ...]:
-        if not project_number.isdigit():
-            raise ValueError("El número de proyecto no es válido.")
-        return (
-            "gcloud",
-            "iam",
-            "service-accounts",
-            "add-iam-policy-binding",
-            self.worker_email,
-            f"--project={self.project_id}",
-            f"--member=serviceAccount:service-{project_number}@gcp-sa-cloudtasks.iam.gserviceaccount.com",
-            "--role=roles/iam.serviceAccountTokenCreator",
-            "--condition=None",
-            "--quiet",
-        )
 
 
 def load_queue_definition(path: Path = DEFINITION_PATH) -> BuildQueueDefinition:
@@ -153,11 +136,4 @@ def plan_build_queue(project_id: str) -> BuildQueuePlan:
         worker_email=worker,
         runtime_email=runtime,
         setup_commands=commands,
-        project_number_command=(
-            "gcloud",
-            "projects",
-            "describe",
-            project_id,
-            "--format=value(projectNumber)",
-        ),
     )
