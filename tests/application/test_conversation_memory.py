@@ -38,7 +38,8 @@ def test_conversation_api_saves_lists_and_deletes_visible_state() -> None:
     headers = {"X-Studio-Session": "browser_memory_demo"}
     body = {
         "title": "Contrato SaaS",
-        "phase": "clarification",
+        "phase": "runtime",
+        "agent_id": "catalog_1234567890abcdef",
         "messages": [
             {"role": "user", "content": "Diseña un contrato SaaS"},
             {
@@ -57,6 +58,8 @@ def test_conversation_api_saves_lists_and_deletes_visible_state() -> None:
     )
     assert saved.status_code == 200
     assert saved.json()["messages"][1]["agentDraft"] == {"readiness": 20}
+    assert saved.json()["phase"] == "runtime"
+    assert saved.json()["agent_id"] == "catalog_1234567890abcdef"
 
     listed = api.get("/api/v1/collaborative/conversations", headers=headers)
     assert listed.status_code == 200

@@ -523,6 +523,39 @@ def test_collaborative_chat_reads_confined_workspace_then_asks_gemini_again(
     assert result.tool_activity[0].path == "README.md"
 
 
+def test_collaborative_chat_compacts_large_history_before_model_request() -> None:
+    gateway = RecordingGateway()
+    service = CollaborativeChatService(gateway, "gemini-3.7-flash")
+    history = tuple(
+        ChatTurn(role="user" if index % 2 == 0 else "assistant", content="x" * 6000)
+        for index in range(16)
+    )
+
+    service.reply("Continúa el análisis", history)
+
+    assert gateway.request is not None
+    assert len(gateway.request.prompt) < 32_000
+
+
+def test_collaborative_chat_compacts_large_tool_evidence_before_follow_up() -> None:
+    class LargeWorkspace:
+        def inspect(self, path: str) -> dict[str, object]:
+            return {"kind": "file", "path": path, "content": "evidencia" * 20_000}
+
+    gateway = RecordingGateway(workspace_path="paper.txt")
+    service = CollaborativeChatService(
+        gateway,
+        "gemini-3.7-flash",
+        workspace_reader=LargeWorkspace(),  # type: ignore[arg-type]
+    )
+
+    service.reply("Analiza el documento", ())
+
+    assert len(gateway.requests) == 2
+    assert len(gateway.requests[1].prompt) < 32_000
+    assert '"truncated": true' in gateway.requests[1].prompt
+
+
 def test_collaborative_chat_reports_blocked_workspace_escape(tmp_path: Path) -> None:
     gateway = RecordingGateway(workspace_path="../secrets.txt")
     service = CollaborativeChatService(

@@ -301,10 +301,12 @@ def test_chat_build_adds_and_verifies_confined_workspace_reader(tmp_path: Path) 
 class _RuntimeSpy:
     def __init__(self) -> None:
         self.messages: list[str] = []
+        self.document_evidence: list[str] = []
 
     def run_specification(self, specification, **kwargs) -> AgentRuntimeResult:
         del specification
         self.messages.append(kwargs["message"])
+        self.document_evidence.append(kwargs.get("document_evidence", ""))
         return AgentRuntimeResult(
             run_id="run_1234567890abcdef",
             reply="Resultado ejecutado desde la carpeta persistente.",
@@ -325,7 +327,7 @@ def test_catalog_agent_runs_from_projects_and_keeps_its_own_memory(tmp_path: Pat
     catalog = AgentCatalog(tmp_path / "data")
     service = _service(tmp_path, catalog=catalog)
     started = service.start(
-        _draft(), owner_session_id="owner_one", confirmation="CONSTRUIR_AGENTE"
+        _workspace_draft(), owner_session_id="owner_one", confirmation="CONSTRUIR_AGENTE"
     )
     _wait(service, started.build_id, "owner_one", {"awaiting_test_approval"})
     service.decide_tests(
@@ -344,6 +346,12 @@ def test_catalog_agent_runs_from_projects_and_keeps_its_own_memory(tmp_path: Pat
         message="Primera solicitud",
         owner_session_id="owner_one",
         idempotency_key="first-run",
+        documents=(
+            {
+                "name": "paper.pdf",
+                "content": "Metodología y resultados verificables del artículo.",
+            },
+        ),
     )
     execution.run(
         agent.id,
@@ -357,3 +365,5 @@ def test_catalog_agent_runs_from_projects_and_keeps_its_own_memory(tmp_path: Pat
     assert "Primera solicitud" in state
     assert "Segunda solicitud" in state
     assert "Contexto persistente de ejecuciones anteriores" in runtime.messages[1]
+    assert "paper.pdf" in runtime.document_evidence[0]
+    assert "resultados verificables" in runtime.document_evidence[0]

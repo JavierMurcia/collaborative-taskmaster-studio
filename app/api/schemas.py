@@ -57,6 +57,7 @@ class DemoResetRequest(RequestModel):
 
 class AgentMessageRequest(RequestModel):
     message: str = Field(min_length=1, max_length=6000)
+    document_ids: list[str] = Field(default_factory=list, max_length=8)
 
 
 class AgentDecisionRequest(RequestModel):
@@ -87,8 +88,9 @@ class RefreshIdentityRequest(RequestModel):
 class CollaborativeConversationRequest(RequestModel):
     title: str = Field(min_length=1, max_length=100)
     messages: list[dict[str, Any]] = Field(default_factory=list, max_length=32)
-    phase: Literal["discovery", "clarification", "alignment"] = "discovery"
+    phase: Literal["discovery", "clarification", "alignment", "runtime"] = "discovery"
     document_ids: list[str] = Field(default_factory=list, max_length=8)
+    agent_id: str | None = Field(default=None, max_length=80)
 
 
 class ChatBuildRequest(RequestModel):

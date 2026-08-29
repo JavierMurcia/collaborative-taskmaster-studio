@@ -33,8 +33,8 @@ def test_home_serves_the_chat_only_experience() -> None:
     assert "Ejecutar 3 escenarios" not in response.text
     assert 'id="taskmaster-studio-access"' in response.text
     assert "Taskmaster Studio" in response.text
-    assert '/static/styles.css?v=20260829-document-tray-v19' in response.text
-    assert '/static/app.js?v=20260829-document-tray-v19' in response.text
+    assert '/static/styles.css?v=20260829-agent-documents-v20' in response.text
+    assert '/static/app.js?v=20260829-agent-documents-v20' in response.text
     assert 'id="document-inspector"' in response.text
     assert 'id="partner-typing"' not in response.text
     assert "Gemini 3.7 Flash diseña · El Ingeniero construye con aprobación · Sin efectos externos" not in response.text
@@ -70,6 +70,8 @@ def test_document_tray_reports_progress_and_supports_inspection_and_deletion() -
     assert 'data-inspect-document="${escapeHtml(item.id)}"' in script
     assert 'data-delete-document="${escapeHtml(item.id)}"' in script
     assert '/api/v1/collaborative/documents/${encodeURIComponent(documentId)}' in script
+    assert 'JSON.stringify({ message, document_ids: state.attachedDocumentIds })' in script
+    assert "agent_id: conversation.agentId || null" in script
 
 
 def test_taskmaster_chat_keeps_the_composer_docked_below_a_scrolling_transcript() -> None:

@@ -175,8 +175,15 @@ class CollaborativeChatService:
         if not clean_message:
             raise DomainError("CHAT_MESSAGE_EMPTY", "Escribe un mensaje para continuar.")
 
-        recent_history = history[-16:]
-        transcript = [turn.model_dump(mode="json") for turn in recent_history]
+        recent_history = history[-10:]
+        transcript = [
+            {
+                "role": turn.role,
+                "content": turn.content[-700:],
+                "evidence": [item[:300] for item in turn.evidence[-2:]],
+            }
+            for turn in recent_history
+        ]
         memories = (
             self._conversation_memory.recall(
                 owner_session_id,
@@ -548,7 +555,7 @@ class CollaborativeChatService:
                 {
                     "capability": activity.capability,
                     "status": activity.status,
-                    "result": tool_result,
+                    "result": _compact_tool_result(tool_result, 900),
                 }
             )
             result = self._generate_structured_resilient(
@@ -561,7 +568,7 @@ class CollaborativeChatService:
                             "latest_user_message": clean_message,
                             "verified_runtime_facts": runtime_facts,
                             "previous_model_response": result.payload,
-                            "workspace_tool_result": tool_result,
+                            "workspace_tool_result": _compact_tool_result(tool_result, 8_000),
                             "accumulated_research": accumulated_research,
                             "research_step": step_number,
                             "remaining_steps": 6 - step_number,
@@ -1290,6 +1297,19 @@ def _github_activity_items(payload: dict[str, object]) -> list[dict[str, str]]:
         for item in raw_items[:8]
         if isinstance(item, dict)
     ]
+
+
+def _compact_tool_result(payload: object, limit: int) -> object:
+    """Keep tool evidence useful while respecting the bounded model request contract."""
+
+    serialized = json.dumps(payload, ensure_ascii=False)
+    if len(serialized) <= limit:
+        return payload
+    return {
+        "truncated": True,
+        "original_characters": len(serialized),
+        "excerpt": serialized[:limit],
+    }
 
 
 def _framework_selection_ready(draft: AgentDraft) -> bool:

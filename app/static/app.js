@@ -275,7 +275,7 @@ async function sendCatalogAgentMessage(message) {
     const payload = await api(`/api/v1/collaborative/agents/${encodeURIComponent(agent.id)}/messages`, {
       method: "POST",
       idempotent: "catalog-agent-run",
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, document_ids: state.attachedDocumentIds }),
     });
     const stepSummary = Array.isArray(payload.steps) && payload.steps.length
       ? `\n\n**Ejecución controlada**\n${payload.steps.map((step) => `- ${step.name}: ${step.detail}`).join("\n")}`
@@ -519,6 +519,7 @@ function serializeConversation(conversation) {
     title: conversation.title,
     phase: conversation.phase || "discovery",
     document_ids: conversation.documentIds || [],
+    agent_id: conversation.agentId || null,
     messages: conversation.messages.slice(-32).map(compactMessage),
   };
 }
@@ -530,6 +531,7 @@ function normalizeRemoteConversation(item) {
     messages: Array.isArray(item.messages) ? item.messages.filter(validPartnerMessage) : [],
     documentIds: Array.isArray(item.document_ids) ? item.document_ids : [],
     phase: item.phase || "discovery",
+    agentId: item.agent_id || "",
     updatedAt: item.updated_at || new Date(0).toISOString(),
   };
 }
@@ -756,7 +758,10 @@ function handleConversationHistory(event) {
   const selectButton = event.target.closest("[data-conversation-id]"); if (!selectButton) return;
   const conversation = state.partnerConversations.find((item) => item.id === selectButton.dataset.conversationId); if (!conversation) return;
   state.activeConversationId = conversation.id; state.partnerMessages = [...conversation.messages]; state.partnerPhase = conversation.phase || "discovery";
-  state.activeCatalogAgent = state.agents.find((agent) => agent.id === conversation.agentId) || null;
+  state.activeCatalogAgent = state.agents.find((agent) => agent.id === conversation.agentId)
+    || state.agents.find((agent) => conversation.messages.some((message) => message.sourceLabel === agent.name))
+    || null;
+  if (state.activeCatalogAgent && !conversation.agentId) conversation.agentId = state.activeCatalogAgent.id;
   state.entryMode = state.activeCatalogAgent ? "runtime" : "radar";
   state.attachedDocumentIds = [...(conversation.documentIds || [])];
   showPartnerChat(); renderPartnerConversation(); renderConversationHistory(); renderAttachments(); document.body.classList.remove("sidebar-open");

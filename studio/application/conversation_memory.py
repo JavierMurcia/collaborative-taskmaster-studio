@@ -30,7 +30,8 @@ class ConversationRecord(BaseModel):
     title: str = Field(min_length=1, max_length=100)
     messages: tuple[ConversationMessage, ...] = Field(max_length=32)
     document_ids: tuple[str, ...] = Field(default_factory=tuple, max_length=8)
-    phase: Literal["discovery", "clarification", "alignment"] = "discovery"
+    phase: Literal["discovery", "clarification", "alignment", "runtime"] = "discovery"
+    agent_id: str | None = Field(default=None, max_length=80)
     updated_at: str
 
 
@@ -64,13 +65,15 @@ class ConversationMemoryService:
         messages: builtins.list[dict[str, Any]],
         phase: str,
         document_ids: builtins.list[str] | None = None,
+        agent_id: str | None = None,
     ) -> ConversationRecord:
         record = ConversationRecord(
             id=conversation_id,
             title=title,
             messages=tuple(ConversationMessage.model_validate(item) for item in messages),
             document_ids=tuple(document_ids or ()),
-            phase=cast(Literal["discovery", "clarification", "alignment"], phase),
+            phase=cast(Literal["discovery", "clarification", "alignment", "runtime"], phase),
+            agent_id=agent_id,
             updated_at=self._clock.now().isoformat(),
         )
         serialized = json.dumps(record.model_dump(mode="json"), ensure_ascii=False)

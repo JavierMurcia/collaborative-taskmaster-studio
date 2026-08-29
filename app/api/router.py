@@ -306,6 +306,7 @@ def create_router(services: ServiceContainer) -> APIRouter:
             messages=body.messages,
             phase=body.phase,
             document_ids=body.document_ids,
+            agent_id=body.agent_id,
         ).model_dump(mode="json")
 
     @router.delete("/collaborative/conversations/{conversation_id}", status_code=204)
@@ -669,6 +670,10 @@ def create_router(services: ServiceContainer) -> APIRouter:
             owner_session_id=session_id,
             idempotency_key=idempotency_key,
             identity=_identity(request),
+            documents=tuple(
+                services.documents.inspect(session_id, document_id)
+                for document_id in body.document_ids
+            ),
         ).model_dump(mode="json")
 
     @router.patch("/collaborative/agents/{agent_id}")

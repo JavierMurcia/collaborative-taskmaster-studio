@@ -6,6 +6,7 @@ import json
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from infrastructure.local.project_storage import LocalProjectArtifactStore
 from studio.application.agent_catalog import AgentCatalogRepository
@@ -41,6 +42,7 @@ class CatalogAgentExecutionService:
         owner_session_id: str,
         idempotency_key: str,
         identity: IdentityContext | None = None,
+        documents: tuple[dict[str, Any], ...] = (),
     ) -> AgentRuntimeResult:
         agent = self._catalog.get(agent_id, owner_session_id)
         stored_name = Path(agent.artifact_directory).name
@@ -78,6 +80,7 @@ class CatalogAgentExecutionService:
             ) from None
 
         contextual_message = self._with_memory(root, message)
+        document_evidence = self._document_evidence(specification, documents)
         result = self._runtime.run_specification(
             specification,
             project_id=agent.project_id,
@@ -85,6 +88,7 @@ class CatalogAgentExecutionService:
             owner_session_id=owner_session_id,
             idempotency_key=idempotency_key,
             identity=identity,
+            document_evidence=document_evidence,
         )
         self._remember(root, message, result)
         if agent.artifact_uri:
@@ -95,6 +99,28 @@ class CatalogAgentExecutionService:
                 source=root / "runtime-state.json",
             )
         return result
+
+    @staticmethod
+    def _document_evidence(
+        specification: TaskmasterSpecification,
+        documents: tuple[dict[str, Any], ...],
+    ) -> str:
+        if not documents or not any(tool.id == "workspace_read" for tool in specification.tools):
+            return ""
+        character_budget = 16_000
+        per_document = max(2_000, character_budget // len(documents))
+        excerpts: list[str] = []
+        used = 0
+        for document in documents:
+            name = str(document.get("name") or "documento")[:180]
+            content = str(document.get("content") or "")[:per_document]
+            block = f"ARCHIVO: {name}\n{content}"
+            remaining = character_budget - used
+            if remaining <= 0:
+                break
+            excerpts.append(block[:remaining])
+            used += len(excerpts[-1])
+        return "\n\n".join(excerpts)
 
     def _with_memory(self, root: Path, message: str) -> str:
         state = self._load_state(root)
