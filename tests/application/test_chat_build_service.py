@@ -14,6 +14,7 @@ from adapters.frameworks import (
     GenkitGenerator,
 )
 from adapters.google_adk import GoogleAdkGenerator
+from infrastructure.local.build_queue import JsonBuildQueueStore
 from studio.application.agent_catalog import AgentCatalog
 from studio.application.agent_runtime_service import AgentRuntimeResult, RuntimeStep
 from studio.application.catalog_agent_execution_service import CatalogAgentExecutionService
@@ -53,7 +54,12 @@ def _workspace_draft() -> dict[str, object]:
     return draft
 
 
-def _service(tmp_path: Path, *, catalog: AgentCatalog | None = None) -> ChatBuildService:
+def _service(
+    tmp_path: Path,
+    *,
+    catalog: AgentCatalog | None = None,
+    queue: JsonBuildQueueStore | None = None,
+) -> ChatBuildService:
     root = tmp_path / "projects"
     registry = FrameworkGeneratorRegistry(
         (
@@ -63,7 +69,13 @@ def _service(tmp_path: Path, *, catalog: AgentCatalog | None = None) -> ChatBuil
             GenkitGenerator(root),
         )
     )
-    return ChatBuildService(registry, root, step_delay_seconds=0, agent_catalog=catalog)
+    return ChatBuildService(
+        registry,
+        root,
+        step_delay_seconds=0,
+        agent_catalog=catalog,
+        build_queue=queue,
+    )
 
 
 def _wait(
@@ -153,6 +165,36 @@ def test_chat_build_can_be_stopped_before_tests(tmp_path: Path) -> None:
     assert stopped.events[-1].kind == "stopped"
     with pytest.raises(DomainError, match="solo está disponible"):
         service.download(started.build_id, owner_session_id="owner_one")
+
+
+def test_chat_build_is_restored_from_durable_queue_before_test_approval(
+    tmp_path: Path,
+) -> None:
+    queue = JsonBuildQueueStore(tmp_path / "data")
+    first = _service(tmp_path, queue=queue)
+    started = first.start(
+        _draft(), owner_session_id="owner_one", confirmation="CONSTRUIR_AGENTE"
+    )
+    waiting = _wait(first, started.build_id, "owner_one", {"awaiting_test_approval"})
+    assert waiting.durable_queue is True
+
+    restored_service = _service(tmp_path, queue=queue)
+    restored = restored_service.get(started.build_id, owner_session_id="owner_one")
+    assert restored.state == "awaiting_test_approval"
+    assert restored.project_directory == waiting.project_directory
+
+    restored_service.decide_tests(
+        started.build_id,
+        owner_session_id="owner_one",
+        decision="approved",
+    )
+    completed = _wait(
+        restored_service,
+        started.build_id,
+        "owner_one",
+        {"completed", "failed"},
+    )
+    assert completed.state == "completed"
 
 
 def test_chat_build_adds_and_verifies_confined_workspace_reader(tmp_path: Path) -> None:

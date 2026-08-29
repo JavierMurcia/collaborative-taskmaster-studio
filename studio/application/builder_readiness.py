@@ -45,7 +45,8 @@ def inspect_builder_readiness() -> BuilderReadiness:
             label="Constructor controlado Google ADK",
             status="active" if active == "controlled_adk" else "available",
             detail=(
-                "Generación determinista, contrato firmado y laboratorio sin red."
+                "Generación determinista en un trabajador aislado, contrato firmado y "
+                "laboratorio sin red."
                 if adk
                 else "Genera la plantilla ADK; el SDK debe instalarse para ejecutarla."
             ),

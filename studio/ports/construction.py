@@ -9,7 +9,11 @@ from typing import Literal, Protocol
 from studio.domain.models import TaskmasterSpecification
 from studio.ports.generator import GeneratedBundle, GeneratorAdapter
 
-BuilderRuntime = Literal["antigravity_sdk", "controlled_local_builder"]
+BuilderRuntime = Literal[
+    "antigravity_sdk",
+    "controlled_local_builder",
+    "isolated_controlled_builder",
+]
 ConstructionProgress = Callable[[str, str, Literal["running", "passed"]], None]
 
 

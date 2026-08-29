@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from pathlib import Path
 from time import perf_counter
 from typing import Any, cast
@@ -17,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from adapters.antigravity import AntigravitySdkOrchestrator
+from adapters.controlled import IsolatedControlledConstructionOrchestrator
 from adapters.frameworks import (
     AntigravityGenerator,
     FrameworkGeneratorRegistry,
@@ -35,6 +37,7 @@ from infrastructure.cloud_run import (
 )
 from infrastructure.firestore import (
     FirestoreAgentCatalog,
+    FirestoreBuildQueueStore,
     FirestoreConversationMemoryRepository,
     FirestoreProjectRepository,
     FirestoreSettings,
@@ -45,6 +48,7 @@ from infrastructure.firestore.retention import (
     DemoRetentionPolicy,
     verify_retention_manifest,
 )
+from infrastructure.local.build_queue import JsonBuildQueueStore
 from infrastructure.local.clock import SystemClock
 from infrastructure.local.conversation_memory import (
     InMemoryConversationMemoryRepository,
@@ -90,7 +94,6 @@ from studio.capabilities.web import VertexWebResearcher
 from studio.capabilities.workspace import WorkspaceReader
 from studio.domain.errors import DomainError
 from studio.ports.clock import Clock
-from studio.ports.construction import ControlledConstructionOrchestrator
 from studio.ports.repositories import EventRepository, ProjectRepository
 from studio.security import IdentityVerifier
 from studio.security.credential_vault import build_credential_vault
@@ -301,7 +304,7 @@ def create_app(
     construction_orchestrator = (
         AntigravitySdkOrchestrator(os.environ["STUDIO_ANTIGRAVITY_PYTHON"])
         if builder_readiness.active_builder == "antigravity"
-        else ControlledConstructionOrchestrator()
+        else IsolatedControlledConstructionOrchestrator(sys.executable)
     )
     output_root = generated_root or Path(os.getenv("STUDIO_GENERATED_ROOT", "generated"))
     projects_root = Path(os.getenv("STUDIO_PROJECTS_ROOT", "projects"))
@@ -312,6 +315,11 @@ def create_app(
         CloudProjectArtifactStore(cast(Any, storage_runtime.client), active_storage_settings)
         if storage_runtime.client is not None and persistence_ready
         else LocalProjectArtifactStore()
+    )
+    build_queue = (
+        FirestoreBuildQueueStore(cast(Any, firestore_runtime.client))
+        if firestore_runtime.client is not None and persistence_ready
+        else JsonBuildQueueStore(data_directory)
     )
     framework_generators = FrameworkGeneratorRegistry(
         (
@@ -393,6 +401,7 @@ def create_app(
             plugin_registry=plugin_registry,
             agent_catalog=agent_catalog,
             project_store=project_store,
+            build_queue=build_queue,
         ),
         agent_catalog=agent_catalog,
         catalog_agent_runtime=CatalogAgentExecutionService(
@@ -519,6 +528,17 @@ def create_app(
                 "policy": "deterministic-signals",
             },
             "agent_builder": builder_readiness.model_dump(mode="json"),
+            "build_orchestration": (
+                services.chat_builder.readiness()
+                if services.chat_builder is not None
+                else {
+                    "durable_queue": False,
+                    "worker_isolated": False,
+                    "runtime": "unavailable",
+                    "max_attempts": 0,
+                    "restart_recovery": False,
+                }
+            ),
             "plugin_registry": {
                 "selection_mode": "automatic_least_privilege",
                 "declared": len(plugin_registry.list()),

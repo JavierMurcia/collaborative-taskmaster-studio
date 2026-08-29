@@ -14,7 +14,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -28,6 +28,7 @@ from studio.application.plugin_registry import PluginRegistry, PluginSelection
 from studio.domain.enums import ApprovalStatus
 from studio.domain.errors import DomainError
 from studio.domain.models import Approval, Briefing, Policy, TaskmasterSpecification, Tool
+from studio.ports.build_queue import BuildQueueStore
 from studio.ports.construction import (
     BuilderRuntime,
     ConstructionOrchestrator,
@@ -113,6 +114,9 @@ class ChatBuildSnapshot(BaseModel):
     catalog_agent_id: str = ""
     project_directory: str = ""
     error: str = ""
+    queue_attempt: int = 0
+    queue_max_attempts: int = 2
+    durable_queue: bool = False
 
 
 class _BuildRecord:
@@ -143,6 +147,10 @@ class _BuildRecord:
         self.output_directory: Path | None = None
         self.error = ""
         self.catalog_agent_id = ""
+        self.artifact_uri = ""
+        self.artifact_digest = ""
+        self.attempts = 0
+        self.max_attempts = 2
 
 
 class ChatBuildService:
@@ -160,6 +168,8 @@ class ChatBuildService:
         plugin_registry: PluginRegistry | None = None,
         agent_catalog: AgentCatalogRepository | None = None,
         project_store: ProjectArtifactStore | None = None,
+        build_queue: BuildQueueStore | None = None,
+        max_attempts: int = 2,
     ) -> None:
         self._adapter = adapter
         self._root = generated_root.resolve()
@@ -173,8 +183,21 @@ class ChatBuildService:
         self._plugins = plugin_registry or PluginRegistry()
         self._catalog = agent_catalog
         self._project_store = project_store or LocalProjectArtifactStore()
+        self._build_queue = build_queue
+        self._max_attempts = min(3, max(1, max_attempts))
         self._records: dict[str, _BuildRecord] = {}
         self._lock = threading.RLock()
+        self._resume_pending()
+
+    def readiness(self) -> dict[str, object]:
+        return {
+            "durable_queue": bool(self._build_queue and self._build_queue.durable),
+            "worker_isolated": self._orchestrator.runtime_id
+            in {"isolated_controlled_builder", "antigravity_sdk"},
+            "runtime": self._orchestrator.runtime_id,
+            "max_attempts": self._max_attempts,
+            "restart_recovery": self._build_queue is not None,
+        }
 
     def start(
         self,
@@ -230,6 +253,7 @@ class ChatBuildService:
             plugins=plugin_selection,
             builder_runtime=self._orchestrator.runtime_id,
         )
+        record.max_attempts = self._max_attempts
         with self._lock:
             self._records[build_id] = record
             self._event(
@@ -290,6 +314,7 @@ class ChatBuildService:
                 )
                 return self._snapshot(record)
             record.state = "testing"
+            record.attempts = 0
             self._event(
                 record,
                 kind="status",
@@ -310,6 +335,13 @@ class ChatBuildService:
                     "El paquete solo está disponible después de superar las pruebas.",
                 )
             root = record.output_directory
+            if not root.is_dir() and record.artifact_uri:
+                self._project_store.restore_directory(
+                    owner_session_id=record.owner_session_id,
+                    uri=record.artifact_uri,
+                    directory=root,
+                    expected_digest=record.artifact_digest,
+                )
             filename = f"{_slug(record.draft.name)}-{record.framework.framework}.zip"
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
@@ -326,6 +358,7 @@ class ChatBuildService:
         try:
             with self._lock:
                 record = self._records[build_id]
+                record.attempts += 1
                 record.state = "building"
                 self._event(
                     record,
@@ -370,25 +403,42 @@ class ChatBuildService:
                         status="passed",
                     )
             destination = self._project_directory(record)
-            bundle = self._orchestrator.construct(
-                specification,
-                destination,
-                generator=self._adapter,
-                contract=record.contract.model_dump(mode="json"),
-                progress=lambda phase, message, status: self._construction_progress(
-                    build_id, phase, message, status
-                ),
-            )
-            managed_files = self._write_managed_artifacts(
-                bundle.output_directory,
-                record,
-                specification,
+            if destination.is_dir() and (destination / "studio-build-contract.json").is_file():
+                output_directory = destination
+            else:
+                bundle = self._orchestrator.construct(
+                    specification,
+                    destination,
+                    generator=self._adapter,
+                    contract=record.contract.model_dump(mode="json"),
+                    progress=lambda phase, message, status: self._construction_progress(
+                        build_id, phase, message, status
+                    ),
+                )
+                output_directory = bundle.output_directory
+                self._write_managed_artifacts(
+                    output_directory,
+                    record,
+                    specification,
+                )
+            with self._lock:
+                record.output_directory = output_directory
+                self._persist(record)
+            stored = self._project_store.persist_directory(
+                owner_session_id=record.owner_session_id,
+                project_id=record.project_id,
+                build_id=record.build_id,
+                directory=output_directory,
             )
             self._pause()
             with self._lock:
                 record = self._records[build_id]
-                record.output_directory = bundle.output_directory
-                record.file_count = len(bundle.files) + managed_files + 1
+                record.output_directory = output_directory
+                record.artifact_uri = stored.uri
+                record.artifact_digest = stored.digest
+                record.file_count = sum(
+                    1 for path in output_directory.rglob("*") if path.is_file()
+                )
                 self._event(
                     record,
                     kind="artifact",
@@ -420,28 +470,24 @@ class ChatBuildService:
                     },
                 )
         except Exception as error:  # pragma: no cover - defensive worker boundary
-            with self._lock:
-                record = self._records[build_id]
-                record.state = "failed"
-                record.error = "La construcción se detuvo de forma segura."
-                self._event(
-                    record,
-                    kind="failed",
-                    phase="generation",
-                    message="La construcción se detuvo de forma segura.",
-                    status="failed",
-                    transient=False,
-                    details={"error_type": type(error).__name__},
-                )
+            self._handle_worker_error(build_id, error, phase="generation", operation="construct")
 
     def _test(self, build_id: str) -> None:
         try:
             with self._lock:
                 record = self._records[build_id]
+                record.attempts += 1
                 root = record.output_directory
                 if root is None:
                     raise DomainError(
                         "BUILD_OUTPUT_MISSING", "No existe una salida para verificar."
+                    )
+                if not root.is_dir() and record.artifact_uri:
+                    self._project_store.restore_directory(
+                        owner_session_id=record.owner_session_id,
+                        uri=record.artifact_uri,
+                        directory=root,
+                        expected_digest=record.artifact_digest,
                     )
                 self._event(
                     record,
@@ -482,6 +528,8 @@ class ChatBuildService:
                         build_id=record.build_id,
                         directory=root,
                     )
+                    record.artifact_uri = stored.uri
+                    record.artifact_digest = stored.digest
                     record.state = "completed"
                     if self._catalog is not None:
                         catalog_agent = self._catalog.register(
@@ -523,19 +571,7 @@ class ChatBuildService:
                         transient=False,
                     )
         except Exception as error:  # pragma: no cover - defensive worker boundary
-            with self._lock:
-                record = self._records[build_id]
-                record.state = "failed"
-                record.error = "Las pruebas se detuvieron de forma segura."
-                self._event(
-                    record,
-                    kind="failed",
-                    phase="testing",
-                    message="Las pruebas se detuvieron de forma segura.",
-                    status="failed",
-                    transient=False,
-                    details={"error_type": type(error).__name__},
-                )
+            self._handle_worker_error(build_id, error, phase="testing", operation="test")
 
     def _construction_progress(
         self,
@@ -614,6 +650,8 @@ class ChatBuildService:
     def _project_directory(self, record: _BuildRecord) -> Path:
         """Return a stable, collision-safe directory directly inside projects/."""
 
+        if record.output_directory is not None:
+            return record.output_directory
         base = _slug(record.draft.name) or record.project_id
         candidate = self._root / base
         if not candidate.exists():
@@ -802,6 +840,11 @@ class ChatBuildService:
 
     def _authorized(self, build_id: str, owner_session_id: str) -> _BuildRecord:
         record = self._records.get(build_id)
+        if record is None and self._build_queue is not None:
+            payload = self._build_queue.load(build_id, owner_session_id)
+            if payload is not None:
+                record = self._record_from_payload(payload)
+                self._records[build_id] = record
         if record is None or record.owner_session_id != owner_session_id:
             raise DomainError(
                 "BUILD_NOT_FOUND", "No existe una construcción accesible con ese identificador."
@@ -816,7 +859,11 @@ class ChatBuildService:
             builder=(
                 "Antigravity · Ingeniero de agentes"
                 if record.builder_runtime == "antigravity_sdk"
-                else "Constructor local seguro · respaldo de Antigravity"
+                else (
+                    "Trabajador aislado · Constructor Google ADK"
+                    if record.builder_runtime == "isolated_controlled_builder"
+                    else "Constructor local seguro · respaldo de Antigravity"
+                )
             ),
             builder_runtime=record.builder_runtime,
             framework=record.framework,
@@ -842,6 +889,9 @@ class ChatBuildService:
                 str(record.output_directory) if record.output_directory is not None else ""
             ),
             error=record.error,
+            queue_attempt=record.attempts,
+            queue_max_attempts=record.max_attempts,
+            durable_queue=bool(self._build_queue and self._build_queue.durable),
         )
 
     def _event(
@@ -867,6 +917,151 @@ class ChatBuildService:
                 details=details or {},
             )
         )
+        self._persist(record)
+
+    def _handle_worker_error(
+        self,
+        build_id: str,
+        error: Exception,
+        *,
+        phase: str,
+        operation: Literal["construct", "test"],
+    ) -> None:
+        with self._lock:
+            record = self._records[build_id]
+            retry = not isinstance(error, DomainError) and record.attempts < record.max_attempts
+            if retry:
+                record.state = "queued" if operation == "construct" else "testing"
+                self._event(
+                    record,
+                    kind="status",
+                    phase="queue",
+                    message="El trabajador se reiniciará una vez tras un fallo transitorio.",
+                    status="waiting",
+                    transient=False,
+                    details={
+                        "attempt": record.attempts,
+                        "max_attempts": record.max_attempts,
+                        "error_type": type(error).__name__,
+                    },
+                )
+            else:
+                record.state = "failed"
+                record.error = "El trabajador aislado se detuvo de forma segura."
+                self._event(
+                    record,
+                    kind="failed",
+                    phase=phase,
+                    message="El trabajador aislado se detuvo de forma segura.",
+                    status="failed",
+                    transient=False,
+                    details={
+                        "attempt": record.attempts,
+                        "error_type": type(error).__name__,
+                    },
+                )
+        if retry:
+            target = self._construct if operation == "construct" else self._test
+            self._executor.submit(target, build_id)
+
+    def _persist(self, record: _BuildRecord) -> None:
+        if self._build_queue is not None:
+            self._build_queue.save(record.build_id, self._record_payload(record))
+
+    def _resume_pending(self) -> None:
+        if self._build_queue is None:
+            return
+        try:
+            pending = self._build_queue.list_pending()
+        except Exception:
+            return
+        for payload in pending:
+            try:
+                record = self._record_from_payload(payload)
+            except (KeyError, TypeError, ValueError):
+                continue
+            self._records[record.build_id] = record
+            if record.state in {"queued", "building"}:
+                record.state = "queued"
+                self._event(
+                    record,
+                    kind="status",
+                    phase="queue",
+                    message="Construcción recuperada después de reiniciar el servicio.",
+                    status="waiting",
+                    transient=False,
+                )
+                self._executor.submit(self._construct, record.build_id)
+            elif record.state == "testing":
+                self._event(
+                    record,
+                    kind="status",
+                    phase="queue",
+                    message="Verificación recuperada después de reiniciar el servicio.",
+                    status="waiting",
+                    transient=False,
+                )
+                self._executor.submit(self._test, record.build_id)
+
+    def _record_payload(self, record: _BuildRecord) -> dict[str, object]:
+        return {
+            "schema_version": "1.0.0",
+            "build_id": record.build_id,
+            "project_id": record.project_id,
+            "owner_session_id": record.owner_session_id,
+            "draft": record.draft.model_dump(mode="json"),
+            "framework": record.framework.model_dump(mode="json"),
+            "contract": record.contract.model_dump(mode="json"),
+            "plugins": [item.model_dump(mode="json") for item in record.plugins],
+            "builder_runtime": record.builder_runtime,
+            "state": record.state,
+            "events": [item.model_dump(mode="json") for item in record.events],
+            "file_count": record.file_count,
+            "tests": [item.model_dump(mode="json") for item in record.tests],
+            "output_directory": str(record.output_directory or ""),
+            "artifact_uri": record.artifact_uri,
+            "artifact_digest": record.artifact_digest,
+            "error": record.error,
+            "catalog_agent_id": record.catalog_agent_id,
+            "attempts": record.attempts,
+            "max_attempts": record.max_attempts,
+            "updated_at": self._now().isoformat(),
+        }
+
+    @staticmethod
+    def _record_from_payload(payload: dict[str, object]) -> _BuildRecord:
+        record = _BuildRecord(
+            build_id=str(payload["build_id"]),
+            project_id=str(payload["project_id"]),
+            owner_session_id=str(payload["owner_session_id"]),
+            draft=AgentDraft.model_validate(payload["draft"]),
+            framework=FrameworkRecommendation.model_validate(payload["framework"]),
+            contract=AgentBuildContract.model_validate(payload["contract"]),
+            plugins=tuple(
+                PluginSelection.model_validate(item)
+                for item in cast(list[object], payload.get("plugins", []))
+            ),
+            builder_runtime=cast(BuilderRuntime, payload["builder_runtime"]),
+        )
+        record.state = cast(BuildState, payload.get("state", "queued"))
+        record.events = [
+            BuildEvent.model_validate(item)
+            for item in cast(list[object], payload.get("events", []))
+        ]
+        record.file_count = int(payload.get("file_count", 0))
+        record.tests = tuple(
+            BuildTestResult.model_validate(item)
+            for item in cast(list[object], payload.get("tests", []))
+        )
+        output_directory = str(payload.get("output_directory", ""))
+        record.output_directory = Path(output_directory) if output_directory else None
+        record.artifact_uri = str(payload.get("artifact_uri", ""))
+        record.artifact_digest = str(payload.get("artifact_digest", ""))
+        record.error = str(payload.get("error", ""))
+        record.catalog_agent_id = str(payload.get("catalog_agent_id", ""))
+        record.attempts = int(payload.get("attempts", 0))
+        record.max_attempts = int(payload.get("max_attempts", 2))
+        return record
 
     def _pause(self) -> None:
         if self._delay:

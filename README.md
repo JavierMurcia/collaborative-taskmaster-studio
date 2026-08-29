@@ -132,7 +132,9 @@ La ficha para copiar durante el video está en
 
 - selector automático y generadores versionados para Google ADK, Google Gen AI SDK, Genkit y
   Antigravity;
-- constructor asíncrono dentro del chat, aislado por sesión y detenido ante cualquier fallo;
+- cola durable de construcción con recuperación tras reinicios y estados auditables;
+- constructor determinista en un proceso aislado que no hereda credenciales de Google, Gemini u
+  OAuth;
 - aprobación humana separada antes de ejecutar las verificaciones locales;
 - manifiesto `taskmaster.manifest.json` con versión, revisión y checksums SHA-256;
 - herramientas simuladas protegidas por políticas de aprobación;
@@ -597,6 +599,7 @@ generated/           salida heredada de exportación ignorada por Git
 | [`16_HITO_H11_CONTENEDOR_AGENTES.md`](docs/16_HITO_H11_CONTENEDOR_AGENTES.md) | Recorrido vertical, biblioteca visual y proyectos ejecutables persistentes. |
 | [`17_ARQUITECTURA_INGENIERO_PLUGINS.md`](docs/17_ARQUITECTURA_INGENIERO_PLUGINS.md) | Relevo Gemini/Ingeniero, selector, plugins, catálogo y límites externos. |
 | [`20_PERSISTENCIA_DURABLE_PROYECTOS.md`](docs/20_PERSISTENCIA_DURABLE_PROYECTOS.md) | Catálogo Firestore y proyectos durables en Cloud Storage. |
+| [`21_COLA_CONSTRUCCION_AISLADA.md`](docs/21_COLA_CONSTRUCCION_AISLADA.md) | Cola durable, recuperación y trabajador de construcción sin credenciales. |
 
 ## Licencia
 
