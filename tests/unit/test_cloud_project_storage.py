@@ -45,6 +45,22 @@ class FakeClient:
         return self.bucket_instance
 
 
+class FailingBlob(FakeBlob):
+    def upload_from_string(self, value: str | bytes, **kwargs: object) -> None:
+        del value, kwargs
+        raise PermissionError("storage.objects.create denied")
+
+
+class FailingBucket(FakeBucket):
+    def blob(self, name: str) -> FailingBlob:
+        return FailingBlob(self.objects, name)
+
+
+class FailingClient(FakeClient):
+    def __init__(self) -> None:
+        self.bucket_instance = FailingBucket()
+
+
 def _settings(**updates: object) -> CloudStorageSettings:
     return CloudStorageSettings(
         enabled=True,
@@ -156,4 +172,25 @@ def test_storage_limits_are_enforced_before_upload(tmp_path: Path) -> None:
             directory=source,
         )
     assert client.bucket_instance.objects == {}
+
+
+def test_storage_failure_preserves_safe_diagnostics(tmp_path: Path) -> None:
+    store = CloudProjectArtifactStore(FailingClient(), _settings())
+    source = tmp_path / "agent"
+    source.mkdir()
+    (source / "agent.py").write_text("agent = True\n")
+
+    with pytest.raises(DomainError) as captured:
+        store.persist_directory(
+            owner_session_id="owner_one",
+            project_id="agent_12345678",
+            build_id="build_12345678",
+            directory=source,
+        )
+
+    assert captured.value.code == "PROJECT_STORAGE_UNAVAILABLE"
+    assert captured.value.context == {
+        "exception_type": "PermissionError",
+        "reason": "storage.objects.create denied",
+    }
 

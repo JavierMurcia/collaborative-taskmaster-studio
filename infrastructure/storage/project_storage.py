@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -12,6 +13,7 @@ from studio.domain.errors import DomainError
 from studio.ports.project_storage import StoredProject
 
 _MANIFEST = "_studio/project-manifest.json"
+_LOGGER = logging.getLogger(__name__)
 
 
 class CloudProjectArtifactStore:
@@ -71,9 +73,15 @@ class CloudProjectArtifactStore:
         except DomainError:
             raise
         except Exception as error:
+            _LOGGER.exception(
+                "Cloud Storage failed while persisting project %s for build %s",
+                project_id,
+                build_id,
+            )
             raise DomainError(
                 "PROJECT_STORAGE_UNAVAILABLE",
                 "No fue posible guardar el proyecto en Cloud Storage.",
+                context=_storage_error_context(error),
             ) from error
         return StoredProject(f"gs://{self._settings.bucket}/{prefix}", digest, len(files), total)
 
@@ -119,7 +127,12 @@ class CloudProjectArtifactStore:
         except DomainError:
             raise
         except Exception as error:
-            raise DomainError("PROJECT_STORAGE_UNAVAILABLE", "No fue posible restaurar el proyecto durable.") from error
+            _LOGGER.exception("Cloud Storage failed while restoring %s", uri)
+            raise DomainError(
+                "PROJECT_STORAGE_UNAVAILABLE",
+                "No fue posible restaurar el proyecto durable.",
+                context=_storage_error_context(error),
+            ) from error
 
     def persist_file(
         self,
@@ -142,7 +155,25 @@ class CloudProjectArtifactStore:
             )
             self._bucket.blob(object_name).upload_from_filename(str(source))
         except Exception as error:
-            raise DomainError("PROJECT_STORAGE_UNAVAILABLE", "No fue posible guardar el estado del agente.") from error
+            _LOGGER.exception("Cloud Storage failed while persisting runtime state for %s", uri)
+            raise DomainError(
+                "PROJECT_STORAGE_UNAVAILABLE",
+                "No fue posible guardar el estado del agente.",
+                context=_storage_error_context(error),
+            ) from error
+
+
+def _storage_error_context(error: Exception) -> dict[str, object]:
+    context: dict[str, object] = {"exception_type": type(error).__name__}
+    code = getattr(error, "code", None)
+    if callable(code):
+        code = code()
+    if code is not None:
+        context["status_code"] = str(code)
+    reason = str(error).replace("\r", " ").replace("\n", " ").strip()
+    if reason:
+        context["reason"] = reason[:500]
+    return context
 
 
 def _files(root: Path) -> list[Path]:
