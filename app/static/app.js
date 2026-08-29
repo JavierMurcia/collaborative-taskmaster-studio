@@ -558,15 +558,9 @@ async function loadConversationMemory() {
   try {
     const payload = await api("/api/v1/collaborative/conversations", { background: true });
     const remote = (payload.conversations || []).map(normalizeRemoteConversation).filter(validConversation);
-    const merged = new Map(remote.map((item) => [item.id, item]));
-    for (const local of state.partnerConversations) {
-      const stored = merged.get(local.id);
-      if (!stored || Date.parse(local.updatedAt || 0) > Date.parse(stored.updatedAt || 0)) {
-        merged.set(local.id, local);
-        scheduleConversationSync(local);
-      }
-    }
-    state.partnerConversations = [...merged.values()].sort((left, right) => Date.parse(right.updatedAt || 0) - Date.parse(left.updatedAt || 0)).slice(0, 40);
+    // A successful server read is authoritative. Re-uploading browser-only
+    // records here can resurrect conversations that were deleted elsewhere.
+    state.partnerConversations = remote.sort((left, right) => Date.parse(right.updatedAt || 0) - Date.parse(left.updatedAt || 0)).slice(0, 40);
     const active = state.partnerConversations.find((item) => item.id === state.activeConversationId);
     if (active) {
       state.partnerMessages = [...active.messages];

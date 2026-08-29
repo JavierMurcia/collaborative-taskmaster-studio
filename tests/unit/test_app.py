@@ -212,6 +212,20 @@ def test_startup_keeps_the_entry_chat_instead_of_opening_latest_history() -> Non
     assert "if (!state.activeConversationId && state.partnerConversations.length)" not in memory_implementation
 
 
+def test_remote_conversation_memory_is_authoritative_after_successful_load() -> None:
+    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(
+        encoding="utf-8"
+    )
+
+    memory_start = script.index("async function loadConversationMemory()")
+    memory_end = script.index("function renderConversationHistory", memory_start)
+    memory_implementation = script[memory_start:memory_end]
+
+    assert "state.partnerConversations = remote.sort" in memory_implementation
+    assert "for (const local of state.partnerConversations)" not in memory_implementation
+    assert "scheduleConversationSync(local)" not in memory_implementation
+
+
 def test_brand_button_returns_home_without_creating_a_conversation() -> None:
     script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(
         encoding="utf-8"
