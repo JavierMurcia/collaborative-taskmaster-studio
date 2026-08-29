@@ -134,6 +134,27 @@ def test_antigravity_workspace_rejects_path_escape_and_secret_material(tmp_path:
         workspace.write_project_file("config.txt", "sk-123456789012345678901234567890")
 
 
+def test_antigravity_removes_an_incomplete_scaffold_after_worker_failure(tmp_path: Path) -> None:
+    root = tmp_path / "generated"
+    destination = root / "failed-build"
+
+    def failed_runner(command: list[str], _cwd: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(command, 1, stdout="", stderr="safe failure")
+
+    orchestrator = AntigravitySdkOrchestrator("isolated-python", runner=failed_runner)
+
+    with pytest.raises(DomainError, match="trabajador aislado"):
+        orchestrator.construct(
+            _specification(),
+            destination,
+            generator=GoogleAdkGenerator(root),
+            contract={"sha256": "approved-contract"},
+            progress=lambda *_args: None,
+        )
+
+    assert not destination.exists()
+
+
 def test_antigravity_starts_with_deny_all_before_allowing_confined_tools(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

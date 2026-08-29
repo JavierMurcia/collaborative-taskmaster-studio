@@ -7,6 +7,7 @@ import importlib.metadata
 import json
 import os
 import re
+import shutil
 import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -181,9 +182,13 @@ class AntigravitySdkOrchestrator:
                 [self._python, "-m", "adapters.antigravity.worker", str(request_path)],
                 Path(__file__).resolve().parents[2],
             )
+        except Exception:
+            shutil.rmtree(seed.output_directory, ignore_errors=True)
+            raise
         finally:
             request_path.unlink(missing_ok=True)
         if result.returncode != 0:
+            shutil.rmtree(seed.output_directory, ignore_errors=True)
             raise DomainError(
                 "ANTIGRAVITY_WORKER_FAILED",
                 "El trabajador aislado de Antigravity se detuvo de forma segura.",
@@ -193,11 +198,13 @@ class AntigravitySdkOrchestrator:
             evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
             operations = evidence["operations"]
         except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+            shutil.rmtree(seed.output_directory, ignore_errors=True)
             raise DomainError(
                 "ANTIGRAVITY_EVIDENCE_INVALID",
                 "El trabajador de Antigravity no devolvió evidencia válida.",
             ) from error
         if not isinstance(operations, list) or not operations:
+            shutil.rmtree(seed.output_directory, ignore_errors=True)
             raise DomainError(
                 "ANTIGRAVITY_NO_OBSERVABLE_WORK",
                 "Antigravity no produjo ninguna operación observable sobre el proyecto.",

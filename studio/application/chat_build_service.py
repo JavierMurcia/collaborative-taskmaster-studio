@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import re
+import shutil
 import threading
 import time
 import uuid
@@ -346,12 +347,17 @@ class ChatBuildService:
         with self._lock:
             record = self._internal_record(build_id)
             allowed = (
-                record.state in {"queued", "building"}
+                record.state == "queued"
                 if operation == "construct"
                 else record.state == "testing"
             )
             if not allowed:
                 return
+            if operation == "construct":
+                # Claim the delivery before leaving the lock so duplicate Cloud Tasks
+                # cannot construct the same workspace concurrently in this worker.
+                record.state = "building"
+                self._persist(record)
         target = self._construct if operation == "construct" else self._test
         target(build_id, external=True)
 
@@ -435,6 +441,10 @@ class ChatBuildService:
             if destination.is_dir() and (destination / "studio-build-contract.json").is_file():
                 output_directory = destination
             else:
+                if record.attempts > 1 and destination.exists():
+                    # A prior isolated attempt may have left only a disposable scaffold.
+                    # Managed projects always contain the build contract and are preserved.
+                    shutil.rmtree(destination)
                 bundle = self._orchestrator.construct(
                     specification,
                     destination,
