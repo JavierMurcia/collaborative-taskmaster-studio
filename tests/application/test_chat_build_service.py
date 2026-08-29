@@ -20,6 +20,7 @@ from studio.application.agent_runtime_service import AgentRuntimeResult, Runtime
 from studio.application.catalog_agent_execution_service import CatalogAgentExecutionService
 from studio.application.chat_build_service import ChatBuildService, ChatBuildSnapshot
 from studio.domain.errors import DomainError
+from studio.ports.build_dispatcher import BuildOperation
 
 
 def _draft() -> dict[str, object]:
@@ -59,6 +60,7 @@ def _service(
     *,
     catalog: AgentCatalog | None = None,
     queue: JsonBuildQueueStore | None = None,
+    dispatcher=None,
 ) -> ChatBuildService:
     root = tmp_path / "projects"
     registry = FrameworkGeneratorRegistry(
@@ -75,6 +77,8 @@ def _service(
         step_delay_seconds=0,
         agent_catalog=catalog,
         build_queue=queue,
+        dispatcher=dispatcher,
+        external_dispatch_required=dispatcher is not None,
     )
 
 
@@ -194,6 +198,37 @@ def test_chat_build_is_restored_from_durable_queue_before_test_approval(
         "owner_one",
         {"completed", "failed"},
     )
+    assert completed.state == "completed"
+
+
+def test_external_dispatch_runs_each_phase_only_when_delivered(tmp_path: Path) -> None:
+    class RecordingDispatcher:
+        external = True
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, BuildOperation, int]] = []
+
+        def dispatch(self, build_id: str, operation: BuildOperation, attempt: int) -> str:
+            self.calls.append((build_id, operation, attempt))
+            return f"queues/taskmaster-builds/tasks/{build_id}-{operation}-a{attempt}"
+
+    dispatcher = RecordingDispatcher()
+    queue = JsonBuildQueueStore(tmp_path / "data")
+    service = _service(tmp_path, queue=queue, dispatcher=dispatcher)
+    started = service.start(
+        _draft(), owner_session_id="owner_one", confirmation="CONSTRUIR_AGENTE"
+    )
+    assert started.state == "queued"
+    assert dispatcher.calls == [(started.build_id, "construct", 0)]
+
+    service.execute_dispatched(started.build_id, "construct")
+    waiting = service.get(started.build_id, owner_session_id="owner_one")
+    assert waiting.state == "awaiting_test_approval"
+    service.decide_tests(started.build_id, owner_session_id="owner_one", decision="approved")
+    assert dispatcher.calls[-1] == (started.build_id, "test", 0)
+
+    service.execute_dispatched(started.build_id, "test")
+    completed = service.get(started.build_id, owner_session_id="owner_one")
     assert completed.state == "completed"
 
 

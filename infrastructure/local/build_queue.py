@@ -33,6 +33,12 @@ class JsonBuildQueueStore(BuildQueueStore):
             os.replace(temporary, path)
 
     def load(self, build_id: str, owner_session_id: str) -> dict[str, object] | None:
+        payload = self.load_internal(build_id)
+        if payload is None or payload.get("owner_session_id") != owner_session_id:
+            return None
+        return payload
+
+    def load_internal(self, build_id: str) -> dict[str, object] | None:
         path = self._path(build_id)
         with self._lock:
             if not path.is_file():
@@ -41,9 +47,7 @@ class JsonBuildQueueStore(BuildQueueStore):
                 payload = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 return None
-        if not isinstance(payload, dict) or payload.get("owner_session_id") != owner_session_id:
-            return None
-        return payload
+        return payload if isinstance(payload, dict) else None
 
     def list_pending(self) -> tuple[dict[str, object], ...]:
         pending: list[dict[str, object]] = []
@@ -64,4 +68,3 @@ class JsonBuildQueueStore(BuildQueueStore):
         path = (self._root / f"{build_id}.json").resolve()
         path.relative_to(self._root)
         return path
-

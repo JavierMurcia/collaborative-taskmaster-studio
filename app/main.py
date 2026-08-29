@@ -35,6 +35,7 @@ from infrastructure.cloud_run import (
     load_identity_definition,
     load_runtime_configuration,
 )
+from infrastructure.cloud_tasks import CloudTasksSettings, initialize_cloud_tasks
 from infrastructure.firestore import (
     FirestoreAgentCatalog,
     FirestoreBuildQueueStore,
@@ -95,7 +96,7 @@ from studio.capabilities.workspace import WorkspaceReader
 from studio.domain.errors import DomainError
 from studio.ports.clock import Clock
 from studio.ports.repositories import EventRepository, ProjectRepository
-from studio.security import IdentityVerifier
+from studio.security import IdentityVerifier, WorkerIdentitySettings, WorkerTokenVerifier
 from studio.security.credential_vault import build_credential_vault
 
 ROOT = Path(__file__).resolve().parent
@@ -149,6 +150,7 @@ class IdentityMiddleware(BaseHTTPMiddleware):
             "/api/v1/collaborative/auth/refresh",
             "/api/v1/collaborative/auth/logout",
             "/api/v1/collaborative/connections/oauth/callback",
+            "/api/v1/internal/build-worker",
         }
         protected = path.startswith("/api/v1/") and path not in public_paths
         if not protected:
@@ -205,6 +207,8 @@ def create_app(
     firestore_runtime = initialize_firestore(active_firestore_settings)
     active_storage_settings = cloud_storage_settings or CloudStorageSettings.from_environment()
     storage_runtime = initialize_cloud_storage(active_storage_settings)
+    cloud_tasks_settings = CloudTasksSettings.from_environment()
+    cloud_tasks_runtime = initialize_cloud_tasks(cloud_tasks_settings)
     firestore_indexes = verify_index_manifest()
     retention_policy = DemoRetentionPolicy(active_firestore_settings.demo_retention_days)
     firestore_retention = verify_retention_manifest(retention_policy)
@@ -321,6 +325,18 @@ def create_app(
         if firestore_runtime.client is not None and persistence_ready
         else JsonBuildQueueStore(data_directory)
     )
+    worker_tokens = (
+        WorkerTokenVerifier(
+            WorkerIdentitySettings(
+                enabled=True,
+                audience=cloud_tasks_settings.audience,
+                service_account_email=cloud_tasks_settings.worker_service_account,
+                queue_name=cloud_tasks_settings.queue,
+            )
+        )
+        if cloud_tasks_runtime.dispatcher is not None
+        else None
+    )
     framework_generators = FrameworkGeneratorRegistry(
         (
             GoogleAdkGenerator(output_root),
@@ -402,6 +418,8 @@ def create_app(
             agent_catalog=agent_catalog,
             project_store=project_store,
             build_queue=build_queue,
+            dispatcher=cloud_tasks_runtime.dispatcher,
+            external_dispatch_required=cloud_tasks_settings.enabled,
         ),
         agent_catalog=agent_catalog,
         catalog_agent_runtime=CatalogAgentExecutionService(
@@ -417,10 +435,12 @@ def create_app(
         google_calendar=google_calendar,
         github=github,
         builder_readiness=builder_readiness,
+        worker_tokens=worker_tokens,
     )
     app.state.services = services
     app.state.startup_complete = True
     app.state.persistence_ready = persistence_ready
+    app.state.orchestration_ready = cloud_tasks_runtime.ready
     app.include_router(create_router(services))
 
     @app.exception_handler(DomainError)
@@ -483,7 +503,8 @@ def create_app(
     async def readiness() -> JSONResponse:
         startup_ready = bool(app.state.startup_complete)
         persistence_ready = bool(app.state.persistence_ready)
-        ready = startup_ready and persistence_ready
+        orchestration_ready = bool(app.state.orchestration_ready)
+        ready = startup_ready and persistence_ready and orchestration_ready
         return JSONResponse(
             status_code=200 if ready else 503,
             content={
@@ -492,6 +513,7 @@ def create_app(
                 "checks": {
                     "application": "ready" if startup_ready else "not_ready",
                     "persistence": "ready" if persistence_ready else "not_ready",
+                    "orchestration": "ready" if orchestration_ready else "not_ready",
                 },
             },
         )
@@ -752,8 +774,12 @@ def create_app(
 
 
 def _domain_status(code: str) -> int:
-    if code in {"ENTITY_NOT_FOUND", "REVISION_NOT_FOUND", "EVALUATION_NOT_FOUND"}:
+    if code in {"ENTITY_NOT_FOUND", "REVISION_NOT_FOUND", "EVALUATION_NOT_FOUND", "BUILD_NOT_FOUND"}:
         return 404
+    if code in {"WORKER_AUTH_REQUIRED", "WORKER_AUTH_INVALID", "WORKER_TASK_INVALID"}:
+        return 401
+    if code in {"WORKER_DISABLED", "BUILD_DISPATCH_UNAVAILABLE", "BUILD_DISPATCH_FAILED"}:
+        return 503
     if code in {"PROJECT_ACCESS_DENIED"}:
         return 403
     if "CONFLICT" in code or code in {

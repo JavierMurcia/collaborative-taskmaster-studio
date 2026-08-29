@@ -19,6 +19,7 @@ EXPECTED_ROLES = frozenset(
         "roles/aiplatform.user",
         "roles/datastore.user",
         "roles/storage.objectUser",
+        "roles/cloudtasks.enqueuer",
         "roles/secretmanager.secretAccessor",
     }
 )
@@ -269,6 +270,15 @@ def _validate_definition(definition: RuntimeIamDefinition) -> None:
         not in storage.condition.expression_template
     ):
         raise ValueError("El acceso Storage debe limitarse al bucket de proyectos.")
+    tasks = next(
+        binding for binding in definition.bindings if binding.role == "roles/cloudtasks.enqueuer"
+    )
+    if (
+        tasks.condition is None
+        or "/locations/us-central1/queues/taskmaster-builds"
+        not in tasks.condition.expression_template
+    ):
+        raise ValueError("El despacho debe limitarse a la cola de construcción declarada.")
     vertex = next(
         binding for binding in definition.bindings if binding.role == "roles/aiplatform.user"
     )

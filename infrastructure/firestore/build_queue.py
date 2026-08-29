@@ -35,14 +35,25 @@ class FirestoreBuildQueueStore(BuildQueueStore):
         )
 
     def load(self, build_id: str, owner_session_id: str) -> dict[str, object] | None:
+        document = self._document(build_id)
+        if document is None or document.get("owner_hash") != _owner_key(owner_session_id):
+            return None
+        record = document.get("record")
+        return record if isinstance(record, dict) else None
+
+    def load_internal(self, build_id: str) -> dict[str, object] | None:
+        document = self._document(build_id)
+        if document is None:
+            return None
+        record = document.get("record")
+        return record if isinstance(record, dict) else None
+
+    def _document(self, build_id: str) -> dict[str, object] | None:
         snapshot = self._client.collection(_COLLECTION).document(build_id).get()
         if not snapshot.exists:
             return None
         document = snapshot.to_dict() or {}
-        if document.get("owner_hash") != _owner_key(owner_session_id):
-            return None
-        record = document.get("record")
-        return record if isinstance(record, dict) else None
+        return document if isinstance(document, dict) else None
 
     def list_pending(self) -> tuple[dict[str, object], ...]:
         records: list[dict[str, object]] = []
@@ -52,4 +63,3 @@ class FirestoreBuildQueueStore(BuildQueueStore):
             if isinstance(record, dict):
                 records.append(record)
         return tuple(records)
-

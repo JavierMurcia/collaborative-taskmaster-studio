@@ -15,6 +15,7 @@ from app.api.schemas import (
     AgentMessageRequest,
     ApprovalRequest,
     BriefingCorrectionRequest,
+    BuildWorkerRequest,
     CatalogAgentUpdateRequest,
     ChatBuildDecisionRequest,
     ChatBuildRequest,
@@ -64,7 +65,7 @@ from studio.domain.errors import DomainError
 from studio.domain.models import AuditEvent, ProjectSnapshot
 from studio.ports.clock import Clock
 from studio.ports.repositories import EventRepository, ProjectRepository
-from studio.security import IdentityContext
+from studio.security import IdentityContext, WorkerTokenVerifier
 from studio.security.browser_oauth import BrowserOAuthService
 
 IDENTITY_REFRESH_COOKIE = "studio_identity_refresh"
@@ -104,6 +105,7 @@ class ServiceContainer:
     google_calendar: GoogleCalendarReader | None
     github: GitHubReader | None
     builder_readiness: BuilderReadiness
+    worker_tokens: WorkerTokenVerifier | None
     repository: ProjectRepository
     events: EventRepository
 
@@ -136,6 +138,7 @@ class ServiceContainer:
         google_calendar: GoogleCalendarReader | None = None,
         github: GitHubReader | None = None,
         builder_readiness: BuilderReadiness | None = None,
+        worker_tokens: WorkerTokenVerifier | None = None,
     ) -> ServiceContainer:
         if agent_runtime is None:
             agent_runtime = AgentRuntimeService(repository, events, clock)
@@ -194,6 +197,7 @@ class ServiceContainer:
             google_calendar=google_calendar,
             github=github,
             builder_readiness=builder_readiness or inspect_builder_readiness(),
+            worker_tokens=worker_tokens,
             repository=repository,
             events=events,
         )
@@ -202,6 +206,19 @@ class ServiceContainer:
 def create_router(services: ServiceContainer) -> APIRouter:
     router = APIRouter(prefix="/api/v1")
     browser_oauth = BrowserOAuthService()
+
+    @router.post("/internal/build-worker", include_in_schema=False, status_code=204)
+    def execute_build_worker(
+        body: BuildWorkerRequest,
+        authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+        task_name: Annotated[str | None, Header(alias="X-CloudTasks-TaskName")] = None,
+        queue_name: Annotated[str | None, Header(alias="X-CloudTasks-QueueName")] = None,
+    ) -> Response:
+        if services.worker_tokens is None or services.chat_builder is None:
+            raise DomainError("WORKER_DISABLED", "El worker externo no está habilitado.")
+        services.worker_tokens.verify(authorization, task_name, queue_name)
+        services.chat_builder.execute_dispatched(body.build_id, body.operation)
+        return Response(status_code=204)
 
     @router.post("/collaborative/messages")
     def collaborative_message(

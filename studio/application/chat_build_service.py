@@ -28,6 +28,7 @@ from studio.application.plugin_registry import PluginRegistry, PluginSelection
 from studio.domain.enums import ApprovalStatus
 from studio.domain.errors import DomainError
 from studio.domain.models import Approval, Briefing, Policy, TaskmasterSpecification, Tool
+from studio.ports.build_dispatcher import BuildDispatcher, BuildOperation
 from studio.ports.build_queue import BuildQueueStore
 from studio.ports.construction import (
     BuilderRuntime,
@@ -169,6 +170,8 @@ class ChatBuildService:
         agent_catalog: AgentCatalogRepository | None = None,
         project_store: ProjectArtifactStore | None = None,
         build_queue: BuildQueueStore | None = None,
+        dispatcher: BuildDispatcher | None = None,
+        external_dispatch_required: bool = False,
         max_attempts: int = 2,
     ) -> None:
         self._adapter = adapter
@@ -184,6 +187,8 @@ class ChatBuildService:
         self._catalog = agent_catalog
         self._project_store = project_store or LocalProjectArtifactStore()
         self._build_queue = build_queue
+        self._dispatcher = dispatcher
+        self._external_dispatch_required = external_dispatch_required
         self._max_attempts = min(3, max(1, max_attempts))
         self._records: dict[str, _BuildRecord] = {}
         self._lock = threading.RLock()
@@ -197,6 +202,13 @@ class ChatBuildService:
             "runtime": self._orchestrator.runtime_id,
             "max_attempts": self._max_attempts,
             "restart_recovery": self._build_queue is not None,
+            "external_dispatch": bool(self._dispatcher and self._dispatcher.external),
+            "external_dispatch_required": self._external_dispatch_required,
+            "dispatcher": (
+                "cloud_tasks"
+                if self._dispatcher
+                else ("unavailable" if self._external_dispatch_required else "in_process")
+            ),
         }
 
     def start(
@@ -264,7 +276,7 @@ class ChatBuildService:
                 status="passed",
                 transient=False,
             )
-        self._executor.submit(self._construct, build_id)
+        self._dispatch(build_id, "construct")
         return self._snapshot(record)
 
     def get(
@@ -323,8 +335,23 @@ class ChatBuildService:
                 status="passed",
                 transient=False,
             )
-        self._executor.submit(self._test, build_id)
+        self._dispatch(build_id, "test")
         return self.get(build_id, owner_session_id=owner_session_id)
+
+    def execute_dispatched(self, build_id: str, operation: BuildOperation) -> None:
+        """Execute one authenticated delivery idempotently from the durable record."""
+
+        with self._lock:
+            record = self._internal_record(build_id)
+            allowed = (
+                record.state in {"queued", "building"}
+                if operation == "construct"
+                else record.state == "testing"
+            )
+            if not allowed:
+                return
+        target = self._construct if operation == "construct" else self._test
+        target(build_id, external=True)
 
     def download(self, build_id: str, *, owner_session_id: str) -> tuple[str, bytes]:
         with self._lock:
@@ -354,7 +381,7 @@ class ChatBuildService:
                 archive.writestr(relative.as_posix(), path.read_bytes())
         return filename, buffer.getvalue()
 
-    def _construct(self, build_id: str) -> None:
+    def _construct(self, build_id: str, *, external: bool = False) -> None:
         try:
             with self._lock:
                 record = self._records[build_id]
@@ -470,9 +497,13 @@ class ChatBuildService:
                     },
                 )
         except Exception as error:  # pragma: no cover - defensive worker boundary
-            self._handle_worker_error(build_id, error, phase="generation", operation="construct")
+            retry = self._handle_worker_error(
+                build_id, error, phase="generation", operation="construct"
+            )
+            if retry and external:
+                raise
 
-    def _test(self, build_id: str) -> None:
+    def _test(self, build_id: str, *, external: bool = False) -> None:
         try:
             with self._lock:
                 record = self._records[build_id]
@@ -571,7 +602,9 @@ class ChatBuildService:
                         transient=False,
                     )
         except Exception as error:  # pragma: no cover - defensive worker boundary
-            self._handle_worker_error(build_id, error, phase="testing", operation="test")
+            retry = self._handle_worker_error(build_id, error, phase="testing", operation="test")
+            if retry and external:
+                raise
 
     def _construction_progress(
         self,
@@ -925,8 +958,8 @@ class ChatBuildService:
         error: Exception,
         *,
         phase: str,
-        operation: Literal["construct", "test"],
-    ) -> None:
+        operation: BuildOperation,
+    ) -> bool:
         with self._lock:
             record = self._records[build_id]
             retry = not isinstance(error, DomainError) and record.attempts < record.max_attempts
@@ -960,9 +993,52 @@ class ChatBuildService:
                         "error_type": type(error).__name__,
                     },
                 )
-        if retry:
-            target = self._construct if operation == "construct" else self._test
-            self._executor.submit(target, build_id)
+        if retry and self._dispatcher is None:
+            self._dispatch(build_id, operation)
+        return retry
+
+    def _dispatch(self, build_id: str, operation: BuildOperation) -> None:
+        with self._lock:
+            record = self._records[build_id]
+            attempt = record.attempts
+        if self._dispatcher is not None:
+            try:
+                task_name = self._dispatcher.dispatch(build_id, operation, attempt)
+            except Exception as error:
+                with self._lock:
+                    record = self._records[build_id]
+                    self._event(
+                        record,
+                        kind="status",
+                        phase="queue",
+                        message="La construcción quedó guardada, pero no pudo entregarse al worker.",
+                        status="waiting",
+                        transient=False,
+                        details={"error_type": type(error).__name__},
+                    )
+                raise DomainError(
+                    "BUILD_DISPATCH_FAILED",
+                    "La construcción quedó guardada, pero Cloud Tasks no pudo recibirla.",
+                ) from error
+            with self._lock:
+                record = self._records[build_id]
+                self._event(
+                    record,
+                    kind="status",
+                    phase="queue",
+                    message="Trabajo entregado a la cola durable de construcción.",
+                    status="waiting",
+                    transient=False,
+                    details={"task": task_name.rsplit("/", 1)[-1], "operation": operation},
+                )
+            return
+        if self._external_dispatch_required:
+            raise DomainError(
+                "BUILD_DISPATCH_UNAVAILABLE",
+                "La cola externa requerida no está disponible; no se ejecutará dentro del servidor web.",
+            )
+        target = self._construct if operation == "construct" else self._test
+        self._executor.submit(target, build_id)
 
     def _persist(self, record: _BuildRecord) -> None:
         if self._build_queue is not None:
@@ -991,7 +1067,10 @@ class ChatBuildService:
                     status="waiting",
                     transient=False,
                 )
-                self._executor.submit(self._construct, record.build_id)
+                try:
+                    self._dispatch(record.build_id, "construct")
+                except DomainError:
+                    continue
             elif record.state == "testing":
                 self._event(
                     record,
@@ -1001,7 +1080,21 @@ class ChatBuildService:
                     status="waiting",
                     transient=False,
                 )
-                self._executor.submit(self._test, record.build_id)
+                try:
+                    self._dispatch(record.build_id, "test")
+                except DomainError:
+                    continue
+
+    def _internal_record(self, build_id: str) -> _BuildRecord:
+        record = self._records.get(build_id)
+        if record is None and self._build_queue is not None:
+            payload = self._build_queue.load_internal(build_id)
+            if payload is not None:
+                record = self._record_from_payload(payload)
+                self._records[build_id] = record
+        if record is None:
+            raise DomainError("BUILD_NOT_FOUND", "La construcción solicitada no existe.")
+        return record
 
     def _record_payload(self, record: _BuildRecord) -> dict[str, object]:
         return {

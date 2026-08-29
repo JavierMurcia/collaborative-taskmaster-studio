@@ -38,6 +38,7 @@ def test_readiness_reports_application_and_persistence_without_cloud_details() -
         "checks": {
             "application": "ready",
             "persistence": "ready",
+            "orchestration": "ready",
         },
     }
     serialized = response.text.casefold()
@@ -74,5 +75,22 @@ def test_readiness_fails_closed_when_persistence_is_unavailable() -> None:
         "checks": {
             "application": "ready",
             "persistence": "not_ready",
+            "orchestration": "ready",
         },
+    }
+
+
+def test_readiness_fails_closed_when_external_orchestration_is_unavailable() -> None:
+    previous = app.state.orchestration_ready
+    app.state.orchestration_ready = False
+    try:
+        response = client.get("/health/ready")
+    finally:
+        app.state.orchestration_ready = previous
+
+    assert response.status_code == 503
+    assert response.json()["checks"] == {
+        "application": "ready",
+        "persistence": "ready",
+        "orchestration": "not_ready",
     }

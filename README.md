@@ -132,7 +132,8 @@ La ficha para copiar durante el video está en
 
 - selector automático y generadores versionados para Google ADK, Google Gen AI SDK, Genkit y
   Antigravity;
-- cola durable de construcción con recuperación tras reinicios y estados auditables;
+- cola durable de construcción con Cloud Tasks, entrega OIDC, recuperación tras reinicios y estados
+  auditables;
 - constructor determinista en un proceso aislado que no hereda credenciales de Google, Gemini u
   OAuth;
 - aprobación humana separada antes de ejecutar las verificaciones locales;
@@ -221,6 +222,8 @@ duradero específico para adjuntos.
 - Firestore con revisiones, aprobaciones, eventos y artefactos en subcolecciones;
 - catálogo multiusuario en Firestore cuando la persistencia cloud está activa;
 - réplica durable, verificable y sin archivos comprimidos de `projects/` en Cloud Storage;
+- construcción despachada fuera de la petición web mediante una cola Cloud Tasks regional, con una
+  identidad de trabajador dedicada, dos intentos máximos y cierre seguro si la cola no está lista;
 - transacciones críticas con reintentos acotados y concurrencia optimista;
 - retención demo de siete días declarada para raíz y subcolecciones;
 - Cloud Run con mínimo cero, máximo una instancia y concurrencia uno;

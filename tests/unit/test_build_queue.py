@@ -15,8 +15,8 @@ def test_json_build_queue_is_owner_scoped_and_lists_pending(tmp_path) -> None:
 
     assert queue.load("build_1234567890abcdef", "owner_two") is None
     assert queue.load("build_1234567890abcdef", "owner_one") == payload
+    assert queue.load_internal("build_1234567890abcdef") == payload
     assert queue.list_pending() == (payload,)
 
     queue.save("build_1234567890abcdef", {**payload, "state": "completed"})
     assert queue.list_pending() == ()
-

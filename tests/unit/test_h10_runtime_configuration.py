@@ -75,7 +75,7 @@ def test_definition_declares_production_identity_and_oauth_secrets() -> None:
     definition = load_runtime_configuration()
     environment = definition.rendered_environment(PROJECT_ID)
 
-    assert len(environment) == 31
+    assert len(environment) == 35
     assert environment["STUDIO_ENABLE_CLOUD_STORAGE"] == "true"
     assert environment["STUDIO_PROJECTS_BUCKET"] == f"{PROJECT_ID}-taskmaster-projects"
     assert environment["STUDIO_PROJECTS_ROOT"] == "/tmp/projects"
@@ -83,6 +83,11 @@ def test_definition_declares_production_identity_and_oauth_secrets() -> None:
     assert environment["GOOGLE_GENAI_USE_VERTEXAI"] == "true"
     assert environment["STUDIO_ENABLE_VERTEX"] == "true"
     assert environment["STUDIO_ENABLE_FIRESTORE"] == "true"
+    assert environment["STUDIO_ENABLE_CLOUD_TASKS"] == "true"
+    assert environment["STUDIO_CLOUD_TASKS_QUEUE"] == "taskmaster-builds"
+    assert environment["STUDIO_BUILD_WORKER_SERVICE_ACCOUNT"] == (
+        f"taskmaster-build-worker@{PROJECT_ID}.iam.gserviceaccount.com"
+    )
     assert environment["STUDIO_GEMINI_MODEL"] == "gemini-3.7-flash"
     assert {item.environment_variable for item in definition.secrets} == {
         "STUDIO_FIREBASE_API_KEY",
@@ -139,6 +144,7 @@ def test_plan_uses_runtime_identity_and_non_secret_environment() -> None:
     assert f"GOOGLE_CLOUD_PROJECT={PROJECT_ID}" in env_argument
     assert "STUDIO_ENABLE_VERTEX=true" in env_argument
     assert "STUDIO_ENABLE_FIRESTORE=true" in env_argument
+    assert "STUDIO_ENABLE_CLOUD_TASKS=true" in env_argument
     assert "PORT=" not in env_argument
 
 

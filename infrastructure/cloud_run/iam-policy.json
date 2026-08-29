@@ -26,6 +26,15 @@
       }
     },
     {
+      "role": "roles/cloudtasks.enqueuer",
+      "purpose": "Create build tasks only in the declared regional queue.",
+      "condition": {
+        "title": "taskmaster_build_queue_only",
+        "description": "Restrict task creation to the Taskmaster build queue.",
+        "expression_template": "resource.name.startsWith(\"projects/{project_id}/locations/us-central1/queues/taskmaster-builds\")"
+      }
+    },
+    {
       "role": "roles/secretmanager.secretAccessor",
       "purpose": "Read only the six runtime secrets declared for identity and OAuth.",
       "condition": {

@@ -100,6 +100,12 @@ class ChatBuildDecisionRequest(RequestModel):
     decision: Literal["approved", "rejected"]
 
 
+class BuildWorkerRequest(RequestModel):
+    schema_version: Literal["1.0.0"]
+    build_id: str = Field(pattern=r"^build_[a-f0-9]{16}$")
+    operation: Literal["construct", "test"]
+
+
 class CatalogAgentUpdateRequest(RequestModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     icon: Literal["spark", "workflow", "document", "research", "operations", "shield"] | None = None
