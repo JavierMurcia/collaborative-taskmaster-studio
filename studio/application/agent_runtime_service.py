@@ -95,6 +95,7 @@ class AgentRuntimeService:
             owner_session_id=owner_session_id,
             idempotency_key=idempotency_key,
             identity=identity,
+            document_evidence=document_evidence,
         )
         self._record(project_id, owner_session_id, idempotency_key, result)
         return result
@@ -108,6 +109,7 @@ class AgentRuntimeService:
         owner_session_id: str,
         idempotency_key: str,
         identity: IdentityContext | None = None,
+        document_evidence: str = "",
     ) -> AgentRuntimeResult:
         """Run an already-approved specification loaded from a catalog project."""
 
