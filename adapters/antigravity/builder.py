@@ -31,20 +31,25 @@ _SECRET_PATTERN = re.compile(
 class _SdkBindings:
     agent: type[Any]
     config: type[Any]
-    deny: Callable[[str], object]
+    deny_all: Callable[[], object]
     allow: Callable[[str], object]
 
 
 def _load_sdk() -> _SdkBindings:
     try:
         from google.antigravity import Agent, LocalAgentConfig
-        from google.antigravity.hooks.policy import allow, deny
+        from google.antigravity.hooks.policy import allow, deny_all
     except (ImportError, ModuleNotFoundError) as error:
         raise DomainError(
             "ANTIGRAVITY_SDK_UNAVAILABLE",
             "El SDK de Antigravity no está instalado en el entorno de construcción.",
         ) from error
-    return _SdkBindings(agent=Agent, config=LocalAgentConfig, deny=deny, allow=allow)
+    return _SdkBindings(
+        agent=Agent,
+        config=LocalAgentConfig,
+        deny_all=deny_all,
+        allow=allow,
+    )
 
 
 def sdk_version() -> str:
@@ -218,7 +223,7 @@ async def orchestrate_workspace(
             "Antigravity requiere un proyecto y una región de Vertex AI explícitos.",
         )
     policies = [
-        sdk.deny("*"),
+        sdk.deny_all(),
         sdk.allow("list_project_files"),
         sdk.allow("read_project_file"),
         sdk.allow("write_project_file"),

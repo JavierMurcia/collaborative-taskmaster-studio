@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
 from datetime import UTC, datetime
@@ -7,7 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from adapters.antigravity.builder import AntigravitySdkOrchestrator, _ConfinedWorkspace
+from adapters.antigravity import builder as antigravity_builder
+from adapters.antigravity.builder import (
+    AntigravitySdkOrchestrator,
+    _ConfinedWorkspace,
+    _SdkBindings,
+    orchestrate_workspace,
+)
 from adapters.google_adk import GoogleAdkGenerator
 from studio.application.builder_readiness import inspect_builder_readiness
 from studio.application.official_designer import OfficialAcademicDesigner
@@ -125,6 +132,61 @@ def test_antigravity_workspace_rejects_path_escape_and_secret_material(tmp_path:
         workspace.write_project_file("../escape.py", "unsafe")
     with pytest.raises(ValueError, match="secret material"):
         workspace.write_project_file("config.txt", "sk-123456789012345678901234567890")
+
+
+def test_antigravity_starts_with_deny_all_before_allowing_confined_tools(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        async def text(self) -> str:
+            return "Proyecto inspeccionado."
+
+    class FakeAgent:
+        def __init__(self, config: dict[str, object]) -> None:
+            captured.update(config)
+
+        async def __aenter__(self) -> FakeAgent:
+            return self
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+        async def chat(self, _prompt: str) -> FakeResponse:
+            tools = captured["tools"]
+            assert isinstance(tools, list)
+            tools[0]()
+            return FakeResponse()
+
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "verified-project")
+    monkeypatch.setenv("STUDIO_ANTIGRAVITY_VERTEX_LOCATION", "us-central1")
+    monkeypatch.setattr(
+        antigravity_builder,
+        "_load_sdk",
+        lambda: _SdkBindings(
+            agent=FakeAgent,
+            config=lambda **values: values,
+            deny_all=lambda: "deny-all",
+            allow=lambda name: f"allow:{name}",
+        ),
+    )
+
+    result = asyncio.run(
+        orchestrate_workspace(
+            _ConfinedWorkspace(tmp_path),
+            {"purpose": "Preparar un informe"},
+            {"sha256": "approved-contract"},
+        )
+    )
+
+    assert result == "Proyecto inspeccionado."
+    assert captured["policies"] == [
+        "deny-all",
+        "allow:list_project_files",
+        "allow:read_project_file",
+        "allow:write_project_file",
+    ]
 
 
 def test_readiness_activates_only_a_verified_isolated_python(
