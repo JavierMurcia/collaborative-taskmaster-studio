@@ -507,11 +507,18 @@ function persistPartnerHistory() {
 
 function serializeConversation(conversation) {
   const allowedMessageKeys = ["role", "content", "model", "provider", "intent", "agentDraft", "toolActivity", "connectionOffers", "kind", "createdProjectId", "buildId", "build", "activityExpanded", "sourceLabel"];
+  const compactMessage = (message) => {
+    const serialized = Object.fromEntries(allowedMessageKeys.filter((key) => message[key] !== undefined).map((key) => [key, message[key]]));
+    if (serialized.build && Array.isArray(serialized.build.events)) {
+      serialized.build = { ...serialized.build, events: serialized.build.events.slice(-16) };
+    }
+    return serialized;
+  };
   return {
     title: conversation.title,
     phase: conversation.phase || "discovery",
     document_ids: conversation.documentIds || [],
-    messages: conversation.messages.slice(-32).map((message) => Object.fromEntries(allowedMessageKeys.filter((key) => message[key] !== undefined).map((key) => [key, message[key]]))),
+    messages: conversation.messages.slice(-32).map(compactMessage),
   };
 }
 

@@ -202,6 +202,12 @@ def test_chat_build_is_restored_from_durable_queue_before_test_approval(
     )
     assert completed.state == "completed"
 
+    # The original long-lived web process still has the pre-test state cached.
+    # Reads must refresh from the durable queue after a separate worker finishes.
+    refreshed = first.get(started.build_id, owner_session_id="owner_one")
+    assert refreshed.state == "completed"
+    assert refreshed.download_ready is True
+
 
 def test_external_dispatch_runs_each_phase_only_when_delivered(tmp_path: Path) -> None:
     class RecordingDispatcher:

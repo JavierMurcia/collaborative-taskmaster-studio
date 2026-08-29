@@ -906,12 +906,14 @@ class ChatBuildService:
         )
 
     def _authorized(self, build_id: str, owner_session_id: str) -> _BuildRecord:
-        record = self._records.get(build_id)
-        if record is None and self._build_queue is not None:
+        record = None
+        if self._build_queue is not None:
             payload = self._build_queue.load(build_id, owner_session_id)
             if payload is not None:
                 record = self._record_from_payload(payload)
                 self._records[build_id] = record
+        if record is None:
+            record = self._records.get(build_id)
         if record is None or record.owner_session_id != owner_session_id:
             raise DomainError(
                 "BUILD_NOT_FOUND", "No existe una construcción accesible con ese identificador."
