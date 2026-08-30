@@ -41,7 +41,7 @@ def test_final_architecture_records_deployed_components_and_limits() -> None:
         assert claim in content
 
 
-def test_architecture_markdown_links_resolve_and_readme_points_to_final_view() -> None:
+def test_architecture_markdown_links_resolve_and_readme_embeds_current_view() -> None:
     content = FINAL_ARCHITECTURE.read_text(encoding="utf-8")
     links = re.findall(r"\[[^]]+\]\(([^)]+)\)", content)
 
@@ -51,13 +51,18 @@ def test_architecture_markdown_links_resolve_and_readme_points_to_final_view() -
         assert (FINAL_ARCHITECTURE.parent / target).resolve().is_file()
 
     readme = README.read_text(encoding="utf-8")
-    assert "docs/12_DIAGRAMA_ARQUITECTURA_FINAL.md" in readme
+    assert "## Architecture" in readme
+    assert "```mermaid" in readme
+    assert "Gemini 3.7 Flash" in readme
+    assert "Cloud Tasks" in readme
+    assert "Antigravity" in readme
 
 
-def test_readme_indexes_current_product_documentation() -> None:
+def test_readme_is_self_contained_for_public_evaluation() -> None:
     readme = README.read_text(encoding="utf-8")
 
-    for number in range(23, 29):
-        match = re.search(rf"\]\(docs/({number}_[^)]+\.md)\)", readme)
-        assert match, f"README does not index document {number}"
-        assert (ROOT / "docs" / match.group(1)).is_file()
+    assert "docs/" not in readme
+    assert "## Local quick start" in readme
+    assert "## Google Cloud deployment workflow" in readme
+    assert "## Test and quality gates" in readme
+    assert "## Live evaluation path" in readme

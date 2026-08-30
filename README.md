@@ -1,625 +1,658 @@
 # Collaborative Taskmaster Studio
 
-**Un Collaborative Partner que convierte una tarea ambigua en un Taskmaster ejecutable, revisable
-y verificable.** Entrevista al usuario, estructura requisitos, incorpora feedback, exige aprobación
-humana, selecciona automáticamente el framework adecuado, genera un proyecto reproducible y
-demuestra su comportamiento en un laboratorio aislado.
+> A Collaborative Partner that turns an ambiguous job into a scoped, approved, tested, and
+> reusable AI Taskmaster.
 
-La experiencia se está reconstruyendo desde su fundamento: la entrada principal es ahora una
-**conversación continua y real con Gemini 3.7 Flash en Vertex AI**. Gemini
-explora el problema, hace preguntas adaptativas y mantiene el contexto. Cuando el borrador está
-completo, una confirmación humana entrega la especificación a un **Ingeniero de agentes** distinto:
-este genera el proyecto, muestra actividad observable, solicita permiso antes de probar y guarda
-un Taskmaster ejecutable en la carpeta obligatoria `projects/`, sin abandonar el chat.
+[![Python 3.13](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Google Cloud Run](https://img.shields.io/badge/Google_Cloud-Cloud_Run-4285F4?logo=googlecloud&logoColor=white)](https://cloud.google.com/run)
+[![Gemini on Vertex AI](https://img.shields.io/badge/Gemini_3.7_Flash-Vertex_AI-8E75B2?logo=google&logoColor=white)](https://cloud.google.com/vertex-ai/generative-ai)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-D22128)](https://www.apache.org/licenses/LICENSE-2.0)
 
-La interfaz de esta conversación sigue patrones de un producto LLM: compositor persistente,
-`Enter` para enviar, `Shift+Enter` para una nueva línea, indicador de respuesta, historial local,
-copia de mensajes y representación segura de listas y bloques de código. La actividad del
-constructor describe acciones y resultados verificables; nunca presenta razonamiento privado del
-modelo como si fuera telemetría.
+**Live application:**
+[collaborative-taskmaster-studio-760216344589.us-central1.run.app](https://collaborative-taskmaster-studio-760216344589.us-central1.run.app/)
 
-## Demo pública
+- **Hackathon:** [All Things Agentic](https://allthingsagentichackathon.devpost.com/)
+- **Category:** Collaborative Partner
+- **Primary model:** Gemini 3.7 Flash through Vertex AI
+- **Agent frameworks:** Google ADK, Google Gen AI SDK, Antigravity SDK, and Genkit generators
+- **Google Cloud:** Cloud Run, Firestore, Cloud Storage, Cloud Tasks, Vertex AI, Cloud Build, and
+  Artifact Registry
 
-<https://collaborative-taskmaster-studio-760216344589.us-central1.run.app>
+---
 
-La versión pública ejecuta **Gemini 3.7 Flash en Vertex AI**, persiste el estado en Firestore y está
-desplegada en Cloud Run. Está destinada a evaluación y demostración: no introduzca secretos, datos
-personales ni información confidencial.
+## Why this exists
 
-## Estado
+Most agent builders begin after the hardest decisions have already been made. They assume the user
+knows the exact objective, inputs, tools, permissions, failure policy, memory model, and framework.
+Real work rarely arrives that cleanly.
 
-- H0–H11 completados: producto vertical, Gemini, Google ADK, Firestore, Cloud Run y entrega
-  reproducible.
-- Capacidades posteriores activas: identidad multiusuario, construcción durable con Cloud Tasks,
-  Antigravity aislado, catálogo conversacional, archivos múltiples y dashboards de datasets.
-- Última revisión funcional registrada: `collaborative-taskmaster-studio-00056-mrx`.
-- Recorrido desplegado: diseño, doble aprobación, construcción durable, laboratorio, catálogo y
-  ejecución conversacional.
-- Calidad local: suite automatizada y análisis estático forman parte de la puerta de publicación.
-- Estado consolidado: [`docs/23_ESTADO_ACTUAL_PRODUCTO.md`](docs/23_ESTADO_ACTUAL_PRODUCTO.md).
+Collaborative Taskmaster Studio starts with the messy version:
 
-## Qué problema resuelve
+> “I need an agent that reviews research papers.”
 
-Crear un agente útil exige mucho más que pedirle a un modelo que escriba código. Hay que aclarar el
-objetivo, separar requisitos de suposiciones, definir herramientas y políticas, incorporar feedback,
-aprobar riesgos y demostrar que el resultado funciona.
+The Studio leads a conversation, asks only the missing questions, records decisions, challenges
+unsafe assumptions, and turns the result into a versioned agent contract. It then hands that
+approved contract to a separate builder, creates a real project, waits for explicit permission
+before testing it, and publishes the Taskmaster only after the isolated laboratory passes.
 
-Collaborative Taskmaster Studio guía ese trabajo como un socio:
+The output is not another answer in a chat window. It is a navigable project with code, a manifest,
+checksums, tests, policy boundaries, a conversational profile, and a durable catalog entry.
 
-1. formula preguntas aclaratorias relevantes;
-2. convierte respuestas en un briefing editable y confirmable;
-3. diseña una `TaskmasterSpecification` estructurada;
-4. aplica feedback como una nueva revisión y muestra el diff;
-5. impide cambios silenciosos sobre políticas protegidas;
-6. exige aprobación humana explícita;
-7. recomienda y genera un proyecto reproducible para Google ADK, Google Gen AI SDK,
-   Antigravity SDK o Genkit;
-8. ejecuta pruebas y escenarios normal, incompleto y adversarial;
-9. incorpora el agente validado a una biblioteca visual;
-10. guarda cada agente aprobado como un proyecto independiente en `projects/<nombre>/` y permite
-    abrirlo y utilizarlo desde el catálogo sin abandonar el estudio;
-11. conserva una trayectoria auditable de decisiones y resultados.
+## The twist
 
-El producto no es un chatbot que termina al producir texto: crea archivos, manifiestos, checksums,
-pruebas y evidencia ejecutable.
+The product is both:
 
-## Recorrido de la demostración
+1. a **Collaborative Partner** that guides a person from uncertainty to a precise design; and
+2. a **Taskmaster factory** that converts that design into an executable, controlled agent.
+
+Every published Taskmaster also receives a domain-specific conversational layer. Before executing
+anything, it can explain what it does, what it cannot do, what information it needs, and which
+actions require approval. That makes the generated agent useful as a guide and as an operator.
+
+## What the Studio does
 
 ```text
-Idea ambigua en el chat
-  → conversación de diseño con Gemini 3.7 Flash
-  → borrador incremental listo
-  → confirmación humana de construcción
-  → selección automática de framework
-  → selección automática de plugins mínimos
-  → proyecto ADK / Gen AI SDK / Antigravity / Genkit
-  → progreso observable del Ingeniero de agentes
-  → aprobación humana antes de 3 verificaciones aisladas
-  → proyecto persistente en projects/<nombre>/
-  → catálogo y ejecución integrada en la misma conversación
+Messy request
+  → adaptive conversation with Gemini
+  → structured notes and visible design
+  → human approval of the contract
+  → automatic framework and capability selection
+  → asynchronous construction
+  → human approval before tests
+  → isolated laboratory
+  → durable project and catalog entry
+  → specialized conversation and controlled execution
 ```
 
-El recorrido automático falla de forma cerrada ante preguntas fuera de alcance, contratos JSON
-inválidos, ausencia de aprobación, artefactos inconsistentes o pruebas fallidas. Gemini participa
-cuando respeta el contrato; de lo contrario, el flujo conserva el estado y utiliza un fallback local
-seguro y visible.
+### 1. Leads the discovery process
 
-### Datos oficiales de la demo
+- asks focused clarifying questions instead of returning a generic checklist;
+- maintains a continuous conversation and structured design state;
+- identifies mission, users, inputs, outputs, workflow, tools, constraints, and approvals;
+- captures feedback as a new revision instead of silently changing an approved design;
+- shows completion, missing decisions, recommended framework, and required connections;
+- preserves a deterministic fallback when the model response violates the contract.
 
-El caso oficial reproducible es un coordinador académico ficticio: tres respuestas, cuatro
-requisitos que suman seis horas, feedback que prohíbe calendario y envío, aprobación humana de la
-revisión 2 y tres escenarios obligatorios. El estudio también acepta otros dominios: el fallback
-local deriva un flujo general del briefing y no introduce estudiantes, calendarios ni paquetes
-semanales cuando no corresponden. Para validar los textos, privacidad, resultado y hashes sin usar
-cloud:
+### 2. Builds a real Taskmaster
 
-```powershell
-python scripts\prepare_demo_data.py
-```
+- freezes the human-approved contract with a SHA-256 digest;
+- selects the smallest suitable framework and plugin set;
+- dispatches construction outside the web request through Cloud Tasks;
+- runs Antigravity in an isolated Python environment when the SDK is available;
+- clearly labels the safe controlled builder when Antigravity is unavailable;
+- writes the result to the mandatory `projects/<agent-name>/` tree;
+- stores files individually—never as ZIP or RAR archives;
+- produces a manifest with paths, sizes, versions, and checksums.
 
-### Reinicio seguro de la demo
+### 3. Tests before publishing
 
-Dentro de un proyecto, **Reiniciar demo** restaura exclusivamente esa instancia con el fixture
-oficial. La operación exige escribir `REINICIAR_DEMO`, comprueba la sesión propietaria, limpia sus
-revisiones, eventos y artefactos y no modifica otros proyectos. Consulte
-[`docs/15_HITO_H11_REINICIO_SEGURO_DEMO.md`](docs/15_HITO_H11_REINICIO_SEGURO_DEMO.md).
+- asks for a second human decision before running the laboratory;
+- launches the generated project without Google, OAuth, or model credentials;
+- blocks network access and applies a strict timeout;
+- validates normal, incomplete-input, and adversarial scenarios;
+- verifies workspace path confinement and plugin policies;
+- publishes only a build that reaches `ready`.
 
-La ficha para copiar durante el video está en
-[`docs/14_HITO_H11_DATOS_OFICIALES_DEMO.md`](docs/14_HITO_H11_DATOS_OFICIALES_DEMO.md).
+### 4. Turns published agents into useful partners
 
-## Capacidades principales
+The generated Taskmaster classifies each request as:
 
-### Collaborative Partner
+| Intent | Behavior |
+| --- | --- |
+| Conversation | Explains its specialty, capabilities, limitations, and examples. |
+| Clarification | Requests the smallest missing input needed to continue. |
+| Execution | Starts the workflow defined in its approved specification. |
+| Approval | Pauses a protected action until the person explicitly decides. |
 
-- una pregunta por turno y notas estructuradas;
-- briefing editable antes de confirmarlo;
-- feedback humano conservado por hash y longitud, no por contenido en la auditoría;
-- revisiones inmutables, comparación estructurada y aprobación explícita;
-- interfaz web en español con estados de carga, vacío, error y éxito.
-- conversación continua: las preguntas, respuestas y etapas completadas permanecen en un único
-  hilo y la etapa siguiente se añade sin cambiar de pantalla.
-- indicador visible del modelo activo: `Gemini 3.7 Flash · Vertex AI` cuando la integración está
-  habilitada o `Fallback local · Sin llamadas cloud` cuando se trabaja sin modelo remoto.
-- catálogo local con preguntas neutrales y diseñador adaptable al dominio descrito.
+The runtime stays tied to the approved mission. A research agent behaves like a research guide; a
+dataset agent behaves like a data analyst. The universal conversational layer does not erase the
+agent's specialized task.
 
-### Inteligencia con límites
+### 5. Works with documents and datasets
 
-- Gemini 3.7 Flash mediante Google Gen AI SDK y Vertex AI;
-- salidas JSON restringidas por esquema para preguntas, briefing, diseño y revisión;
-- `VertexModelGateway` como única frontera del modelo;
-- máximo configurable de tokens y preguntas por proyecto;
-- una sola llamada por operación, sin reintentos ocultos;
-- fallback determinista y auditable para cada operación asistida;
-- agentes Google ADK de coordinación, entrevista y diseño sin herramientas de negocio.
+The chat accepts multiple files and immediately displays upload progress, inspection, attachment,
+and deletion controls.
 
-### Acción verificable
+Supported inputs:
 
-- selector automático y generadores versionados para Google ADK, Google Gen AI SDK, Genkit y
-  Antigravity;
-- cola durable de construcción con Cloud Tasks, entrega OIDC, recuperación tras reinicios y estados
-  auditables;
-- constructor determinista en un proceso aislado que no hereda credenciales de Google, Gemini u
-  OAuth;
-- aprobación humana separada antes de ejecutar las verificaciones locales;
-- manifiesto `taskmaster.manifest.json` con versión, revisión y checksums SHA-256;
-- herramientas simuladas protegidas por políticas de aprobación;
-- laboratorio temporal sin credenciales y con red bloqueada;
-- tres escenarios obligatorios y puerta de exportación basada en `ready`.
-- biblioteca de agentes aprobados, identidad visual editable, apertura directa del proyecto y
-  memoria de ejecución propia en `runtime-state.json`.
-- registro cerrado de plugins, selección por mínimo privilegio y gateway generado que bloquea por
-  defecto plugins desconocidos, conexiones ausentes y escrituras sin aprobación.
+- text and structured data: TXT, Markdown, CSV, JSON, YAML, and XML;
+- office documents: PDF, DOCX, XLSX, and PPTX;
+- images: PNG, JPG, JPEG, and WEBP.
 
-El nombre del constructor siempre declara su ejecución real. Si el SDK de Antigravity no está
-instalado y habilitado, la interfaz muestra `Constructor local seguro · respaldo de Antigravity`;
-no atribuye esa generación al SDK. En ambos casos, Gemini conserva exclusivamente el papel de socio
-de diseño y no recibe herramientas de escritura ni autoridad para aprobar pruebas.
+Small files use a direct upload. CSV and XLSX files up to **600 MiB** use validated 8 MiB chunks.
+Large inputs are never copied wholesale into a prompt: extraction is bounded by rows, columns,
+characters, expanded archive size, and multimodal bytes.
 
-El selector de framework permanece en **Pendiente** mientras el borrador tenga menos de 60 % de
-preparación o todavía no defina misión, entradas, resultados y flujo. Su confianza describe la
-adecuación técnica entre frameworks, no la calidad del borrador. Las capacidades que necesiten
-correo, tickets, Internet, repositorios o documentación privada se muestran como integraciones
-pendientes; diseñarlas no significa que esos accesos ya estén conectados.
+### 6. Draws charts instead of returning chart code
 
-### Capacidad `workspace.read`
+When a user asks for analysis or a visualization, the backend creates deterministic chart
+artifacts. The browser renders them with Google Charts. The model is prevented from substituting a
+Matplotlib, Seaborn, Plotly, or Chart.js snippet when a chart artifact is available.
 
-Cuando el diseño aprobado solicita explícitamente leer o inspeccionar fuentes dentro del directorio
-del agente, el constructor incorpora una herramienta real `workspace_read` al paquete Google ADK.
-La raíz se declara con `TASKMASTER_WORKSPACE_ROOT`; no se concede acceso al resto del equipo.
+Available visualizations include:
 
-El lector:
+- vertical and horizontal bars;
+- line and area charts;
+- pie and donut charts;
+- scatter plots with a linear trend and R² where supported;
+- metric strips, calculated insights, source attribution, and expandable data tables.
 
-- permite listar directorios y leer texto UTF-8 en formatos expresamente admitidos;
-- rechaza rutas absolutas, `..`, escapes de la raíz y enlaces simbólicos;
-- oculta `.env`, credenciales, claves, directorios internos y nombres que comiencen por `secret`;
-- limita cada archivo a 256 KiB por defecto y nunca supera el límite duro de 1 MiB;
-- no escribe, elimina, ejecuta ni registra el contenido leído en la auditoría.
+A deep-analysis request can inspect several attached datasets and return a colorful dashboard of up
+to eight complementary views. Explicit demo requests can also produce reproducible simulated data,
+clearly labeled as synthetic.
 
-La capacidad no se añade a agentes que no la soliciten. Antes de guardar el proyecto como listo,
-el laboratorio ejecuta una verificación adicional que comprueba una lectura válida y el bloqueo
-del escape de ruta.
+### 7. Uses external context with least privilege
 
-### Investigación y contexto del socio colaborativo
+Personal connections are isolated by verified user identity:
 
-El chat de diseño puede utilizar cinco capacidades de solo lectura cuando Gemini determina que
-son necesarias y el usuario proporciona el contexto correspondiente:
+- Google Drive: search, list, and read with `drive.readonly`;
+- Gmail: search and read with `gmail.readonly`;
+- Google Calendar: list and read with `calendar.readonly`;
+- GitHub and public web research through bounded read-only adapters when configured;
+- local project inspection confined to an explicitly authorized workspace.
 
-- **Google Drive por usuario:** tras iniciar sesión y completar OAuth, Gemini puede buscar archivos
-  por nombre o contenido indexado, enumerar carpetas y leer Google Docs, Sheets, Slides, PDF,
-  DOCX, XLSX, PPTX y contenido textual con el scope `drive.readonly`. Los resultados incluyen
-  accesos para abrir o leer el elemento desde el chat. Los grants se cifran antes de
-  persistirse en Firestore y nunca llegan al navegador ni al historial. Un Taskmaster aprobado solo
-  puede usar esa evidencia cuando su especificación declara Drive como herramienta `read_only` y el
-  usuario lo solicita explícitamente. La conexión puede revocarse desde el panel izquierdo.
+Connecting a service does not grant write access. A capability shown in a design is not presented as
+connected until OAuth and the required adapter are actually available.
 
-- **Gmail por usuario:** una autorización independiente con `gmail.readonly` permite buscar mensajes,
-  mostrar remitente, asunto y fecha, y leer el contenido seleccionado. No existen operaciones para
-  enviar, responder, archivar, modificar etiquetas ni borrar correo.
-- **Google Calendar por usuario:** una autorización independiente con `calendar.readonly` permite
-  consultar próximos eventos y abrirlos en Calendar. No existen operaciones para crear, modificar ni
-  eliminar eventos.
+---
 
-- **Investigación en Internet:** Google Search grounding y lectura directa de URLs públicas mediante
-  el mismo cliente autenticado de Vertex AI. Si una página impide la lectura directa, el Studio
-  realiza una búsqueda verificable por su dominio y registra el cambio de método. Las consultas
-  recientes incluyen la fecha y el año actuales; una respuesta sin fuentes verificables se
-  descarta. No inicia sesión, completa formularios ni ejecuta acciones en sitios externos.
-- **Lectura de documentos:** carga explícita de TXT, Markdown, CSV, JSON, YAML, XML, PDF, DOCX,
-  XLSX, PPTX o imágenes PNG, JPG y WEBP.
-  Se extrae únicamente texto y el original nunca se ejecuta. La carga directa admite 25 MiB;
-  CSV y XLSX admiten hasta 600 MiB mediante bloques de 8 MiB, se inspeccionan de forma acotada y
-  solo quedan disponibles en la sesión que los adjuntó.
-- **Memoria avanzada:** recupera fragmentos visibles y relevantes de conversaciones anteriores de
-  la misma sesión. No mezcla usuarios ni expone cargas internas de herramientas.
-- **Navegación profunda del proyecto:** además de leer y buscar, crea un mapa estructural acotado,
-  cuenta líneas de archivos legibles e identifica imports y referencias inversas. Permanece
-  confinada al directorio autorizado, sin escritura ni ejecución de comandos.
-
-Cada uso aparece como actividad verificable en la respuesta. Las páginas, documentos, recuerdos,
-correos, eventos y archivos inspeccionados se consideran datos no confiables y no pueden modificar las políticas del
-sistema. En desarrollo local, los documentos extraídos se guardan bajo `.studio-data`; en una
-instancia efímera de Cloud Run deben tratarse como datos temporales hasta conectar almacenamiento
-duradero específico para adjuntos.
-
-### Persistencia y operación
-
-- repositorio local JSON para desarrollo sin nube;
-- Firestore con revisiones, aprobaciones, eventos y artefactos en subcolecciones;
-- catálogo multiusuario en Firestore cuando la persistencia cloud está activa;
-- réplica durable, verificable y sin archivos comprimidos de `projects/` en Cloud Storage;
-- construcción despachada fuera de la petición web mediante una cola Cloud Tasks regional, con una
-  identidad de trabajador dedicada, dos intentos máximos y cierre seguro si la cola no está lista;
-- transacciones críticas con reintentos acotados y concurrencia optimista;
-- retención demo de siete días declarada para raíz y subcolecciones;
-- Cloud Run con mínimo cero, máximo una instancia y concurrencia uno;
-- imagen fijada por digest, identidad administrada y rollback entre revisiones;
-- presupuesto mensual de 20.000 COP con alertas al 50 %, 80 % y 100 %.
-
-## Arquitectura
+## Architecture
 
 ```mermaid
 flowchart LR
-    USER[Usuario] --> UI[Interfaz web]
-    UI --> API[FastAPI]
-    API --> USE[Servicios de aplicación]
-    USE --> DOMAIN[Dominio y TaskmasterSpecification]
-    USE --> MODEL[VertexModelGateway]
-    MODEL --> GEMINI[Gemini 3.7 Flash · Vertex AI]
-    USE --> REPO{Repositorio}
-    REPO --> LOCAL[JSON local]
-    REPO --> FIRESTORE[Firestore]
-    USE --> GENERATOR[Generador Google ADK]
-    GENERATOR --> LAB[Laboratorio aislado]
-    LAB --> PROJECTS[Carpeta projects]
-    PROJECTS --> LIBRARY[Catálogo de Taskmasters]
-    PROJECTS --> STORAGE[Cloud Storage durable]
-    LIBRARY --> FIRESTORE
-    LIBRARY --> RUNTIME[Ejecución integrada]
-    USE --> AUDIT[Trayectoria auditable]
-    APPROVAL[Aprobación humana] --> USE
+    PERSON["User"] --> WEB["Chat-first web UI"]
+
+    subgraph RUN["Cloud Run · FastAPI"]
+        API["Versioned API"]
+        CHAT["Collaborative chat service"]
+        DESIGN["Design and approval services"]
+        FILES["Document and dataset inspection"]
+        CHARTS["Deterministic chart artifacts"]
+        MEMORY["Conversation memory"]
+        CATALOG["Agent catalog and runtime"]
+    end
+
+    WEB --> API
+    API --> CHAT
+    API --> DESIGN
+    API --> FILES
+    FILES --> CHARTS --> WEB
+    CHAT --> VERTEX["Gemini 3.7 Flash · Vertex AI"]
+    CHAT --> MEMORY
+    DESIGN --> FIRESTORE["Firestore"]
+    MEMORY --> FIRESTORE
+    CATALOG --> FIRESTORE
+
+    DESIGN --> TASKS["Cloud Tasks"]
+    TASKS --> WORKER["OIDC-authenticated worker"]
+    WORKER --> BUILDER["Antigravity or controlled builder"]
+    BUILDER --> LAB["Isolated laboratory"]
+    LAB --> PROJECTS["projects/ tree"]
+    PROJECTS --> STORAGE["Private Cloud Storage"]
+    PROJECTS --> CATALOG
+
+    ID["Identity Platform"] -. verified owner .-> API
+    OAUTH["Encrypted read-only grants"] -. scoped context .-> CHAT
+    HUMAN["Human approval gates"] -. contract and test approval .-> DESIGN
 ```
 
-La lógica de negocio no depende de FastAPI, Firestore ni Vertex AI. Los puertos y adaptadores
-permiten ejecutar el mismo flujo con implementaciones locales, dobles de prueba o servicios reales.
-La vista final desplegada, el recorrido y las fronteras de confianza están en
-[`docs/12_DIAGRAMA_ARQUITECTURA_FINAL.md`](docs/12_DIAGRAMA_ARQUITECTURA_FINAL.md). Las decisiones
-técnicas detalladas permanecen en
-[`docs/03_ARQUITECTURA_IMPLEMENTACION.md`](docs/03_ARQUITECTURA_IMPLEMENTACION.md).
+### Architectural boundaries
 
-## Inicio rápido local
+| Boundary | Responsibility | What it cannot do |
+| --- | --- | --- |
+| Browser | Interaction, rendering, local cache, upload progress | Choose a production owner or approve on behalf of the user |
+| API | Authentication, request limits, use-case orchestration | Bypass domain transitions |
+| Gemini gateway | Questions, synthesis, structured proposals | Write projects, approve tests, or receive cloud credentials |
+| Domain | Contracts, states, risk, validation, idempotency | Call Google Cloud directly |
+| Builder | Render an approved specification into an allowed tree | Accept arbitrary shell commands or escape `projects/` |
+| Laboratory | Verify the generated package | Use network or inherited credentials |
+| Repository adapters | Persist state and artifacts | Decide what the agent should do |
+| Human gates | Confirm design and authorize tests/actions | Mutate an already approved revision in place |
 
-### Requisitos
+The application is a modular monolith at the web layer, but the long-running build path is
+asynchronous and durable. Domain code depends on ports; local JSON, Firestore, local project
+storage, and Cloud Storage are adapters behind those ports.
 
-- Python `3.13.x`;
-- PowerShell 7 o Windows PowerShell;
-- Git, únicamente para clonar y versionar.
+## Google technology used
 
-No necesita cuenta de Google Cloud para el modo local determinista.
+| Technology | Role in the product |
+| --- | --- |
+| Gemini 3.7 Flash | Collaborative conversation, synthesis, structured agent proposals, and runtime responses |
+| Vertex AI | Managed model access through Application Default Credentials |
+| Google ADK | Agent topology and one supported generated-project target |
+| Google Gen AI SDK | Typed model gateway and generated-project target |
+| Antigravity SDK | Isolated refinement of approved generated projects |
+| Genkit | Additional generated-project target |
+| Cloud Run | Public web application and authenticated worker endpoint |
+| Firestore | Projects, revisions, decisions, conversations, catalog, events, and durable build state |
+| Cloud Tasks | Background construction and test delivery with bounded retries |
+| Cloud Storage | Private, file-by-file persistence of completed Taskmaster projects |
+| Identity Platform | Verified multi-user isolation and Google sign-in |
+| Cloud Build | Test, container build, and image publication pipeline |
+| Artifact Registry | Immutable container images |
+| Google Charts | In-chat interactive rendering of validated chart artifacts |
 
-### Instalar y ejecutar
+## How this goes beyond a chatbot
+
+| Simple chat loop | Collaborative Taskmaster Studio |
+| --- | --- |
+| Returns text | Produces code, manifests, checksums, tests, state, and visual artifacts |
+| Treats the first prompt as complete | Leads discovery and records unresolved decisions |
+| Changes output silently | Creates immutable revisions and visible diffs |
+| Runs immediately | Requires separate approval for the contract and the laboratory |
+| Loses work with the request | Uses Firestore and Cloud Tasks for durable asynchronous work |
+| Claims capabilities | Verifies connections, runtimes, generated files, and tests |
+| Offers chart code | Renders traceable charts directly in the conversation |
+| One generic assistant | Publishes domain-specific Taskmasters with their own conversational profile |
+
+---
+
+## Safety model
+
+The system treats user text, uploaded files, web pages, repository contents, and connector results
+as untrusted data.
+
+Core guarantees:
+
+- production identity is derived from a verified token, not a client-provided session ID;
+- OAuth grants are encrypted at rest and never written to chat history or browser storage;
+- Gemini receives bounded context and no builder, Firestore, Cloud Storage, or OAuth credentials;
+- generated paths are selected by controlled adapters;
+- the isolated builder receives a frozen contract digest and a confined destination;
+- the laboratory runs without network access or inherited cloud credentials;
+- unknown plugins, missing connections, and unapproved writes fail closed;
+- events contain identifiers, hashes, sizes, and outcomes—not private chain-of-thought;
+- a failed cloud dispatch is shown as a failure, never as a simulated success.
+
+### Human authority
+
+There are three distinct decisions:
+
+1. **Approve the design** — authorizes construction from the frozen contract.
+2. **Approve laboratory execution** — authorizes isolated tests of the generated project.
+3. **Approve a protected external effect** — required later if a Taskmaster gains a write-capable
+   plugin.
+
+Gemini, ADK agents, the builder, and the laboratory cannot grant these approvals.
+
+## Data and upload limits
+
+| Limit | Value |
+| --- | ---: |
+| Message length | 6,000 characters |
+| Documents per session/conversation | 12 |
+| Direct upload | 25 MiB per file |
+| Large CSV or XLSX | 600 MiB per file |
+| Upload chunk | 8 MiB |
+| Simultaneous reserved large-upload bytes | 1,200 MiB per session |
+| Extracted text retained | 100,000 characters per document |
+| Dataset sample | 2,500 rows × 40 columns per sheet |
+| XLSX sheets inspected | 24 |
+| Chart points | 24 per artifact |
+| Chart artifacts | 8 per request |
+| Generated project | 500 files / 50,000,000 bytes |
+
+The 600 MiB transport limit is not an instruction to load 600 MiB into model context. XLSX archive
+members, expansion size, shared strings, sheets, rows, and columns remain independently bounded.
+
+## Persistence and lifecycle
+
+| Resource | Local development | Hosted production |
+| --- | --- | --- |
+| Conversations | Browser cache and local JSON | Browser cache plus Firestore authority |
+| Design revisions and events | Local repository | Firestore |
+| Build queue | Atomic local JSON | Firestore plus Cloud Tasks delivery |
+| Agent catalog | Local catalog | Firestore per verified owner |
+| Completed Taskmaster project | `projects/` | Private Cloud Storage with hash validation |
+| Taskmaster runtime state | Separate local state file | Separate mutable Cloud Storage object |
+| Uploaded chat files | `.studio-data` | Instance-temporary storage in the current release |
+
+Completed projects are durable. Chat attachments on Cloud Run are intentionally described as
+temporary until a dedicated private attachment store is connected. Closing a session is different
+from deleting a chat, an uploaded file, an agent catalog entry, or a durable project.
+
+---
+
+## Repository layout
+
+```text
+app/                    FastAPI composition and browser application
+studio/                 Domain-facing application services and capabilities
+agents/                 Google ADK agent definitions
+adapters/               Framework generators and construction orchestrators
+infrastructure/         Vertex AI, Firestore, Cloud Run, Cloud Tasks, Storage, and local adapters
+sandbox/                Isolated evaluation and safety gates
+schemas/                Canonical Taskmaster specification schema
+scripts/                Local startup and reproducibility helpers
+tests/                  Unit, contract, integration, and API coverage
+projects/               Generated Taskmasters; local content is ignored by Git
+generated/              Legacy export output; local content is ignored by Git
+```
+
+## Local quick start
+
+### Requirements
+
+- Python 3.13.x
+- Git
+- PowerShell on Windows for the assisted Vertex AI startup script
+
+Cloud credentials are not required for deterministic local mode.
+
+### 1. Clone and create an environment
 
 ```powershell
-cd "C:\ruta\a\collaborative-taskmaster-studio"
+git clone https://github.com/JavierMurcia/collaborative-taskmaster-studio.git
+cd collaborative-taskmaster-studio
 py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
+```
+
+On macOS or Linux, activate with `source .venv/bin/activate` and use `python3.13` when creating the
+environment.
+
+### 2. Run deterministic local mode
+
+```powershell
 python -m app.main
 ```
 
-Abrir:
+Open:
 
-- interfaz: <http://127.0.0.1:8080/>;
-- OpenAPI: <http://127.0.0.1:8080/docs>;
-- disponibilidad: <http://127.0.0.1:8080/health/ready>.
+- application: <http://127.0.0.1:8080/>
+- OpenAPI: <http://127.0.0.1:8080/docs>
+- readiness: <http://127.0.0.1:8080/health/ready>
 
-El modo predeterminado usa repositorio local y componentes deterministas. No descubre credenciales,
-no invoca Gemini y no consume Google Cloud.
+Local mode does not discover Google credentials, invoke Gemini, connect personal accounts, or
+consume cloud resources. It uses the deterministic fallback and local adapters.
 
-### Verificar una instalación limpia
+## Run locally with Gemini on Vertex AI
 
-El siguiente comando crea otra copia y otro entorno virtual temporales, instala `.[dev]`, ejecuta
-la suite y el recorrido integral, inicia un servidor local y comprueba sus endpoints:
+### 1. Install cloud extras
+
+```powershell
+python -m pip install -e ".[dev,vertex,firestore,storage,tasks]"
+gcloud auth application-default login
+gcloud config set project YOUR_PROJECT_ID
+```
+
+The Vertex integration uses Application Default Credentials. Remove `GOOGLE_API_KEY` and
+`GEMINI_API_KEY` from the terminal before starting; API keys are deliberately rejected in this
+mode.
+
+### 2. Verify configuration before the first prompt
+
+```powershell
+.\scripts\start_local.ps1 -ProjectId YOUR_PROJECT_ID -CheckOnly
+```
+
+### 3. Start the application
+
+```powershell
+.\scripts\start_local.ps1 -ProjectId YOUR_PROJECT_ID
+```
+
+The script checks credentials, project, model, API version, and the effective builder. If a valid
+Antigravity environment is absent, it reports and uses the controlled ADK builder.
+
+## Optional isolated Antigravity runtime
+
+Antigravity is installed separately because its dependency set should not control the web
+application environment.
+
+```powershell
+py -3.13 -m venv .antigravity-venv
+.\.antigravity-venv\Scripts\python.exe -m pip install --upgrade pip
+.\.antigravity-venv\Scripts\python.exe -m pip install "google-antigravity==0.1.15"
+.\scripts\start_local.ps1 -ProjectId YOUR_PROJECT_ID -CheckOnly
+```
+
+When the readiness check succeeds, the startup script sets the builder to `antigravity` and passes
+the absolute interpreter path to the isolated orchestrator.
+
+## Configuration reference
+
+The application reads environment variables; it does not automatically load `.env.example`.
+
+### Runtime and model
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `STUDIO_ENV` | `development` | Selects development or production validation. |
+| `STUDIO_HOST` | `127.0.0.1` | Local bind address; Cloud Run uses `0.0.0.0`. |
+| `STUDIO_PORT` | `8080` | Local port; Cloud Run injects `PORT`. |
+| `STUDIO_DATA_DIRECTORY` | `.studio-data` | Local state root. |
+| `STUDIO_ENABLE_VERTEX` | `false` | Enables the Vertex AI gateway. |
+| `GOOGLE_CLOUD_PROJECT` | empty | Exact Google Cloud project ID. |
+| `GOOGLE_CLOUD_LOCATION` | `global` | Vertex AI location for Gemini. |
+| `STUDIO_GEMINI_MODEL` | `gemini-3.7-flash` | Primary collaborative model. |
+| `STUDIO_VERTEX_API_VERSION` | `v1` | Stable Vertex API version. |
+| `STUDIO_MAX_MODEL_OUTPUT_TOKENS` | `8192` | Structured-output ceiling. |
+| `STUDIO_MAX_MODEL_QUESTIONS_PER_PROJECT` | `3` | Generated interview-question ceiling. |
+
+Model-assisted operations have independent feature gates:
+
+- `STUDIO_ENABLE_MODEL_QUESTIONS`
+- `STUDIO_ENABLE_MODEL_BRIEFING`
+- `STUDIO_ENABLE_MODEL_SPECIFICATION`
+- `STUDIO_ENABLE_MODEL_REVISION`
+
+### Persistence and construction
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `STUDIO_PERSISTENCE` | `local` | Selects the repository adapter. |
+| `STUDIO_ENABLE_FIRESTORE` | `false` | Enables Firestore persistence. |
+| `STUDIO_FIRESTORE_DATABASE` | `collaborative-taskmaster` | Named database. |
+| `STUDIO_FIRESTORE_DEMO_RETENTION_DAYS` | `7` | Demo retention contract. |
+| `STUDIO_PROJECTS_ROOT` | `projects` | Mandatory generated-project root. |
+| `STUDIO_ENABLE_CLOUD_STORAGE` | `false` | Enables durable project replication. |
+| `STUDIO_PROJECTS_BUCKET` | empty | Private project bucket. |
+| `STUDIO_PROJECTS_BUCKET_PREFIX` | `taskmaster-projects` | Isolated object prefix. |
+| `STUDIO_PROJECTS_MAX_FILES` | `500` | Project file-count limit. |
+| `STUDIO_PROJECTS_MAX_TOTAL_BYTES` | `50000000` | Project byte limit. |
+| `STUDIO_AGENT_BUILDER` | `controlled_adk` | Effective builder request. |
+| `STUDIO_ANTIGRAVITY_PYTHON` | empty | Absolute isolated Antigravity interpreter. |
+| `STUDIO_ANTIGRAVITY_MODEL` | `gemini-2.5-flash` | Explicit model used by the builder SDK. |
+| `STUDIO_SANDBOX_TIMEOUT` | `8` | Seconds allowed for each laboratory process. |
+
+### Asynchronous work and identity
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `STUDIO_ENABLE_CLOUD_TASKS` | `false` | Enables external build delivery. |
+| `STUDIO_CLOUD_TASKS_LOCATION` | `us-central1` | Queue region. |
+| `STUDIO_CLOUD_TASKS_QUEUE` | `taskmaster-builds` | Queue name. |
+| `STUDIO_BUILD_WORKER_SERVICE_ACCOUNT` | empty | Exact OIDC worker identity. |
+| `STUDIO_BUILD_WORKER_URL` | empty | Private worker URL. |
+| `STUDIO_BUILD_WORKER_AUDIENCE` | empty | Expected OIDC audience. |
+| `STUDIO_AUTH_MODE` | `local` | `local` or `identity_platform`. |
+| `STUDIO_IDENTITY_PROJECT` | project default | Identity Platform project. |
+| `STUDIO_PUBLIC_BASE_URL` | local URL | OAuth return origin and public service origin. |
+
+OAuth client secrets, the OAuth state secret, and the encryption key must come from managed secret
+injection in production. Never commit them.
+
+---
+
+## Test and quality gates
+
+Run the complete suite:
+
+```powershell
+python -m pytest -q
+python -m ruff check .
+python -m mypy app studio agents infrastructure adapters sandbox
+```
+
+The suite covers:
+
+- domain transitions and schema validation;
+- immutable revisions, approvals, and idempotency;
+- local and Firestore repository contracts;
+- model boundary and deterministic fallbacks;
+- framework selection and generated manifests;
+- isolated Antigravity orchestration;
+- sandbox containment and adversarial scenarios;
+- Identity Platform ownership and OAuth isolation;
+- Cloud Tasks authentication, retries, and recovery;
+- conversation persistence and deletion;
+- multiple uploads, bounded XLSX/CSV parsing, and chart artifacts;
+- Cloud Run declarations, IAM, build pipeline, and architecture contract.
+
+### Clean-install verification
 
 ```powershell
 py -3.13 scripts\verify_clean_install.py
 ```
 
-La verificación fuerza Gemini y Firestore a apagado, no copia credenciales y elimina el entorno
-temporal al finalizar. Puede descargar dependencias desde PyPI. Consulte
-[`docs/13_HITO_H11_INSTALACION_LIMPIA.md`](docs/13_HITO_H11_INSTALACION_LIMPIA.md) para conocer los
-controles y la evidencia.
+This helper creates a temporary isolated copy, installs development dependencies, runs the suite,
+starts the local server, probes key endpoints, and removes the temporary environment. Gemini and
+Firestore are forced off so the check cannot consume cloud resources.
 
-## Ejecutar con Gemini 3.7 Flash
-
-La forma recomendada en Windows valida la configuración y las credenciales **antes del primer
-prompt** y conserva las variables correctas durante toda la vida del servidor:
+## Container build
 
 ```powershell
-.\scripts\start_local.ps1
+docker build -t collaborative-taskmaster-studio:local .
+docker run --rm -p 8080:8080 collaborative-taskmaster-studio:local
 ```
 
-Para comprobar Vertex AI sin iniciar el servidor:
+The runtime image:
+
+- runs as an unprivileged user;
+- listens on port 8080;
+- contains no service-account JSON;
+- installs cloud and laboratory adapters at build time;
+- writes only to application-owned or temporary locations.
+
+## Google Cloud deployment workflow
+
+Production provisioning is intentionally explicit. The repository contains machine-readable
+definitions and planners; no resource is created merely by importing or starting the application.
+
+### 1. Authenticate and select a project
 
 ```powershell
-.\scripts\start_local.ps1 -CheckOnly
-```
-
-Las variables establecidas manualmente con `$env:` pertenecen únicamente a la terminal actual. Si
-el servidor se inicia desde otra consola, la interfaz permanece bloqueada en `Fallback local` en
-lugar de aceptar mensajes que no podrá procesar.
-
-Instalar los adaptadores opcionales:
-
-```powershell
-python -m pip install -e ".[dev,vertex]"
+gcloud auth login
 gcloud auth application-default login
+gcloud config set project YOUR_PROJECT_ID
+gcloud billing projects describe YOUR_PROJECT_ID
 ```
 
-Antigravity debe instalarse en un entorno separado porque su dependencia de `protobuf` no es
-compatible con la versión requerida por Vertex AI en el proceso web:
+### 2. Inspect the declared plans
 
 ```powershell
-py -3.13 -m venv .antigravity-venv
-.\.antigravity-venv\Scripts\python.exe -m pip install "google-antigravity>=0.1.7,<1"
+python -m infrastructure.cloud_run.iam_check --project YOUR_PROJECT_ID
+python -m infrastructure.cloud_run.build_check --project YOUR_PROJECT_ID --image-tag git-COMMIT
+python -m infrastructure.firestore.provisioning --project YOUR_PROJECT_ID
 ```
 
-Configurar la terminal de desarrollo:
+These commands print plans unless their explicit apply or verification option is used.
+
+### 3. Build with Cloud Build
 
 ```powershell
-$env:GOOGLE_CLOUD_PROJECT = "TU_PROJECT_ID"
-$env:GOOGLE_CLOUD_LOCATION = "global"
-$env:GOOGLE_GENAI_USE_VERTEXAI = "true"
-$env:STUDIO_ENABLE_VERTEX = "true"
-$env:STUDIO_ENABLE_MODEL_QUESTIONS = "true"
-$env:STUDIO_ENABLE_MODEL_BRIEFING = "true"
-$env:STUDIO_ENABLE_MODEL_SPECIFICATION = "true"
-$env:STUDIO_ENABLE_MODEL_REVISION = "true"
-$env:STUDIO_GEMINI_MODEL = "gemini-3.7-flash"
-$env:STUDIO_VERTEX_API_VERSION = "v1"
-$env:STUDIO_AGENT_BUILDER = "antigravity"
-$env:STUDIO_ANTIGRAVITY_PYTHON = (Resolve-Path ".\.antigravity-venv\Scripts\python.exe")
-
-python -m infrastructure.vertex.check
-python -m app.main
+gcloud builds submit `
+  --config cloudbuild.yaml `
+  --substitutions=_IMAGE_TAG=git-COMMIT `
+  --project YOUR_PROJECT_ID `
+  .
 ```
 
-El diagnóstico valida la configuración y la presencia de ADC sin invocar el modelo. Ejecutar el
-flujo con las cuatro puertas activas sí puede enviar contexto delimitado a Vertex AI y consumir
-créditos. Para volver al modo local, cierre esa terminal o asigne `false` a las cinco variables
-`STUDIO_ENABLE_*`.
+The pipeline runs the tests before building and pushing the image to Artifact Registry.
 
-## Persistencia Firestore
-
-Instalar el adaptador:
+### 4. Plan deployment from an immutable digest
 
 ```powershell
-python -m pip install -e ".[dev,firestore]"
+python -m infrastructure.cloud_run.deployment_check `
+  --project YOUR_PROJECT_ID `
+  --image-digest DIGEST_WITHOUT_SHA256_PREFIX
 ```
 
-La infraestructura declarada usa la base nombrada `collaborative-taskmaster` en `us-central1`,
-protección contra borrado, transacciones pesimistas y TTL de siete días para datos de demostración.
-Planificar el aprovisionamiento no modifica Google Cloud:
+Review the emitted `gcloud run deploy` command, runtime identity, environment, scaling, ingress,
+port, concurrency, and digest before applying anything.
+
+### 5. Verify the deployed service
 
 ```powershell
-python -m infrastructure.firestore.provisioning --project TU_PROJECT_ID
+python -m infrastructure.cloud_run.deployment_check `
+  --project YOUR_PROJECT_ID `
+  --image-digest DIGEST_WITHOUT_SHA256_PREFIX `
+  --verify
+
+python -m infrastructure.cloud_run.journey_check `
+  --url https://YOUR_SERVICE_URL `
+  --timeout 90
 ```
 
-La opción `--apply` crea o verifica recursos reales y debe utilizarse únicamente con autorización.
-Consulte [`docs/08_HITO_H9_FIRESTORE.md`](docs/08_HITO_H9_FIRESTORE.md) antes de habilitarla.
+Production currently uses a deliberately conservative scale profile for the public demo. Review
+memory, concurrency, maximum instances, queue throughput, temporary disk, and budget before using
+the deployment for sustained workloads.
 
-### Proyectos durables en Cloud Storage
+## Failure and recovery behavior
 
-El directorio `projects/` continúa siendo obligatorio y es el espacio de trabajo de cada instancia.
-En Cloud Run puede replicarse archivo por archivo, sin ZIP ni RAR, en un bucket privado. El
-manifiesto durable incluye propietario, huella SHA-256, cantidad de archivos y tamaño total. Una
-instancia nueva restaura el proyecto y verifica su integridad antes de ejecutarlo.
-
-```powershell
-$env:STUDIO_ENABLE_FIRESTORE = "true"
-$env:STUDIO_ENABLE_CLOUD_STORAGE = "true"
-$env:STUDIO_PROJECTS_BUCKET = "TU_BUCKET_PRIVADO"
-$env:STUDIO_PROJECTS_BUCKET_PREFIX = "taskmaster-projects"
-```
-
-El bucket debe existir previamente y la cuenta de servicio de Cloud Run necesita acceso de objetos
-solamente sobre ese bucket. Consulte
-[`docs/20_PERSISTENCIA_DURABLE_PROYECTOS.md`](docs/20_PERSISTENCIA_DURABLE_PROYECTOS.md).
-
-## Configuración
-
-`.env.example` documenta todos los valores admitidos, pero la aplicación no carga ese archivo
-automáticamente. Defina variables en el proceso o mediante la configuración declarativa de Cloud
-Run.
-
-| Variable | Valor local | Propósito |
-| --- | --- | --- |
-| `STUDIO_ENABLE_VERTEX` | `false` | Activa la frontera de Vertex AI. |
-| `STUDIO_ENABLE_MODEL_*` | `false` | Autoriza cada operación asistida por separado. |
-| `STUDIO_GEMINI_MODEL` | `gemini-3.7-flash` | Fija el modelo estable usado por el socio y los agentes. |
-| `STUDIO_MAX_MODEL_OUTPUT_TOKENS` | `8192` | Limita la salida estructurada. |
-| `STUDIO_MAX_MODEL_QUESTIONS_PER_PROJECT` | `3` | Limita preguntas generadas por proyecto. |
-| `STUDIO_ENABLE_FIRESTORE` | `false` | Activa persistencia Firestore. |
-| `STUDIO_FIRESTORE_DATABASE` | `collaborative-taskmaster` | Selecciona la base nombrada. |
-| `STUDIO_FIRESTORE_DEMO_RETENTION_DAYS` | `7` | Limita retención de sesiones demo. |
-| `STUDIO_PROJECTS_ROOT` | `projects` | Carpeta obligatoria para los Taskmasters construidos. |
-| `STUDIO_ENABLE_CLOUD_STORAGE` | `false` | Replica cada proyecto terminado en Cloud Storage. |
-| `STUDIO_PROJECTS_BUCKET` | vacío | Bucket privado que conserva los proyectos. |
-| `STUDIO_PROJECTS_BUCKET_PREFIX` | `taskmaster-projects` | Prefijo aislado de objetos. |
-| `STUDIO_GENERATED_ROOT` | `generated` | Salida heredada para exportaciones reproducibles. |
-| `STUDIO_AGENT_BUILDER` | `controlled_adk` | Activa `antigravity` solo cuando su SDK está instalado. |
-| `STUDIO_ANTIGRAVITY_PYTHON` | vacío | Python absoluto del trabajador Antigravity aislado. |
-| `STUDIO_SANDBOX_TIMEOUT` | `8` | Limita cada ejecución del laboratorio. |
-
-`PORT`, `K_SERVICE`, `K_REVISION` y `K_CONFIGURATION` están reservadas para Cloud Run. API keys y
-archivos JSON de credenciales están prohibidos en producción; la aplicación utiliza la cuenta de
-servicio y Application Default Credentials.
-
-## Selección y generación multi-framework
-
-Después de aprobar una revisión, Studio crea:
-
-```text
-generated/{project_id}/revision-{n}/
-```
-
-El selector determinista evalúa el propósito, el flujo, las acciones, las entradas, los resultados
-y las restricciones. Gemini ayuda a definir el agente, pero no tiene autoridad para imponer el
-framework. Los destinos instalados son:
-
-| Framework | Uso preferente | Lenguaje |
-| --- | --- | --- |
-| Google ADK | agentes de varios pasos, herramientas, estado y aprobaciones | Python |
-| Google Gen AI SDK | extracción, clasificación o transformación ligera | Python |
-| Antigravity SDK | refinamiento autónomo y auditable del proyecto dentro de un workspace confinado | Python |
-| Genkit | aplicaciones web/API, Firebase, RAG, streaming y flujos full-stack | TypeScript |
-
-Cada adaptador produce código, configuración, Dockerfile, README, manifiesto y checksums dentro de
-`generated/`. Una generación existente se verifica y reutiliza; nunca se sobrescribe
-silenciosamente. Las plantillas iniciales no ejecutan herramientas ni incorporan secretos.
-
-Cuando `STUDIO_AGENT_BUILDER=antigravity`, el orquestador entrega al SDK únicamente herramientas
-de listado, lectura y escritura de texto dentro del paquete generado. Terminal, navegador, red y
-credenciales permanecen bloqueados. El laboratorio se ejecuta después y exige una aprobación
-humana independiente.
-
-El playground de ADK es solo para desarrollo local:
-
-```powershell
-python -m pip install -e ".[dev,vertex]"
-.\.venv\Scripts\adk.exe web --host 127.0.0.1 --port 8002 agents
-```
-
-No exponga ese servidor a una red pública. Abrirlo no invoca Gemini; enviar un mensaje sí puede
-consumir Vertex AI.
-
-## Pruebas y calidad
-
-```powershell
-python -m pytest
-python -m ruff check .
-python -m mypy app studio sandbox adapters infrastructure agents
-```
-
-El recorrido integral local utiliza la composición real sin credenciales ni llamadas cloud:
-
-```powershell
-python -m pytest tests\integration\test_h10_journey_local.py
-```
-
-MyPy valida los 84 módulos de producción; `tests/` se valida mediante su ejecución con Pytest y no
-forma parte de esa puerta de tipos. La suite cubre dominio, contratos JSON, API, entrevista,
-feedback, aprobación, generación,
-laboratorio, prompt injection, repositorios local/Firestore, IAM, contenedor, despliegue, rollback,
-presupuesto y recorrido de extremo a extremo.
-
-## Despliegue verificado
-
-| Elemento | Evidencia |
+| Failure | Behavior |
 | --- | --- |
-| Servicio | `collaborative-taskmaster-studio` |
-| Región | `us-central1` |
-| URL | <https://collaborative-taskmaster-studio-760216344589.us-central1.run.app> |
-| Revisión | `collaborative-taskmaster-studio-00004-fqp` |
-| Tráfico | 100 % |
-| Escalado | mínimo 0, máximo 1, concurrencia 1 |
-| Modelo | Gemini 3.7 Flash mediante Vertex AI |
-| Persistencia | Firestore, base `collaborative-taskmaster` |
-| Identidad | cuenta de servicio administrada, sin claves de usuario |
-| Imagen | Artifact Registry, digest SHA-256 inmutable |
+| Invalid Gemini structure | Reject and use a visible deterministic fallback. |
+| Missing human approval | Do not construct, test, or execute the protected action. |
+| Cloud Tasks dispatch failure | Preserve the durable job and display the failure. |
+| Duplicate task delivery | Treat it as the same idempotent phase. |
+| Worker restart | Recover the contract and state from Firestore. |
+| Missing Antigravity runtime | Use and label the controlled builder. |
+| Invalid generated path | Reject the project before persistence. |
+| Laboratory failure | Mark `failed_safe`; do not publish. |
+| Large-upload offset mismatch | Reject the chunk without corrupting confirmed bytes. |
+| Unsafe or malformed XLSX | Stop extraction and clean temporary state. |
+| Chart renderer unavailable | Keep the validated data artifact and avoid claiming visual success. |
+| Deleted conversation | Remove local and server copies so it is not restored on reload. |
 
-Humo público de solo lectura:
+## Live evaluation path
 
-```powershell
-$url = "https://collaborative-taskmaster-studio-760216344589.us-central1.run.app"
-python -m infrastructure.cloud_run.smoke_check --url $url
-```
+A judge can verify the main value without configuring cloud resources:
 
-El recorrido desplegado crea datos, invoca Gemini y puede consumir créditos; debe ejecutarse una
-sola vez por revisión candidata:
+1. open the live application;
+2. sign in or use the available evaluation session;
+3. describe an agent in ordinary language;
+4. answer the focused follow-up questions;
+5. inspect the design, framework, access requirements, and completion state;
+6. approve construction;
+7. observe durable builder progress;
+8. approve the isolated laboratory separately;
+9. open the published Taskmaster from the catalog;
+10. ask what it can do, then give it a domain-specific task;
+11. attach multiple CSV/XLSX files and request a deep visual dashboard;
+12. inspect the rendered charts, metrics, insights, and source data.
 
-```powershell
-python -m infrastructure.cloud_run.journey_check --url $url --timeout 90
-```
+For a strong four-minute demonstration, show the live Cloud Run URL, one unedited construction or
+recovered build, the approval boundary, the resulting project/catalog entry, and one dataset
+dashboard. This provides visible proof of action rather than relying on a narrated architecture.
 
-La evidencia versionada está en `infrastructure/cloud_run/deployment-evidence.json`. El despliegue,
-la reversión y la validación están documentados en
-[`docs/09_HITO_H10_CLOUD_RUN.md`](docs/09_HITO_H10_CLOUD_RUN.md) y
-[`docs/10_HITO_H10_RECORRIDO_INTEGRAL.md`](docs/10_HITO_H10_RECORRIDO_INTEGRAL.md).
+## Current limitations
 
-## Seguridad y gobernanza
+- The interface chrome is Spanish-first; the Gemini conversation accepts English and Spanish input.
+- Hosted chat attachments are temporary to the current Cloud Run instance; completed Taskmaster
+  projects are durable.
+- External connectors are read-only in the current public experience.
+- A protected write requires a future write-capable adapter plus explicit human approval.
+- The public service is configured for evaluation, not unrestricted production traffic.
+- Google Charts is loaded in the browser; a restrictive network policy can prevent visual rendering
+  while leaving the underlying artifact intact.
 
-- aprobación humana obligatoria antes de generar;
-- políticas `deny`, `data` y `require_approval` no reducibles silenciosamente;
-- entradas del usuario delimitadas como datos no confiables;
-- respuestas del modelo validadas estructural y semánticamente;
-- modelo sin herramientas de negocio ni autoridad para persistir, aprobar o desplegar;
-- fallback seguro con causa estable y preservación de estado;
-- sandbox sin credenciales, sin red y con timeout;
-- eventos auditables sin prompts completos, feedback, secretos ni razonamiento interno;
-- Firestore con aislamiento lógico, concurrencia, transacciones y retención limitada;
-- cuentas de servicio separadas para build y runtime, sin claves descargadas;
-- permisos mínimos para Vertex AI, Firestore, Artifact Registry y logs;
-- rollback de aplicación separado de los datos versionados.
+## Design principles
 
-## Costos
+1. **Lead before generating.** Clarify the job and its constraints first.
+2. **Contracts over prompt folklore.** Validate every model-produced structure.
+3. **Human authority is explicit.** Construction, testing, and external effects are separate gates.
+4. **Capabilities must be real.** Show disconnected, unavailable, fallback, and failed states honestly.
+5. **Long work must survive requests.** Persist state before asynchronous dispatch.
+6. **Projects remain inspectable.** Store trees and manifests, not opaque archives.
+7. **Data is evidence, never instruction.** Bound and label every external source.
+8. **Visible activity is not chain-of-thought.** Report operations and results only.
+9. **Fail closed.** Invalid state never becomes an implicit success.
 
-La configuración reduce el consumo, pero no promete costo cero:
+## License
 
-- Cloud Run escala a cero y se limita a una instancia;
-- las llamadas al modelo tienen tokens y preguntas acotados;
-- no existen trabajos periódicos ni reintentos ocultos;
-- el presupuesto mensual es 20.000 COP, con alertas 50/80/100;
-- no hay apagado automático ni automatización Pub/Sub.
-
-Los presupuestos de Google Cloud generan alertas; no constituyen un límite duro y los costos pueden
-aparecer con retraso. Consulte
-[`docs/11_HITO_H10_PRESUPUESTO_ALERTAS.md`](docs/11_HITO_H10_PRESUPUESTO_ALERTAS.md).
-
-## Limitaciones conocidas
-
-- El selector cubre cuatro frameworks, pero sus plantillas iniciales son deliberadamente mínimas y
-  deben ampliarse después de validar el agente en el laboratorio.
-- Las herramientas de los Taskmasters generados son simuladas y no modifican sistemas productivos.
-- La demo pública no implementa gestión empresarial de usuarios ni debe recibir datos sensibles.
-- La durabilidad de los proyectos en Cloud Run requiere activar Cloud Storage y conceder a la
-  identidad runtime permisos sobre el bucket; sin esa configuración, `projects/` es local y efímero.
-- El presupuesto alerta, pero no bloquea cargos.
-- En el equipo Windows usado para la entrega, el almacén local de certificados impide algunas
-  consultas `gcloud`; Cloud Shell fue la superficie de verificación sin desactivar TLS.
-
-## Estructura del repositorio
-
-```text
-app/                 API FastAPI e interfaz web
-studio/              dominio, casos de uso y puertos
-agents/              agentes Google ADK
-adapters/google_adk/ generador y plantillas ADK
-infrastructure/      adaptadores local, Firestore, Vertex AI y Cloud Run
-sandbox/             laboratorio y políticas de ejecución
-schemas/             contrato JSON canónico
-tests/               unitarias, contrato, integración y API
-docs/                decisiones, hitos y evidencia
-projects/            Taskmasters construidos y ejecutables; contenido local ignorado por Git
-generated/           salida heredada de exportación ignorada por Git
-```
-
-## Documentación
-
-El punto de entrada recomendado es
-[`23_ESTADO_ACTUAL_PRODUCTO.md`](docs/23_ESTADO_ACTUAL_PRODUCTO.md). Los documentos anteriores
-conservan el contrato, las decisiones y la evidencia cronológica del desarrollo.
-
-| Documento | Contenido |
-| --- | --- |
-| [`01_PLAN_MAESTRO.md`](docs/01_PLAN_MAESTRO.md) | Visión, alcance y etapas. |
-| [`02_CONTRATO_TASKMASTER_SPECIFICATION.md`](docs/02_CONTRATO_TASKMASTER_SPECIFICATION.md) | Contrato canónico. |
-| [`03_ARQUITECTURA_IMPLEMENTACION.md`](docs/03_ARQUITECTURA_IMPLEMENTACION.md) | Arquitectura y seguridad. |
-| [`04_EXPERIENCIA_USUARIO_Y_DEMO.md`](docs/04_EXPERIENCIA_USUARIO_Y_DEMO.md) | UX y guion de demo. |
-| [`05_PLAN_IMPLEMENTACION_MVP.md`](docs/05_PLAN_IMPLEMENTACION_MVP.md) | Backlog, hitos y puertas de calidad. |
-| [`06_CASO_DEMO_Y_FIXTURES.md`](docs/06_CASO_DEMO_Y_FIXTURES.md) | Caso oficial y resultados esperados. |
-| [`08_HITO_H9_FIRESTORE.md`](docs/08_HITO_H9_FIRESTORE.md) | Persistencia Firestore. |
-| [`09_HITO_H10_CLOUD_RUN.md`](docs/09_HITO_H10_CLOUD_RUN.md) | Despliegue y rollback. |
-| [`10_HITO_H10_RECORRIDO_INTEGRAL.md`](docs/10_HITO_H10_RECORRIDO_INTEGRAL.md) | Recorrido integral y evidencia. |
-| [`11_HITO_H10_PRESUPUESTO_ALERTAS.md`](docs/11_HITO_H10_PRESUPUESTO_ALERTAS.md) | Presupuesto y alertas. |
-| [`12_DIAGRAMA_ARQUITECTURA_FINAL.md`](docs/12_DIAGRAMA_ARQUITECTURA_FINAL.md) | Sistema desplegado, recorrido y fronteras de confianza. |
-| [`13_HITO_H11_INSTALACION_LIMPIA.md`](docs/13_HITO_H11_INSTALACION_LIMPIA.md) | Instalación aislada, recorrido local y evidencia. |
-| [`14_HITO_H11_DATOS_OFICIALES_DEMO.md`](docs/14_HITO_H11_DATOS_OFICIALES_DEMO.md) | Textos, requisitos y resultados oficiales de la demo. |
-| [`15_HITO_H11_REINICIO_SEGURO_DEMO.md`](docs/15_HITO_H11_REINICIO_SEGURO_DEMO.md) | Reinicio aislado, confirmado e idempotente de la demo. |
-| [`16_HITO_H11_CONTENEDOR_AGENTES.md`](docs/16_HITO_H11_CONTENEDOR_AGENTES.md) | Recorrido vertical, biblioteca visual y proyectos ejecutables persistentes. |
-| [`17_ARQUITECTURA_INGENIERO_PLUGINS.md`](docs/17_ARQUITECTURA_INGENIERO_PLUGINS.md) | Relevo Gemini/Ingeniero, selector, plugins, catálogo y límites externos. |
-| [`18_IDENTIDAD_MULTIUSUARIO_Y_CONEXIONES.md`](docs/18_IDENTIDAD_MULTIUSUARIO_Y_CONEXIONES.md) | Identidad verificada, aislamiento y conexiones personales. |
-| [`19_VALIDACION_IDENTITY_PLATFORM_DRIVE.md`](docs/19_VALIDACION_IDENTITY_PLATFORM_DRIVE.md) | Validación de Identity Platform y Drive. |
-| [`20_PERSISTENCIA_DURABLE_PROYECTOS.md`](docs/20_PERSISTENCIA_DURABLE_PROYECTOS.md) | Catálogo Firestore y proyectos durables en Cloud Storage. |
-| [`21_COLA_CONSTRUCCION_AISLADA.md`](docs/21_COLA_CONSTRUCCION_AISLADA.md) | Cola durable, recuperación y trabajador de construcción sin credenciales. |
-| [`22_WORKER_CLOUD_TASKS.md`](docs/22_WORKER_CLOUD_TASKS.md) | Entrega autenticada e idempotente del trabajador. |
-| [`23_ESTADO_ACTUAL_PRODUCTO.md`](docs/23_ESTADO_ACTUAL_PRODUCTO.md) | Estado autoritativo y mapa de la implementación vigente. |
-| [`24_EXPERIENCIA_CHAT_Y_TASKMASTER.md`](docs/24_EXPERIENCIA_CHAT_Y_TASKMASTER.md) | Chat actual, construcción visible y conversación con Taskmasters. |
-| [`25_ARCHIVOS_DATASETS_Y_VISUALIZACIONES.md`](docs/25_ARCHIVOS_DATASETS_Y_VISUALIZACIONES.md) | Cargas, límites, datasets y gráficos renderizados. |
-| [`26_IDENTIDAD_PERSISTENCIA_Y_CICLO_DE_DATOS.md`](docs/26_IDENTIDAD_PERSISTENCIA_Y_CICLO_DE_DATOS.md) | Propiedad, almacenamiento, eliminación y retención. |
-| [`27_OPERACION_PRODUCCION_Y_DIAGNOSTICO.md`](docs/27_OPERACION_PRODUCCION_Y_DIAGNOSTICO.md) | Runbook de producción y resolución de fallos. |
-| [`28_VALIDACION_Y_DEMO_ACTUAL.md`](docs/28_VALIDACION_Y_DEMO_ACTUAL.md) | Recorrido vigente, casos negativos y evidencia. |
-
-## Licencia
-
-El paquete declara licencia Apache-2.0 en `pyproject.toml`.
+Licensed under the Apache License 2.0.
