@@ -552,7 +552,10 @@ body.taskmaster-studio-mode.chat-active .partner-conversation{
   overflow-y:auto;
   overscroll-behavior:contain;
   padding:8px 0 26px;
-  scrollbar-gutter:stable;
+  width:calc(100vw - 272px);
+  max-width:none;
+  margin-right:0;
+  scrollbar-gutter:auto;
   scrollbar-width:thin;
   scrollbar-color:#3b3d49 transparent;
 }
@@ -602,6 +605,35 @@ body.taskmaster-studio-mode.chat-active #partner-message-form{
 @media(prefers-reduced-motion:reduce){
   body.taskmaster-studio-mode.chat-active .partner-chat-view.first-turn-lifting .partner-conversation .user-turn:first-child,
   body.taskmaster-studio-mode.chat-active .partner-conversation .inline-typing-turn{animation:none}
+}
+@media(max-width:900px){
+  body.taskmaster-studio-mode.chat-active .partner-conversation{width:100vw}
+}
+/* En el chat general el contenido sigue centrado, pero el scroll pertenece a todo el panel. */
+body.chat-active:not(.taskmaster-studio-mode) #main-content{
+  padding-right:0;
+}
+body.chat-active:not(.taskmaster-studio-mode) .partner-chat-view:not([hidden]){
+  width:100%;
+  max-width:none;
+  margin:0;
+  padding-inline:0;
+}
+body.chat-active:not(.taskmaster-studio-mode) .partner-conversation{
+  width:100%;
+  max-width:none;
+  margin:0;
+  grid-template-columns:minmax(24px,1fr) minmax(0,820px) minmax(24px,1fr);
+  gap:36px 0;
+  scrollbar-gutter:auto;
+}
+body.chat-active:not(.taskmaster-studio-mode) .partner-conversation>.partner-turn{
+  grid-column:2;
+}
+@media(max-width:700px){
+  body.chat-active:not(.taskmaster-studio-mode) .partner-conversation{
+    grid-template-columns:12px minmax(0,1fr) 12px;
+  }
 }
 
 .attachment-list{display:block;width:100%;max-width:840px}

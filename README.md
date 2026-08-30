@@ -202,8 +202,9 @@ son necesarias y el usuario proporciona el contexto correspondiente:
   descarta. No inicia sesión, completa formularios ni ejecuta acciones en sitios externos.
 - **Lectura de documentos:** carga explícita de TXT, Markdown, CSV, JSON, YAML, XML, PDF, DOCX,
   XLSX o PPTX.
-  Se extrae únicamente texto, el original nunca se ejecuta, cada archivo se limita a 25 MiB y solo
-  queda disponible en la sesión que lo adjuntó.
+  Se extrae únicamente texto y el original nunca se ejecuta. La carga directa admite 25 MiB;
+  CSV y XLSX admiten hasta 600 MiB mediante bloques de 8 MiB, se inspeccionan de forma acotada y
+  solo quedan disponibles en la sesión que los adjuntó.
 - **Memoria avanzada:** recupera fragmentos visibles y relevantes de conversaciones anteriores de
   la misma sesión. No mezcla usuarios ni expone cargas internas de herramientas.
 - **Navegación profunda del proyecto:** además de leer y buscar, crea un mapa estructural acotado,

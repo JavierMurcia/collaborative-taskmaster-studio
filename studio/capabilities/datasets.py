@@ -11,6 +11,7 @@ import re
 import zipfile
 from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Literal
 from xml.etree import ElementTree
 
@@ -19,6 +20,10 @@ from pydantic import BaseModel, ConfigDict, Field
 MAX_DATASET_ROWS = 2_500
 MAX_DATASET_COLUMNS = 40
 MAX_CHART_POINTS = 24
+MAX_XLSX_MEMBERS = 10_000
+MAX_XLSX_EXPANDED_BYTES = 4_000_000_000
+MAX_SHARED_STRINGS = 200_000
+MAX_SHARED_STRING_CHARACTERS = 10_000_000
 
 CellValue = str | int | float | bool | None
 
@@ -169,6 +174,18 @@ def parse_dataset(suffix: str, payload: bytes) -> DatasetSnapshot | None:
     return None
 
 
+def parse_dataset_path(suffix: str, path: Path) -> DatasetSnapshot | None:
+    """Inspect large structured files from disk without loading the original into memory."""
+
+    if suffix == ".csv":
+        return DatasetSnapshot(sheets=(_parse_csv_path(path),))
+    if suffix == ".xlsx":
+        with zipfile.ZipFile(path) as archive:
+            sheets = _parse_xlsx_archive(archive)
+        return DatasetSnapshot(sheets=tuple(sheets)) if sheets else None
+    return None
+
+
 def _parse_csv(payload: bytes) -> DatasetSheet:
     text = payload.decode("utf-8-sig")
     sample = text[:8_192]
@@ -194,55 +211,115 @@ def _parse_csv(payload: bytes) -> DatasetSheet:
     )
 
 
+def _parse_csv_path(path: Path) -> DatasetSheet:
+    with path.open("r", encoding="utf-8-sig", newline="") as source:
+        sample = source.read(8_192)
+        source.seek(0)
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
+        except csv.Error:
+            dialect = csv.excel
+        raw_rows: list[list[str]] = []
+        truncated = False
+        for row in csv.reader(source, dialect):
+            if not any(str(value).strip() for value in row):
+                continue
+            if len(raw_rows) <= MAX_DATASET_ROWS:
+                raw_rows.append(row)
+            else:
+                truncated = True
+                break
+    sheet = _sheet_from_rows("Datos", raw_rows)
+    return sheet.model_copy(update={"truncated": truncated or sheet.truncated})
+
+
 def _parse_xlsx(payload: bytes) -> list[DatasetSheet]:
     with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-        members = archive.infolist()
-        if len(members) > 1_500 or sum(item.file_size for item in members) > 40_000_000:
-            return []
-        shared: list[str] = []
-        if "xl/sharedStrings.xml" in archive.namelist():
-            root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
-            shared = [
-                "".join(node.text or "" for node in item.iter() if node.tag.endswith("}t"))
-                for item in root
-                if item.tag.endswith("}si")
-            ]
-        names = _xlsx_sheet_names(archive)
-        paths = sorted(
-            (name for name in archive.namelist() if re.fullmatch(r"xl/worksheets/sheet\d+\.xml", name)),
-            key=lambda value: int(re.search(r"sheet(\d+)", value).group(1)),  # type: ignore[union-attr]
-        )
-        result: list[DatasetSheet] = []
-        for index, path in enumerate(paths):
-            root = ElementTree.fromstring(archive.read(path))
-            rows: list[list[CellValue]] = []
-            for row in (node for node in root.iter() if node.tag.endswith("}row")):
-                values: list[CellValue] = []
-                expected_column = 0
-                for cell in (node for node in row if node.tag.endswith("}c")):
-                    reference = cell.attrib.get("r", "")
-                    column_index = _column_index(reference) if reference else expected_column
-                    while len(values) < min(column_index, MAX_DATASET_COLUMNS):
-                        values.append(None)
-                    if column_index >= MAX_DATASET_COLUMNS:
-                        continue
-                    cell_type = cell.attrib.get("t", "")
-                    raw = next((node.text or "" for node in cell.iter() if node.tag.endswith("}v")), "")
-                    if cell_type == "s" and raw.isdigit() and int(raw) < len(shared):
-                        value: CellValue = shared[int(raw)]
-                    elif cell_type == "inlineStr":
-                        value = "".join(node.text or "" for node in cell.iter() if node.tag.endswith("}t"))
-                    elif cell_type == "b":
-                        value = raw == "1"
-                    else:
-                        value = _coerce_value(raw)
-                    values.append(value)
-                    expected_column = column_index + 1
+        return _parse_xlsx_archive(archive)
+
+
+def _parse_xlsx_archive(archive: zipfile.ZipFile) -> list[DatasetSheet]:
+    members = archive.infolist()
+    if (
+        len(members) > MAX_XLSX_MEMBERS
+        or sum(item.file_size for item in members) > MAX_XLSX_EXPANDED_BYTES
+    ):
+        return []
+    shared = _xlsx_shared_strings(archive)
+    names = _xlsx_sheet_names(archive)
+    paths = sorted(
+        (
+            name
+            for name in archive.namelist()
+            if re.fullmatch(r"xl/worksheets/sheet\d+\.xml", name)
+        ),
+        key=lambda value: int(re.search(r"sheet(\d+)", value).group(1)),  # type: ignore[union-attr]
+    )
+    result: list[DatasetSheet] = []
+    for index, path in enumerate(paths[:24]):
+        rows: list[list[CellValue]] = []
+        truncated = False
+        with archive.open(path) as source:
+            for _, row in ElementTree.iterparse(source, events=("end",)):
+                if not row.tag.endswith("}row"):
+                    continue
+                if len(rows) > MAX_DATASET_ROWS:
+                    truncated = True
+                    row.clear()
+                    break
+                values = _xlsx_row_values(row, shared)
                 if any(value not in (None, "") for value in values):
                     rows.append(values)
-            if rows:
-                result.append(_sheet_from_rows(names[index] if index < len(names) else f"Hoja {index + 1}", rows))
-        return result
+                row.clear()
+        if rows:
+            sheet = _sheet_from_rows(
+                names[index] if index < len(names) else f"Hoja {index + 1}", rows
+            )
+            result.append(sheet.model_copy(update={"truncated": truncated or sheet.truncated}))
+    return result
+
+
+def _xlsx_shared_strings(archive: zipfile.ZipFile) -> list[str]:
+    if "xl/sharedStrings.xml" not in archive.namelist():
+        return []
+    shared: list[str] = []
+    characters = 0
+    with archive.open("xl/sharedStrings.xml") as source:
+        for _, item in ElementTree.iterparse(source, events=("end",)):
+            if not item.tag.endswith("}si"):
+                continue
+            value = "".join(node.text or "" for node in item.iter() if node.tag.endswith("}t"))
+            shared.append(value[:500])
+            characters += len(shared[-1])
+            item.clear()
+            if len(shared) >= MAX_SHARED_STRINGS or characters >= MAX_SHARED_STRING_CHARACTERS:
+                break
+    return shared
+
+
+def _xlsx_row_values(row: ElementTree.Element, shared: list[str]) -> list[CellValue]:
+    values: list[CellValue] = []
+    expected_column = 0
+    for cell in (node for node in row if node.tag.endswith("}c")):
+        reference = cell.attrib.get("r", "")
+        column_index = _column_index(reference) if reference else expected_column
+        while len(values) < min(column_index, MAX_DATASET_COLUMNS):
+            values.append(None)
+        if column_index >= MAX_DATASET_COLUMNS:
+            continue
+        cell_type = cell.attrib.get("t", "")
+        raw = next((node.text or "" for node in cell.iter() if node.tag.endswith("}v")), "")
+        if cell_type == "s" and raw.isdigit() and int(raw) < len(shared):
+            value: CellValue = shared[int(raw)]
+        elif cell_type == "inlineStr":
+            value = "".join(node.text or "" for node in cell.iter() if node.tag.endswith("}t"))
+        elif cell_type == "b":
+            value = raw == "1"
+        else:
+            value = _coerce_value(raw)
+        values.append(value)
+        expected_column = column_index + 1
+    return values
 
 
 def _xlsx_sheet_names(archive: zipfile.ZipFile) -> list[str]:

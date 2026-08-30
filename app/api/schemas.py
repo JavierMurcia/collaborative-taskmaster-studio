@@ -85,6 +85,11 @@ class RefreshIdentityRequest(RequestModel):
     refresh_token: str | None = Field(default=None, min_length=20, max_length=4096)
 
 
+class LargeUploadStartRequest(RequestModel):
+    filename: str = Field(min_length=1, max_length=180)
+    size_bytes: int = Field(gt=25 * 1024 * 1024, le=600 * 1024 * 1024)
+
+
 class CollaborativeConversationRequest(RequestModel):
     title: str = Field(min_length=1, max_length=100)
     messages: list[dict[str, Any]] = Field(default_factory=list, max_length=32)

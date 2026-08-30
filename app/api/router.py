@@ -27,6 +27,7 @@ from app.api.schemas import (
     FeedbackRequest,
     GenerationRequest,
     InterviewAnswerRequest,
+    LargeUploadStartRequest,
     RefreshIdentityRequest,
 )
 from studio.application.agent_catalog import AgentCatalogRepository
@@ -57,7 +58,11 @@ from studio.application.project_service import ProjectService
 from studio.application.revision_generator import StructuredRevisionGenerator
 from studio.application.specification_generator import StructuredSpecificationGenerator
 from studio.capabilities.datasets import ChartArtifact, DatasetAnalysisService
-from studio.capabilities.documents import MAX_UPLOAD_BYTES, DocumentLibrary
+from studio.capabilities.documents import (
+    MAX_UPLOAD_BYTES,
+    DocumentLibrary,
+    LargeUploadManager,
+)
 from studio.capabilities.github import GitHubReader
 from studio.capabilities.google_calendar import GoogleCalendarReader
 from studio.capabilities.google_drive import GoogleDriveReader
@@ -96,6 +101,7 @@ class ServiceContainer:
     collaborative_chat: CollaborativeChatService
     conversation_memory: ConversationMemoryService
     documents: DocumentLibrary
+    large_uploads: LargeUploadManager
     dataset_analysis: DatasetAnalysisService
     chat_builder: ChatBuildService | None
     agent_catalog: AgentCatalogRepository | None
@@ -130,6 +136,7 @@ class ServiceContainer:
         collaborative_chat: CollaborativeChatService | None = None,
         conversation_memory: ConversationMemoryService | None = None,
         documents: DocumentLibrary | None = None,
+        large_uploads: LargeUploadManager | None = None,
         dataset_analysis: DatasetAnalysisService | None = None,
         chat_builder: ChatBuildService | None = None,
         agent_catalog: AgentCatalogRepository | None = None,
@@ -159,6 +166,10 @@ class ServiceContainer:
             from pathlib import Path
 
             documents = DocumentLibrary(Path(".studio-data"))
+        if large_uploads is None:
+            from pathlib import Path
+
+            large_uploads = LargeUploadManager(Path(".studio-data/large-uploads"), documents)
         active_registry = plugin_registry or PluginRegistry()
         if connections is None:
             from pathlib import Path
@@ -190,6 +201,7 @@ class ServiceContainer:
             collaborative_chat=collaborative_chat,
             conversation_memory=conversation_memory,
             documents=documents,
+            large_uploads=large_uploads,
             dataset_analysis=dataset_analysis or DatasetAnalysisService(),
             chat_builder=chat_builder,
             agent_catalog=agent_catalog,
@@ -279,6 +291,44 @@ def create_router(services: ServiceContainer) -> APIRouter:
             file.filename or "documento",
             payload,
         ).summary()
+
+    @router.post("/collaborative/document-uploads", status_code=201)
+    def start_large_document_upload(
+        body: LargeUploadStartRequest,
+        session_id: SessionHeader,
+    ) -> dict[str, Any]:
+        state = services.large_uploads.start(session_id, body.filename, body.size_bytes)
+        return state.model_dump(mode="json")
+
+    @router.put("/collaborative/document-uploads/{upload_id}")
+    async def append_large_document_upload(
+        upload_id: str,
+        request: Request,
+        session_id: SessionHeader,
+        offset: Annotated[int, Query(ge=0, le=600 * 1024 * 1024)],
+    ) -> dict[str, Any]:
+        state = services.large_uploads.append(
+            session_id,
+            upload_id,
+            offset,
+            await request.body(),
+        )
+        return state.model_dump(mode="json")
+
+    @router.post("/collaborative/document-uploads/{upload_id}/complete", status_code=201)
+    def complete_large_document_upload(
+        upload_id: str,
+        session_id: SessionHeader,
+    ) -> dict[str, Any]:
+        return services.large_uploads.complete(session_id, upload_id).summary()
+
+    @router.delete("/collaborative/document-uploads/{upload_id}", status_code=204)
+    def cancel_large_document_upload(
+        upload_id: str,
+        session_id: SessionHeader,
+    ) -> Response:
+        services.large_uploads.cancel(session_id, upload_id)
+        return Response(status_code=204)
 
     @router.get("/collaborative/documents")
     def list_collaborative_documents(session_id: SessionHeader) -> dict[str, Any]:

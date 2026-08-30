@@ -8,6 +8,8 @@ const ID_TOKEN_KEY = "taskmaster_studio_id_token";
 const REFRESH_TOKEN_KEY = "taskmaster_studio_refresh_token";
 const MAX_SESSION_DOCUMENTS = 12;
 const MAX_DOCUMENT_UPLOAD_BYTES = 25 * 1024 * 1024;
+const MAX_LARGE_DOCUMENT_UPLOAD_BYTES = 600 * 1024 * 1024;
+const DOCUMENT_UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024;
 const CONNECTION_CATALOG = [
   { plugin_id: "google.drive", title: "Google Drive", provider: "Google" },
   { plugin_id: "google.gmail", title: "Gmail", provider: "Google" },
@@ -889,8 +891,8 @@ async function uploadDocuments(files) {
     name: file.name,
     size_bytes: file.size,
     progress: 0,
-    status: file.size > MAX_DOCUMENT_UPLOAD_BYTES ? "failed" : "uploading",
-    error: file.size > MAX_DOCUMENT_UPLOAD_BYTES ? "El archivo supera el límite de 25 MB." : "",
+    status: file.size > MAX_LARGE_DOCUMENT_UPLOAD_BYTES ? "failed" : "uploading",
+    error: file.size > MAX_LARGE_DOCUMENT_UPLOAD_BYTES ? "El archivo supera el límite de 600 MB." : "",
   }));
   state.documentUploads.push(...uploads);
   renderAttachments();
@@ -916,6 +918,7 @@ async function uploadDocuments(files) {
 function closeAttachmentMenus() { $$(".attachment-menu[open]").forEach((menu) => menu.removeAttribute("open")); }
 
 function uploadDocumentWithProgress(upload) {
+  if (upload.file.size > MAX_DOCUMENT_UPLOAD_BYTES) return uploadLargeDocument(upload);
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     const form = new FormData(); form.append("file", upload.file);
@@ -947,10 +950,65 @@ function uploadDocumentWithProgress(upload) {
   });
 }
 
+async function uploadLargeDocument(upload) {
+  const extension = upload.name.split(".").pop()?.toLowerCase();
+  if (!new Set(["csv", "xlsx"]).has(extension)) {
+    throw new Error("Las cargas mayores de 25 MB admiten archivos CSV y XLSX.");
+  }
+  const controller = new AbortController();
+  activeDocumentUploads.set(upload.id, controller);
+  let serverUploadId = "";
+  try {
+    const started = await api("/api/v1/collaborative/document-uploads", {
+      method: "POST",
+      body: JSON.stringify({ filename: upload.name, size_bytes: upload.file.size }),
+      background: true,
+    });
+    serverUploadId = started.id;
+    upload.serverUploadId = serverUploadId;
+    let offset = Number(started.received_bytes || 0);
+    while (offset < upload.file.size) {
+      const chunk = upload.file.slice(offset, Math.min(offset + DOCUMENT_UPLOAD_CHUNK_BYTES, upload.file.size));
+      const response = await fetch(`/api/v1/collaborative/document-uploads/${encodeURIComponent(serverUploadId)}?offset=${offset}`, {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: identityHeaders({ "Content-Type": "application/octet-stream" }),
+        body: chunk,
+        signal: controller.signal,
+      });
+      const raw = await response.text();
+      let payload = {};
+      try { payload = raw ? JSON.parse(raw) : {}; }
+      catch { throw new Error("El servidor devolvió una respuesta inesperada durante la carga."); }
+      if (!response.ok) throw new Error(payload.error?.message || "No se pudo cargar un bloque del archivo.");
+      offset = Number(payload.received_bytes || offset + chunk.size);
+      upload.progress = Math.min(99, Math.round((offset / upload.file.size) * 100));
+      renderAttachments();
+    }
+    const result = await api(`/api/v1/collaborative/document-uploads/${encodeURIComponent(serverUploadId)}/complete`, {
+      method: "POST",
+      body: JSON.stringify({}),
+      background: true,
+    });
+    upload.progress = 100;
+    return result;
+  } catch (error) {
+    if (serverUploadId) {
+      api(`/api/v1/collaborative/document-uploads/${encodeURIComponent(serverUploadId)}`, { method: "DELETE", background: true }).catch(() => {});
+    }
+    throw error;
+  } finally {
+    activeDocumentUploads.delete(upload.id);
+  }
+}
+
 function cancelDocumentUpload(uploadId) {
   const upload = state.documentUploads.find((item) => item.id === uploadId);
   if (upload) upload.status = "cancelled";
   activeDocumentUploads.get(uploadId)?.abort();
+  if (upload?.serverUploadId) {
+    api(`/api/v1/collaborative/document-uploads/${encodeURIComponent(upload.serverUploadId)}`, { method: "DELETE", background: true }).catch(() => {});
+  }
   state.documentUploads = state.documentUploads.filter((item) => item.id !== uploadId);
   renderAttachments();
 }

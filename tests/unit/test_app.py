@@ -18,7 +18,9 @@ def test_health_endpoint() -> None:
 
 def test_home_serves_the_chat_only_experience() -> None:
     response = client.get("/")
+    styles_response = client.get("/static/styles.css")
     assert response.status_code == 200
+    assert styles_response.status_code == 200
     assert "Collaborative Taskmaster Studio" in response.text
     assert "RADAR DE PROYECTOS · SOCIO COLABORATIVO" in response.text
     assert "¿Qué proyecto deberíamos construir?" in response.text
@@ -33,8 +35,9 @@ def test_home_serves_the_chat_only_experience() -> None:
     assert "Ejecutar 3 escenarios" not in response.text
     assert 'id="taskmaster-studio-access"' in response.text
     assert "Taskmaster Studio" in response.text
-    assert '/static/styles.css?v=20260830-multi-dataset-v27' in response.text
-    assert '/static/app.js?v=20260830-multi-dataset-v27' in response.text
+    assert '/static/styles.css?v=20260830-large-upload-v29' in response.text
+    assert '/static/app.js?v=20260830-large-upload-v29' in response.text
+    assert "body.chat-active:not(.taskmaster-studio-mode) #main-content" in styles_response.text
     assert 'https://www.gstatic.com/charts/loader.js' in response.text
     assert 'id="document-inspector"' in response.text
     assert 'id="partner-typing"' not in response.text

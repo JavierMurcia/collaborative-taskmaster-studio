@@ -5,7 +5,9 @@ from __future__ import annotations
 import base64
 import hashlib
 import io
+import json
 import re
+import time
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -14,11 +16,14 @@ from xml.etree import ElementTree
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from studio.capabilities.datasets import DatasetSnapshot, parse_dataset
+from studio.capabilities.datasets import DatasetSnapshot, parse_dataset, parse_dataset_path
 from studio.domain.errors import DomainError
 from studio.ports.model_gateway import ModelMedia
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+MAX_LARGE_UPLOAD_BYTES = 600 * 1024 * 1024
+MAX_UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024
+MAX_ACTIVE_LARGE_UPLOAD_BYTES = 1200 * 1024 * 1024
 MAX_MULTIMODAL_BYTES = 16 * 1024 * 1024
 MAX_EXTRACTED_CHARACTERS = 100_000
 MAX_DOCUMENTS_PER_SESSION = 12
@@ -38,7 +43,7 @@ class DocumentRecord(BaseModel):
     id: str = Field(pattern=r"^doc_[a-f0-9]{16}$")
     name: str = Field(min_length=1, max_length=180)
     suffix: str
-    size_bytes: int = Field(ge=1, le=MAX_UPLOAD_BYTES)
+    size_bytes: int = Field(ge=1, le=MAX_LARGE_UPLOAD_BYTES)
     sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     text: str = Field(max_length=MAX_EXTRACTED_CHARACTERS)
     truncated: bool = False
@@ -59,6 +64,16 @@ class DocumentRecord(BaseModel):
         if self.media is not None:
             summary["media_type"] = self.media.mime_type
         return summary
+
+
+class LargeUploadState(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: str = Field(pattern=r"^large_[a-f0-9]{16}$")
+    name: str = Field(min_length=1, max_length=180)
+    size_bytes: int = Field(gt=MAX_UPLOAD_BYTES, le=MAX_LARGE_UPLOAD_BYTES)
+    received_bytes: int = Field(ge=0, le=MAX_LARGE_UPLOAD_BYTES)
+    created_at: float = Field(gt=0)
 
 
 class DocumentLibrary:
@@ -88,12 +103,93 @@ class DocumentLibrary:
                 "DOCUMENT_LIMIT_REACHED",
                 "La sesión alcanzó el límite de 12 documentos; elimina uno antes de continuar.",
             )
+        dataset = parse_dataset(suffix, payload)
         media = _image_media(suffix, payload) if suffix in IMAGE_MIME_TYPES else None
         extracted = (
             f"Imagen adjunta: {safe_name}. Gemini puede analizar sus píxeles directamente."
             if media is not None
+            else _dataset_text(dataset)
+            if suffix == ".xlsx" and dataset is not None
             else _extract_text(suffix, payload)
         )
+        return self._store_record(
+            directory,
+            safe_name=safe_name,
+            suffix=suffix,
+            size_bytes=len(payload),
+            sha256=hashlib.sha256(payload).hexdigest(),
+            extracted=extracted,
+            dataset=dataset,
+            media=media,
+        )
+
+    def add_path(self, owner_session_id: str, filename: str, path: Path) -> DocumentRecord:
+        """Finalize a large CSV/XLSX from disk using bounded, streaming inspection."""
+
+        safe_name = Path(filename).name.strip()[:180]
+        suffix = Path(safe_name).suffix.casefold()
+        size_bytes = path.stat().st_size if path.exists() else 0
+        if suffix not in {".csv", ".xlsx"}:
+            raise DomainError(
+                "DOCUMENT_LARGE_FORMAT_UNSUPPORTED",
+                "Las cargas mayores de 25 MB admiten CSV y XLSX.",
+            )
+        if not size_bytes or size_bytes > MAX_LARGE_UPLOAD_BYTES:
+            raise DomainError(
+                "DOCUMENT_SIZE_INVALID",
+                "El archivo debe contener datos y no superar 600 MB.",
+            )
+        directory = self._owner_directory(owner_session_id)
+        directory.mkdir(parents=True, exist_ok=True)
+        if len(tuple(directory.glob("doc_*.json"))) >= MAX_DOCUMENTS_PER_SESSION:
+            raise DomainError(
+                "DOCUMENT_LIMIT_REACHED",
+                "La sesión alcanzó el límite de 12 documentos; elimina uno antes de continuar.",
+            )
+        try:
+            dataset = parse_dataset_path(suffix, path)
+            if suffix == ".xlsx":
+                if dataset is None:
+                    raise DomainError(
+                        "DOCUMENT_XLSX_LIMIT_REACHED",
+                        "El XLSX no contiene hojas legibles dentro de los límites de análisis.",
+                    )
+                extracted = _dataset_text(dataset)
+            else:
+                extracted = _read_text_prefix(path)
+        except DomainError:
+            raise
+        except UnicodeDecodeError as error:
+            raise DomainError(
+                "DOCUMENT_ENCODING_INVALID", "El archivo CSV debe usar UTF-8."
+            ) from error
+        except (zipfile.BadZipFile, ElementTree.ParseError) as error:
+            raise DomainError(
+                "DOCUMENT_XLSX_INVALID", "El archivo XLSX no es válido."
+            ) from error
+        return self._store_record(
+            directory,
+            safe_name=safe_name,
+            suffix=suffix,
+            size_bytes=size_bytes,
+            sha256=_sha256_path(path),
+            extracted=extracted,
+            dataset=dataset,
+            media=None,
+        )
+
+    def _store_record(
+        self,
+        directory: Path,
+        *,
+        safe_name: str,
+        suffix: str,
+        size_bytes: int,
+        sha256: str,
+        extracted: str,
+        dataset: DatasetSnapshot | None,
+        media: ModelMedia | None,
+    ) -> DocumentRecord:
         clean = _normalize_text(extracted)
         truncated = len(clean) > MAX_EXTRACTED_CHARACTERS
         clean = clean[:MAX_EXTRACTED_CHARACTERS]
@@ -102,13 +198,12 @@ class DocumentLibrary:
                 "DOCUMENT_TEXT_EMPTY",
                 "No fue posible extraer texto utilizable del documento.",
             )
-        dataset = parse_dataset(suffix, payload)
         record = DocumentRecord(
             id=f"doc_{uuid4().hex[:16]}",
             name=safe_name,
             suffix=suffix,
-            size_bytes=len(payload),
-            sha256=hashlib.sha256(payload).hexdigest(),
+            size_bytes=size_bytes,
+            sha256=sha256,
             text=clean,
             truncated=truncated,
             dataset=dataset,
@@ -202,6 +297,159 @@ class DocumentLibrary:
             return None
 
 
+class LargeUploadManager:
+    """Assemble same-origin chunks on disk before bounded dataset inspection."""
+
+    def __init__(self, root: Path, documents: DocumentLibrary) -> None:
+        self._root = root.resolve()
+        self._root.mkdir(parents=True, exist_ok=True)
+        self._documents = documents
+
+    def start(self, owner_session_id: str, filename: str, size_bytes: int) -> LargeUploadState:
+        safe_name = Path(filename).name.strip()[:180]
+        if Path(safe_name).suffix.casefold() not in {".csv", ".xlsx"}:
+            raise DomainError(
+                "DOCUMENT_LARGE_FORMAT_UNSUPPORTED",
+                "Las cargas mayores de 25 MB admiten CSV y XLSX.",
+            )
+        if not MAX_UPLOAD_BYTES < size_bytes <= MAX_LARGE_UPLOAD_BYTES:
+            raise DomainError(
+                "DOCUMENT_SIZE_INVALID",
+                "La carga grande debe superar 25 MB y no exceder 600 MB.",
+            )
+        directory = self._owner_directory(owner_session_id)
+        directory.mkdir(parents=True, exist_ok=True)
+        for owner_directory in self._root.iterdir():
+            if owner_directory.is_dir():
+                self._prune(owner_directory)
+        active = len(tuple(directory.glob("large_*.json")))
+        if len(self._documents.list(owner_session_id)) + active >= MAX_DOCUMENTS_PER_SESSION:
+            raise DomainError(
+                "DOCUMENT_LIMIT_REACHED",
+                "La sesión alcanzó el límite de 12 documentos; elimina uno antes de continuar.",
+            )
+        if self._active_declared_bytes() + size_bytes > MAX_ACTIVE_LARGE_UPLOAD_BYTES:
+            raise DomainError(
+                "DOCUMENT_UPLOAD_CAPACITY_REACHED",
+                "El servicio está procesando otras cargas grandes; inténtalo nuevamente en unos minutos.",
+            )
+        state = LargeUploadState(
+            id=f"large_{uuid4().hex[:16]}",
+            name=safe_name,
+            size_bytes=size_bytes,
+            received_bytes=0,
+            created_at=time.time(),
+        )
+        self._write_state(directory, state)
+        self._part_path(directory, state.id).touch(exist_ok=False)
+        return state
+
+    def append(
+        self,
+        owner_session_id: str,
+        upload_id: str,
+        offset: int,
+        payload: bytes,
+    ) -> LargeUploadState:
+        directory = self._owner_directory(owner_session_id)
+        state = self._require(directory, upload_id)
+        if not payload or len(payload) > MAX_UPLOAD_CHUNK_BYTES:
+            raise DomainError(
+                "DOCUMENT_CHUNK_SIZE_INVALID",
+                "Cada bloque debe contener datos y no superar 8 MB.",
+            )
+        if offset != state.received_bytes:
+            raise DomainError(
+                "DOCUMENT_CHUNK_OFFSET_CONFLICT",
+                "La posición del bloque no coincide con la carga recibida.",
+            )
+        if offset + len(payload) > state.size_bytes:
+            raise DomainError(
+                "DOCUMENT_CHUNK_OVERFLOW", "El bloque supera el tamaño declarado del archivo."
+            )
+        with self._part_path(directory, upload_id).open("ab") as target:
+            target.write(payload)
+        updated = state.model_copy(update={"received_bytes": offset + len(payload)})
+        self._write_state(directory, updated)
+        return updated
+
+    def complete(self, owner_session_id: str, upload_id: str) -> DocumentRecord:
+        directory = self._owner_directory(owner_session_id)
+        state = self._require(directory, upload_id)
+        part_path = self._part_path(directory, upload_id)
+        if state.received_bytes != state.size_bytes or part_path.stat().st_size != state.size_bytes:
+            raise DomainError(
+                "DOCUMENT_UPLOAD_INCOMPLETE", "La carga todavía no ha recibido todos sus bloques."
+            )
+        try:
+            return self._documents.add_path(owner_session_id, state.name, part_path)
+        finally:
+            part_path.unlink(missing_ok=True)
+            self._state_path(directory, upload_id).unlink(missing_ok=True)
+
+    def cancel(self, owner_session_id: str, upload_id: str) -> None:
+        directory = self._owner_directory(owner_session_id)
+        self._validate_id(upload_id)
+        self._part_path(directory, upload_id).unlink(missing_ok=True)
+        self._state_path(directory, upload_id).unlink(missing_ok=True)
+
+    def _require(self, directory: Path, upload_id: str) -> LargeUploadState:
+        self._validate_id(upload_id)
+        try:
+            return LargeUploadState.model_validate_json(
+                self._state_path(directory, upload_id).read_text("utf-8")
+            )
+        except (OSError, ValueError) as error:
+            raise DomainError(
+                "DOCUMENT_UPLOAD_NOT_FOUND", "La carga grande no existe o ya terminó."
+            ) from error
+
+    def _owner_directory(self, owner_session_id: str) -> Path:
+        return self._root / hashlib.sha256(owner_session_id.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _validate_id(upload_id: str) -> None:
+        if not re.fullmatch(r"large_[a-f0-9]{16}", upload_id):
+            raise DomainError(
+                "DOCUMENT_UPLOAD_ID_INVALID", "El identificador de carga no es válido."
+            )
+
+    @staticmethod
+    def _state_path(directory: Path, upload_id: str) -> Path:
+        return directory / f"{upload_id}.json"
+
+    @staticmethod
+    def _part_path(directory: Path, upload_id: str) -> Path:
+        return directory / f"{upload_id}.part"
+
+    def _write_state(self, directory: Path, state: LargeUploadState) -> None:
+        self._state_path(directory, state.id).write_text(
+            state.model_dump_json(), encoding="utf-8"
+        )
+
+    def _active_declared_bytes(self) -> int:
+        total = 0
+        for state_path in self._root.glob("*/large_*.json"):
+            try:
+                total += int(json.loads(state_path.read_text("utf-8")).get("size_bytes", 0))
+            except (OSError, ValueError, TypeError):
+                continue
+        return total
+
+    @staticmethod
+    def _prune(directory: Path) -> None:
+        cutoff = time.time() - 24 * 60 * 60
+        for state_path in directory.glob("large_*.json"):
+            try:
+                payload = json.loads(state_path.read_text("utf-8"))
+                if float(payload.get("created_at", 0)) >= cutoff:
+                    continue
+            except (OSError, ValueError, TypeError):
+                pass
+            state_path.with_suffix(".part").unlink(missing_ok=True)
+            state_path.unlink(missing_ok=True)
+
+
 def _extract_text(suffix: str, payload: bytes) -> str:
     if suffix in TEXT_SUFFIXES:
         try:
@@ -217,6 +465,34 @@ def _extract_text(suffix: str, payload: bytes) -> str:
     if suffix == ".pptx":
         return _extract_pptx(payload)
     raise DomainError("DOCUMENT_FORMAT_UNSUPPORTED", "El formato no está permitido.")
+
+
+def _dataset_text(dataset: DatasetSnapshot | None) -> str:
+    if dataset is None:
+        return ""
+    sections: list[str] = []
+    for sheet in dataset.sheets:
+        lines = ["\t".join(sheet.columns)]
+        lines.extend(
+            "\t".join("" if value is None else str(value) for value in row)
+            for row in sheet.rows
+        )
+        sections.append(f"Hoja: {sheet.name}\n" + "\n".join(lines))
+    return "\n\n".join(sections)
+
+
+def _read_text_prefix(path: Path) -> str:
+    with path.open("rb") as source:
+        payload = source.read(MAX_EXTRACTED_CHARACTERS * 4)
+    return payload.decode("utf-8-sig", errors="ignore")
+
+
+def _sha256_path(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        while block := source.read(1024 * 1024):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _image_media(suffix: str, payload: bytes) -> ModelMedia:
@@ -282,35 +558,7 @@ def _extract_pdf(payload: bytes) -> str:
 
 def _extract_xlsx(payload: bytes) -> str:
     try:
-        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
-            _validate_office_archive(archive, "XLSX")
-            shared: list[str] = []
-            if "xl/sharedStrings.xml" in archive.namelist():
-                root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
-                shared = ["".join(node.text or "" for node in item.iter() if node.tag.endswith("}t")) for item in root if item.tag.endswith("}si")]
-            sheets: list[str] = []
-            names = sorted(
-                name for name in archive.namelist()
-                if re.fullmatch(r"xl/worksheets/sheet\d+\.xml", name)
-            )
-            for index, name in enumerate(names, start=1):
-                root = ElementTree.fromstring(archive.read(name))
-                rows: list[str] = []
-                for row in (node for node in root.iter() if node.tag.endswith("}row")):
-                    values: list[str] = []
-                    for cell in (node for node in row if node.tag.endswith("}c")):
-                        cell_type = cell.attrib.get("t", "")
-                        value = next((node.text or "" for node in cell.iter() if node.tag.endswith("}v")), "")
-                        if cell_type == "s" and value.isdigit() and int(value) < len(shared):
-                            value = shared[int(value)]
-                        elif cell_type == "inlineStr":
-                            value = "".join(node.text or "" for node in cell.iter() if node.tag.endswith("}t"))
-                        values.append(value)
-                    if any(values):
-                        rows.append("\t".join(values))
-                if rows:
-                    sheets.append(f"Hoja {index}\n" + "\n".join(rows))
-            return "\n\n".join(sheets)
+        return _dataset_text(parse_dataset(".xlsx", payload))
     except (zipfile.BadZipFile, ElementTree.ParseError) as error:
         raise DomainError("DOCUMENT_XLSX_INVALID", "El archivo XLSX no es válido.") from error
 

@@ -86,7 +86,7 @@ from studio.application.interview_question_generator import (
 from studio.application.plugin_registry import PluginRegistry
 from studio.application.revision_generator import StructuredRevisionGenerator
 from studio.application.specification_generator import StructuredSpecificationGenerator
-from studio.capabilities.documents import DocumentLibrary
+from studio.capabilities.documents import DocumentLibrary, LargeUploadManager
 from studio.capabilities.github import GitHubReader
 from studio.capabilities.google_calendar import GoogleCalendarReader
 from studio.capabilities.google_drive import GoogleDriveReader
@@ -105,6 +105,7 @@ STATIC = ROOT / "static"
 LOGGER = logging.getLogger("collaborative-taskmaster-studio")
 MAX_REQUEST_BYTES = 32_768
 MAX_DOCUMENT_REQUEST_BYTES = 26_500_000
+MAX_UPLOAD_CHUNK_REQUEST_BYTES = 8_500_000
 def _workspace_read_limit() -> int:
     try:
         return int(os.getenv("STUDIO_COLLABORATOR_MAX_READ_BYTES", "16384"))
@@ -117,11 +118,15 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         request_id = request.headers.get("X-Request-ID") or uuid4().hex
         request.state.request_id = request_id[:128]
         content_length = request.headers.get("content-length")
-        request_limit = (
-            MAX_DOCUMENT_REQUEST_BYTES
-            if request.url.path == "/api/v1/collaborative/documents"
-            else MAX_REQUEST_BYTES
-        )
+        if request.url.path == "/api/v1/collaborative/documents":
+            request_limit = MAX_DOCUMENT_REQUEST_BYTES
+        elif (
+            request.method == "PUT"
+            and request.url.path.startswith("/api/v1/collaborative/document-uploads/")
+        ):
+            request_limit = MAX_UPLOAD_CHUNK_REQUEST_BYTES
+        else:
+            request_limit = MAX_REQUEST_BYTES
         if content_length and content_length.isdigit() and int(content_length) > request_limit:
             return _error_response(
                 request,
@@ -188,6 +193,7 @@ def create_app(
     cloud_storage_settings: CloudStorageSettings | None = None,
     conversation_memory: ConversationMemoryRepository | None = None,
     document_library: DocumentLibrary | None = None,
+    large_upload_manager: LargeUploadManager | None = None,
     identity_verifier: IdentityVerifier | None = None,
 ) -> FastAPI:
     app = FastAPI(
@@ -287,6 +293,11 @@ def create_app(
             conversation_memory = JsonConversationMemoryRepository(data_directory)
     if document_library is None:
         document_library = DocumentLibrary(data_directory)
+    if large_upload_manager is None:
+        large_upload_root = Path(
+            os.getenv("STUDIO_LARGE_UPLOAD_ROOT", str(data_directory / "large-uploads"))
+        )
+        large_upload_manager = LargeUploadManager(large_upload_root, document_library)
     plugin_registry = PluginRegistry()
     credential_vault = build_credential_vault(
         cast(Any, firestore_runtime.client) if firestore_runtime.client is not None else None
@@ -426,6 +437,7 @@ def create_app(
         ),
         conversation_memory=ConversationMemoryService(conversation_memory, active_clock),
         documents=document_library,
+        large_uploads=large_upload_manager,
         chat_builder=ChatBuildService(
             project_framework_generators,
             projects_root,

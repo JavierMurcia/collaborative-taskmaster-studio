@@ -13,7 +13,7 @@ from infrastructure.local.clock import FrozenClock
 from infrastructure.local.conversation_memory import InMemoryConversationMemoryRepository
 from infrastructure.local.repositories import InMemoryRepository
 from studio.application.conversation_memory import ConversationMemoryService
-from studio.capabilities.documents import DocumentLibrary
+from studio.capabilities.documents import DocumentLibrary, LargeUploadManager
 from studio.capabilities.web import VertexWebResearcher
 from studio.capabilities.workspace import WorkspaceReader
 
@@ -109,6 +109,64 @@ def test_multiple_dataset_files_can_be_uploaded_to_one_session(tmp_path: Path) -
 
     assert listed.status_code == 200
     assert {item["id"] for item in listed.json()["documents"]} == set(document_ids)
+
+
+def test_large_upload_manager_accepts_bounded_chunks_and_can_cancel(tmp_path: Path) -> None:
+    library = DocumentLibrary(tmp_path / "data")
+    manager = LargeUploadManager(tmp_path / "uploads", library)
+    state = manager.start("browser_large", "inventario.csv", 25 * 1024 * 1024 + 1)
+
+    updated = manager.append("browser_large", state.id, 0, b"categoria,valor\n")
+
+    assert updated.received_bytes == len(b"categoria,valor\n")
+    manager.cancel("browser_large", state.id)
+    assert not tuple((tmp_path / "uploads").rglob(f"{state.id}.*"))
+
+
+def test_large_upload_api_accepts_same_origin_chunks(tmp_path: Path) -> None:
+    clock = FrozenClock(NOW)
+    projects = InMemoryRepository(clock)
+    library = DocumentLibrary(tmp_path / "data")
+    manager = LargeUploadManager(tmp_path / "uploads", library)
+    api = TestClient(
+        create_app(
+            projects,
+            projects,
+            clock,
+            document_library=library,
+            large_upload_manager=manager,
+        )
+    )
+    headers = {"X-Studio-Session": "browser_large_api"}
+    started = api.post(
+        "/api/v1/collaborative/document-uploads",
+        headers=headers,
+        json={"filename": "inventario.csv", "size_bytes": 25 * 1024 * 1024 + 1},
+    )
+
+    assert started.status_code == 201
+    upload_id = started.json()["id"]
+    chunk = api.put(
+        f"/api/v1/collaborative/document-uploads/{upload_id}?offset=0",
+        headers={**headers, "Content-Type": "application/octet-stream"},
+        content=b"categoria,valor\n",
+    )
+    assert chunk.status_code == 200
+    assert chunk.json()["received_bytes"] == len(b"categoria,valor\n")
+    assert api.delete(
+        f"/api/v1/collaborative/document-uploads/{upload_id}", headers=headers
+    ).status_code == 204
+
+
+def test_document_library_streams_a_dataset_from_a_file_path(tmp_path: Path) -> None:
+    source = tmp_path / "ventas.csv"
+    source.write_text("mes,ventas\nEnero,10\nFebrero,20\n", encoding="utf-8")
+    library = DocumentLibrary(tmp_path / "data")
+
+    record = library.add_path("browser_large", source.name, source)
+
+    assert record.dataset is not None
+    assert record.dataset.sheets[0].total_rows == 2
 
 
 def test_workspace_project_map_and_relations_are_bounded(tmp_path: Path) -> None:
