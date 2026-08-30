@@ -35,46 +35,47 @@ def test_home_serves_the_chat_only_experience() -> None:
     assert "Ejecutar 3 escenarios" not in response.text
     assert 'id="taskmaster-studio-access"' in response.text
     assert "Taskmaster Studio" in response.text
-    assert '/static/styles.css?v=20260830-large-upload-v29' in response.text
-    assert '/static/app.js?v=20260830-large-upload-v29' in response.text
+    assert "/static/styles.css?v=20260830-analytics-dashboard-v30" in response.text
+    assert "/static/app.js?v=20260830-analytics-dashboard-v30" in response.text
     assert "body.chat-active:not(.taskmaster-studio-mode) #main-content" in styles_response.text
-    assert 'https://www.gstatic.com/charts/loader.js' in response.text
+    assert "https://www.gstatic.com/charts/loader.js" in response.text
     assert 'id="document-inspector"' in response.text
     assert 'id="partner-typing"' not in response.text
-    assert "Gemini 3.7 Flash diseña · El Ingeniero construye con aprobación · Sin efectos externos" not in response.text
+    assert (
+        "Gemini 3.7 Flash diseña · El Ingeniero construye con aprobación · Sin efectos externos"
+        not in response.text
+    )
     assert 'id="conversation-title"' not in response.text
     assert 'class="chat-model-chip"' not in response.text
     assert "Ir al taller" in response.text
-    assert response.text.index('id="agent-library-title"') < response.text.index('id="conversation-library-title"')
+    assert response.text.index('id="agent-library-title"') < response.text.index(
+        'id="conversation-library-title"'
+    )
     assert 'class="builder-grid-preview"' not in response.text
     assert 'id="builder-live-board"' not in response.text
     assert response.headers["cache-control"] == "no-cache, must-revalidate"
 
 
 def test_identity_uses_same_origin_server_oauth_instead_of_firebase_iframe() -> None:
-    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(
-        encoding="utf-8"
-    )
+    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(encoding="utf-8")
 
     assert 'window.location.assign("/api/v1/collaborative/auth/google/start")' in script
-    assert 'refreshIdentitySession()' in script
-    assert '/api/v1/collaborative/auth/refresh' in script
+    assert "refreshIdentitySession()" in script
+    assert "/api/v1/collaborative/auth/refresh" in script
     assert "firebase-auth.js" not in script
     assert "onAuthStateChanged" not in script
     assert "signInWithPopup" not in script
 
 
 def test_document_tray_reports_progress_and_supports_inspection_and_deletion() -> None:
-    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(
-        encoding="utf-8"
-    )
+    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(encoding="utf-8")
 
     assert 'request.upload.addEventListener("progress"' in script
     assert "Cargando · ${item.progress}%" in script
     assert 'data-inspect-document="${escapeHtml(item.id)}"' in script
     assert 'data-delete-document="${escapeHtml(item.id)}"' in script
-    assert '/api/v1/collaborative/documents/${encodeURIComponent(documentId)}' in script
-    assert 'JSON.stringify({ message, document_ids: state.attachedDocumentIds })' in script
+    assert "/api/v1/collaborative/documents/${encodeURIComponent(documentId)}" in script
+    assert "JSON.stringify({ message, document_ids: state.attachedDocumentIds })" in script
     assert "agent_id: conversation.agentId || null" in script
 
 
@@ -132,9 +133,12 @@ def test_all_conversational_chats_render_and_persist_dataset_charts() -> None:
 
     assert "function renderChartArtifacts" in script
     assert "function drawChartArtifacts" in script
-    assert 'artifacts: payload.artifacts || []' in script
+    assert "artifacts: payload.artifacts || []" in script
     assert '"artifacts", "kind"' in script
     assert ".chat-chart-card" in styles
+    assert ".chat-chart-dashboard" in styles
+    assert ".chat-chart-grid" in styles
+    assert "chartPalette(artifact)" in script
 
 
 def test_taskmaster_chat_keeps_the_composer_docked_below_a_scrolling_transcript() -> None:
@@ -146,6 +150,8 @@ def test_taskmaster_chat_keeps_the_composer_docked_below_a_scrolling_transcript(
     assert 'scrollIntoView({ behavior: "smooth", block: "end" })' not in script
     assert "body.taskmaster-studio-mode.chat-active .partner-conversation" in styles
     assert "body.taskmaster-studio-mode.chat-active #partner-message-form" in styles
+    assert "minmax(0,1120px)" in styles
+    assert "width:min(1040px,calc(100% - 48px))" in styles
     assert "overflow-y:auto" in styles
     assert "flex:0 0 auto" in styles
     assert "body.chat-active{height:auto" not in styles
@@ -153,9 +159,7 @@ def test_taskmaster_chat_keeps_the_composer_docked_below_a_scrolling_transcript(
 
 
 def test_new_chat_reserves_an_independent_conversation_before_first_message() -> None:
-    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(
-        encoding="utf-8"
-    )
+    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(encoding="utf-8")
 
     reset_start = script.index("function resetPartnerChat()")
     reset_end = script.index("function readPartnerConversations", reset_start)
@@ -166,16 +170,16 @@ def test_new_chat_reserves_an_independent_conversation_before_first_message() ->
 
 
 def test_first_message_transitions_before_it_is_sent() -> None:
-    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(
-        encoding="utf-8"
-    )
+    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(encoding="utf-8")
 
     create_start = script.index("async function createProject(event)")
     create_end = script.index("async function sendPartnerMessage", create_start)
     create_implementation = script[create_start:create_end]
 
     assert "await transitionWelcomeToConversation()" in create_implementation
-    assert create_implementation.index("await transitionWelcomeToConversation()") < create_implementation.index("await sendPartnerMessage(message)")
+    assert create_implementation.index(
+        "await transitionWelcomeToConversation()"
+    ) < create_implementation.index("await sendPartnerMessage(message)")
     assert 'chat.classList.add("chat-entering")' in script
 
 
@@ -199,7 +203,9 @@ def test_taskmaster_first_message_reuses_the_same_canvas_without_transition() ->
     transition_end = script.index("async function sendPartnerMessage", transition_start)
     transition = script[transition_start:transition_end]
     assert 'if (state.entryMode === "builder")' in transition
-    assert transition.index('if (state.entryMode === "builder")') < transition.index('document.body.classList.add("chat-transitioning")')
+    assert transition.index('if (state.entryMode === "builder")') < transition.index(
+        'document.body.classList.add("chat-transitioning")'
+    )
     assert "body.taskmaster-studio-mode #main-content{" in styles
     assert "body.taskmaster-studio-mode #welcome-view{" in styles
     assert "background-image:none" in styles
@@ -218,7 +224,9 @@ def test_first_builder_response_clears_stale_markup_and_reveals_the_real_draft()
     assert 'item.revealResponse ? " response-arrival" : ""' in script
     assert "if (item.revealResponse) item.revealResponse = false" in script
     assert ".assistant-turn.response-arrival{animation:assistant-response-in" in styles
-    assert ".assistant-turn.response-arrival .agent-draft-card{animation:draft-response-in" in styles
+    assert (
+        ".assistant-turn.response-arrival .agent-draft-card{animation:draft-response-in" in styles
+    )
 
 
 def test_taskmaster_conversation_stays_on_the_grid_without_status_board() -> None:
@@ -251,24 +259,23 @@ def test_chat_keeps_the_draft_approval_footer_visible_and_names_the_builder() ->
 
 
 def test_startup_keeps_the_entry_chat_instead_of_opening_latest_history() -> None:
-    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(
-        encoding="utf-8"
-    )
+    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(encoding="utf-8")
 
-    state_declaration = script[script.index("const state = "):script.index("const buildPollers")]
+    state_declaration = script[script.index("const state = ") : script.index("const buildPollers")]
     memory_start = script.index("async function loadConversationMemory()")
     memory_end = script.index("function renderConversationHistory", memory_start)
     memory_implementation = script[memory_start:memory_end]
 
     assert "activeConversationId: null" in state_declaration
     assert "partnerMessages: []" in state_declaration
-    assert "if (!state.activeConversationId && state.partnerConversations.length)" not in memory_implementation
+    assert (
+        "if (!state.activeConversationId && state.partnerConversations.length)"
+        not in memory_implementation
+    )
 
 
 def test_remote_conversation_memory_is_authoritative_after_successful_load() -> None:
-    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(
-        encoding="utf-8"
-    )
+    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(encoding="utf-8")
 
     memory_start = script.index("async function loadConversationMemory()")
     memory_end = script.index("function renderConversationHistory", memory_start)
@@ -280,9 +287,7 @@ def test_remote_conversation_memory_is_authoritative_after_successful_load() -> 
 
 
 def test_brand_button_returns_home_without_creating_a_conversation() -> None:
-    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(
-        encoding="utf-8"
-    )
+    script = (Path(__file__).parents[2] / "app" / "static" / "app.js").read_text(encoding="utf-8")
 
     home_start = script.index("function openChatHome()")
     home_end = script.index("function enableComposerKeyboard", home_start)
@@ -311,14 +316,14 @@ def test_meta_reports_h10_10_with_firestore_disabled() -> None:
         "status": "declared",
         "exact_project_roles": True,
         "roles": [
-                "roles/aiplatform.user",
-                "roles/datastore.user",
-                "roles/storage.objectUser",
-                "roles/cloudtasks.enqueuer",
-                "roles/secretmanager.secretAccessor",
-            ],
-            "firestore_database_scoped": True,
-            "storage_bucket_scoped": True,
+            "roles/aiplatform.user",
+            "roles/datastore.user",
+            "roles/storage.objectUser",
+            "roles/cloudtasks.enqueuer",
+            "roles/secretmanager.secretAccessor",
+        ],
+        "firestore_database_scoped": True,
+        "storage_bucket_scoped": True,
         "cloud_verified": False,
         "bindings_applied": False,
     }
@@ -330,9 +335,9 @@ def test_meta_reports_h10_10_with_firestore_disabled() -> None:
         "immutable_tags": True,
         "builder_account_id": "taskmaster-studio-builder",
         "builder_roles": [
-                "roles/artifactregistry.writer",
-                "roles/logging.logWriter",
-                "roles/storage.objectViewer",
+            "roles/artifactregistry.writer",
+            "roles/logging.logWriter",
+            "roles/storage.objectViewer",
         ],
         "cloudbuild_config_verification_phase": "pre_build",
         "cloud_verified": False,

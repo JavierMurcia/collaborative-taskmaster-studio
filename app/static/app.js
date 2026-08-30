@@ -406,15 +406,32 @@ function renderPartnerConversation() {
 
 function renderChartArtifacts(artifacts, messageIndex) {
   if (!Array.isArray(artifacts) || !artifacts.length) return "";
-  return artifacts.map((artifact, artifactIndex) => {
+  const cards = artifacts.map((artifact, artifactIndex) => {
     if (artifact?.type !== "chart" || !Array.isArray(artifact.rows)) return "";
     const rows = artifact.rows.map((row) => { const [x, y] = chartPointValues(row); return `<tr><td>${escapeHtml(x)}</td><td>${escapeHtml(y)}</td></tr>`; }).join("");
-    return `<section class="chat-chart-card"><header><div><span>VISUALIZACIÓN DE DATOS</span><strong>${escapeHtml(artifact.title || "Gráfico")}</strong></div><b>${escapeHtml(artifact.chart_type || "chart")}</b></header><div class="chat-chart-canvas" data-chart-message="${messageIndex}" data-chart-artifact="${artifactIndex}" role="img" aria-label="${escapeHtml(artifact.description || artifact.title || "Gráfico de datos")}"><span>Preparando gráfico interactivo…</span></div><p>${escapeHtml(artifact.description || "")}</p><footer><small>${escapeHtml(artifact.source_name || "Dataset")} · ${escapeHtml(artifact.sheet || "Datos")}</small><details><summary>Ver datos</summary><div class="chat-chart-table"><table><thead><tr><th>${escapeHtml(artifact.columns?.[0] || "Categoría")}</th><th>${escapeHtml(artifact.columns?.[1] || "Valor")}</th></tr></thead><tbody>${rows}</tbody></table></div></details></footer></section>`;
+    const metrics = (artifact.metrics || []).map((metric) => `<li><span>${escapeHtml(metric.label)}</span><strong>${escapeHtml(metric.value)}</strong></li>`).join("");
+    const insights = (artifact.insights || []).map((insight) => `<li>${escapeHtml(insight)}</li>`).join("");
+    return `<section class="chat-chart-card" data-chart-variant="${escapeHtml(artifact.variant || "comparison")}"><header><div><span>ANÁLISIS VISUAL</span><strong>${escapeHtml(artifact.title || "Gráfico")}</strong></div><b>${escapeHtml(chartTypeLabel(artifact.chart_type))}</b></header>${metrics ? `<ul class="chart-metric-strip">${metrics}</ul>` : ""}<div class="chat-chart-canvas" data-chart-message="${messageIndex}" data-chart-artifact="${artifactIndex}" role="img" aria-label="${escapeHtml(artifact.description || artifact.title || "Gráfico de datos")}"><span>Preparando gráfico interactivo…</span></div><p>${escapeHtml(artifact.description || "")}</p>${insights ? `<ul class="chart-insights">${insights}</ul>` : ""}<footer><small>${escapeHtml(artifact.source_name || "Dataset")} · ${escapeHtml(artifact.sheet || "Datos")}</small><details><summary>Ver datos</summary><div class="chat-chart-table"><table><thead><tr><th>${escapeHtml(artifact.columns?.[0] || "Categoría")}</th><th>${escapeHtml(artifact.columns?.[1] || "Valor")}</th></tr></thead><tbody>${rows}</tbody></table></div></details></footer></section>`;
   }).join("");
+  return `<section class="chat-chart-dashboard"><header><div><span>LECTURA PROFUNDA DEL DATASET</span><strong>Panel analítico</strong></div><b>${artifacts.length} visualizaciones</b></header><div class="chat-chart-grid">${cards}</div></section>`;
 }
 
 function chartPointValues(row) {
   return Array.isArray(row) ? [row[0], row[1]] : [row?.x, row?.y];
+}
+
+function chartTypeLabel(type) {
+  return ({ bar: "Barras", horizontal_bar: "Ranking", line: "Tendencia", area: "Área", pie: "Composición", donut: "Composición", scatter: "Correlación" })[type] || "Gráfico";
+}
+
+function chartPalette(artifact) {
+  const fallback = ["#8b7cf6", "#55d4df", "#ff7aa2", "#f3b65a", "#6ee7a8", "#7ca8ff", "#c792ff", "#ff9f68"];
+  const supplied = Array.isArray(artifact?.palette) ? artifact.palette.filter((color) => /^#[0-9a-f]{6}$/i.test(color)) : [];
+  return supplied.length ? supplied.slice(0, 8) : fallback;
+}
+
+function formatChartValue(value) {
+  return new Intl.NumberFormat("es-CO", { notation: Math.abs(value) >= 100000 ? "compact" : "standard", maximumFractionDigits: 1 }).format(value);
 }
 
 let googleChartsReady = null;
@@ -437,19 +454,35 @@ async function drawChartArtifacts() {
     if (!artifact || target.dataset.chartDrawn === "true") continue;
     const rows = (artifact.rows || []).map((row) => { const [x, y] = chartPointValues(row); return [x, Number(y)]; });
     if (!rows.length || rows.some((row) => !Number.isFinite(row[1]))) continue;
-    const data = google.visualization.arrayToDataTable([[artifact.columns?.[0] || "Categoría", artifact.columns?.[1] || "Valor"], ...rows]);
-    const constructors = { bar: "ColumnChart", line: "LineChart", pie: "PieChart", scatter: "ScatterChart" };
+    const palette = chartPalette(artifact);
+    const decoratedBars = ["bar", "horizontal_bar"].includes(artifact.chart_type);
+    const header = decoratedBars
+      ? [artifact.columns?.[0] || "Categoría", artifact.columns?.[1] || "Valor", { role: "style" }, { role: "annotation" }]
+      : [artifact.columns?.[0] || "Categoría", artifact.columns?.[1] || "Valor"];
+    const chartRows = decoratedBars
+      ? rows.map((row, index) => [row[0], row[1], `color: ${palette[index % palette.length]}`, formatChartValue(row[1])])
+      : rows;
+    const data = google.visualization.arrayToDataTable([header, ...chartRows]);
+    const constructors = { bar: "ColumnChart", horizontal_bar: "BarChart", line: "LineChart", area: "AreaChart", pie: "PieChart", donut: "PieChart", scatter: "ScatterChart" };
     const Constructor = google.visualization[constructors[artifact.chart_type] || "ColumnChart"];
     const chart = new Constructor(target);
     chart.draw(data, {
       backgroundColor: "transparent",
-      colors: ["#8b7cf6", "#55d4df", "#f3b65a"],
-      chartArea: { left: 58, top: 28, width: "78%", height: "68%" },
+      colors: palette,
+      chartArea: { left: artifact.chart_type === "horizontal_bar" ? 105 : 62, top: 28, width: artifact.chart_type === "horizontal_bar" ? "70%" : "77%", height: "68%" },
       fontName: "Inter, system-ui, sans-serif",
-      legend: { position: artifact.chart_type === "pie" ? "right" : "none", textStyle: { color: "#b9bac5", fontSize: 11 } },
+      legend: { position: ["pie", "donut"].includes(artifact.chart_type) ? "right" : "none", textStyle: { color: "#b9bac5", fontSize: 11 } },
       hAxis: { textStyle: { color: "#8e919e", fontSize: 10 }, gridlines: { color: "#252834" }, baselineColor: "#383b49" },
       vAxis: { textStyle: { color: "#8e919e", fontSize: 10 }, gridlines: { color: "#252834" }, baselineColor: "#383b49", minValue: 0 },
       tooltip: { textStyle: { color: "#171922", fontSize: 12 } },
+      annotations: { alwaysOutside: true, textStyle: { color: "#d9d7e8", fontSize: 9, auraColor: "none" } },
+      pieHole: artifact.chart_type === "donut" ? 0.58 : 0,
+      pieSliceText: "percentage",
+      sliceVisibilityThreshold: 0.02,
+      curveType: ["line", "area"].includes(artifact.chart_type) ? "function" : "none",
+      areaOpacity: artifact.chart_type === "area" ? 0.28 : 0,
+      pointSize: artifact.chart_type === "scatter" ? 7 : 4,
+      trendlines: artifact.chart_type === "scatter" ? { 0: { type: "linear", color: "#f3b65a", lineWidth: 2, opacity: 0.75, showR2: true, visibleInLegend: false } } : undefined,
       animation: { startup: true, duration: 520, easing: "out" },
     });
     target.dataset.chartDrawn = "true";

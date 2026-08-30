@@ -24,6 +24,17 @@ MAX_XLSX_MEMBERS = 10_000
 MAX_XLSX_EXPANDED_BYTES = 4_000_000_000
 MAX_SHARED_STRINGS = 200_000
 MAX_SHARED_STRING_CHARACTERS = 10_000_000
+MAX_ANALYSIS_ARTIFACTS = 8
+CHART_PALETTE = (
+    "#8b7cf6",
+    "#55d4df",
+    "#ff7aa2",
+    "#f3b65a",
+    "#6ee7a8",
+    "#7ca8ff",
+    "#c792ff",
+    "#ff9f68",
+)
 
 CellValue = str | int | float | bool | None
 
@@ -64,6 +75,13 @@ class ChartPoint(BaseModel):
     y: CellValue
 
 
+class ChartMetric(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    label: str = Field(min_length=1, max_length=40)
+    value: str = Field(min_length=1, max_length=60)
+
+
 class ChartArtifact(BaseModel):
     """A small chart contract that is safe to persist with a conversation."""
 
@@ -71,28 +89,55 @@ class ChartArtifact(BaseModel):
 
     type: Literal["chart"] = "chart"
     title: str = Field(min_length=1, max_length=160)
-    chart_type: Literal["bar", "line", "pie", "scatter"]
+    chart_type: Literal["bar", "horizontal_bar", "line", "area", "pie", "donut", "scatter"]
     columns: tuple[str, str]
     rows: tuple[ChartPoint, ...] = Field(min_length=1, max_length=MAX_CHART_POINTS)
     source_document_id: str | None = Field(default=None, pattern=r"^doc_[a-f0-9]{16}$")
     source_name: str = Field(min_length=1, max_length=180)
     sheet: str = Field(min_length=1, max_length=100)
     description: str = Field(min_length=1, max_length=300)
+    variant: Literal["comparison", "trend", "composition", "distribution", "correlation"] = (
+        "comparison"
+    )
+    palette: tuple[str, ...] = Field(default=CHART_PALETTE, min_length=1, max_length=8)
+    metrics: tuple[ChartMetric, ...] = Field(default=(), max_length=4)
+    insights: tuple[str, ...] = Field(default=(), max_length=3)
 
 
 class DatasetAnalysisService:
     """Create chart artifacts from attached structured data without arbitrary code."""
 
     _CHART_TERMS = (
-        "gráfic", "grafic", "chart", "visualiza", "diagrama",
+        "gráfic",
+        "grafic",
+        "chart",
+        "visualiza",
+        "diagrama",
+        "histograma",
     )
     _REQUEST_TERMS = _CHART_TERMS + (
         "tendencia",
-        "distribución", "distribucion", "correlación", "correlacion",
-        "analiza", "analice", "comparar", "compara",
+        "distribución",
+        "distribucion",
+        "correlación",
+        "correlacion",
+        "analiza",
+        "analice",
+        "comparar",
+        "compara",
+        "revisa",
+        "profund",
+        "dashboard",
+        "panel",
+        "colorid",
     )
     _SYNTHETIC_TERMS = (
-        "aleatori", "simulad", "demostración", "demostracion", "demo", "ejemplo",
+        "aleatori",
+        "simulad",
+        "demostración",
+        "demostracion",
+        "demo",
+        "ejemplo",
     )
 
     def analyze(
@@ -111,18 +156,32 @@ class DatasetAnalysisService:
                 return _build_demo_charts(message)
             return ()
         artifacts: list[ChartArtifact] = []
+        deep_request = any(
+            term in normalized
+            for term in ("profund", "complet", "detall", "complej", "dashboard", "panel")
+        )
+        per_document = (
+            4
+            if len(dataset_documents) == 1 and deep_request
+            else 3
+            if len(dataset_documents) == 1
+            else 2
+        )
         for document in dataset_documents[:8]:
             snapshot = DatasetSnapshot.model_validate(document["dataset"])
             sheet = _select_sheet(snapshot, normalized)
-            artifact = _build_chart(
-                sheet,
-                normalized,
-                document_id=str(document["id"]),
-                document_name=str(document.get("name") or "dataset"),
+            artifacts.extend(
+                _build_charts(
+                    sheet,
+                    normalized,
+                    document_id=str(document["id"]),
+                    document_name=str(document.get("name") or "dataset"),
+                    limit=per_document,
+                )
             )
-            if artifact is not None:
-                artifacts.append(artifact)
-        return tuple(artifacts)
+            if len(artifacts) >= MAX_ANALYSIS_ARTIFACTS:
+                break
+        return tuple(artifacts[:MAX_ANALYSIS_ARTIFACTS])
 
     @classmethod
     def requests_chart(cls, message: str) -> bool:
@@ -136,8 +195,7 @@ def _build_demo_charts(message: str) -> tuple[ChartArtifact, ...]:
     seed = int.from_bytes(hashlib.sha256(message.encode("utf-8")).digest()[:8], "big")
     generator = random.Random(seed)
     latency = tuple(
-        ChartPoint(x=f"Muestra {index}", y=generator.randint(82, 148))
-        for index in range(1, 13)
+        ChartPoint(x=f"Muestra {index}", y=generator.randint(82, 148)) for index in range(1, 13)
     )
     success = tuple(
         ChartPoint(x=label, y=round(generator.uniform(88.0, 99.4), 1))
@@ -248,11 +306,7 @@ def _parse_xlsx_archive(archive: zipfile.ZipFile) -> list[DatasetSheet]:
     shared = _xlsx_shared_strings(archive)
     names = _xlsx_sheet_names(archive)
     paths = sorted(
-        (
-            name
-            for name in archive.namelist()
-            if re.fullmatch(r"xl/worksheets/sheet\d+\.xml", name)
-        ),
+        (name for name in archive.namelist() if re.fullmatch(r"xl/worksheets/sheet\d+\.xml", name)),
         key=lambda value: int(re.search(r"sheet(\d+)", value).group(1)),  # type: ignore[union-attr]
     )
     result: list[DatasetSheet] = []
@@ -343,7 +397,9 @@ def _column_index(reference: str) -> int:
 
 
 def _sheet_from_rows(name: str, raw_rows: list[list[Any]]) -> DatasetSheet:
-    nonempty = [row[:MAX_DATASET_COLUMNS] for row in raw_rows if any(str(value).strip() for value in row)]
+    nonempty = [
+        row[:MAX_DATASET_COLUMNS] for row in raw_rows if any(str(value).strip() for value in row)
+    ]
     if not nonempty:
         return DatasetSheet(name=name, columns=("Valor",), rows=(), total_rows=0)
     width = min(MAX_DATASET_COLUMNS, max(len(row) for row in nonempty))
@@ -366,7 +422,9 @@ def _headers(values: list[Any], width: int) -> tuple[str, ...]:
     seen: dict[str, int] = {}
     headers: list[str] = []
     for index in range(width):
-        base = str(values[index] if index < len(values) else "").strip()[:80] or f"Columna {index + 1}"
+        base = (
+            str(values[index] if index < len(values) else "").strip()[:80] or f"Columna {index + 1}"
+        )
         count = seen.get(base.casefold(), 0) + 1
         seen[base.casefold()] = count
         headers.append(base if count == 1 else f"{base} ({count})")
@@ -394,7 +452,83 @@ def _coerce_value(value: Any) -> CellValue:
 
 
 def _select_sheet(snapshot: DatasetSnapshot, message: str) -> DatasetSheet:
-    return next((sheet for sheet in snapshot.sheets if sheet.name.casefold() in message), snapshot.sheets[0])
+    return next(
+        (sheet for sheet in snapshot.sheets if sheet.name.casefold() in message), snapshot.sheets[0]
+    )
+
+
+def _build_charts(
+    sheet: DatasetSheet,
+    message: str,
+    *,
+    document_id: str,
+    document_name: str,
+    limit: int,
+) -> tuple[ChartArtifact, ...]:
+    """Build a compact analytical dashboard from the most informative column shapes."""
+
+    primary = _build_chart(
+        sheet,
+        message,
+        document_id=document_id,
+        document_name=document_name,
+    )
+    if primary is None:
+        return ()
+    kinds = [_column_kind(sheet.rows, index) for index in range(len(sheet.columns))]
+    numeric = [index for index, kind in enumerate(kinds) if kind == "number"]
+    dimensions = [index for index, kind in enumerate(kinds) if kind != "number"]
+    candidates: list[ChartArtifact | None] = [primary]
+    if len(numeric) >= 2:
+        correlation = _build_correlation_chart(
+            sheet,
+            numeric,
+            message,
+            document_id=document_id,
+            document_name=document_name,
+        )
+        if primary.chart_type == "scatter" and correlation is not None:
+            candidates[0] = correlation
+        else:
+            candidates.append(correlation)
+    if dimensions and numeric:
+        composition = _build_composition_chart(
+            sheet,
+            dimensions,
+            numeric,
+            message,
+            document_id=document_id,
+            document_name=document_name,
+        )
+        if primary.chart_type in {"pie", "donut"} and composition is not None:
+            candidates[0] = composition.model_copy(update={"chart_type": primary.chart_type})
+        else:
+            candidates.append(composition)
+    if numeric:
+        distribution = _build_distribution_chart(
+            sheet,
+            numeric,
+            message,
+            document_id=document_id,
+            document_name=document_name,
+        )
+        if any(term in message for term in ("distrib", "histograma")):
+            candidates.insert(1, distribution)
+        else:
+            candidates.append(distribution)
+    result: list[ChartArtifact] = []
+    signatures: set[tuple[str, tuple[str, str]]] = set()
+    for artifact in candidates:
+        if artifact is None:
+            continue
+        signature = (artifact.chart_type, artifact.columns)
+        if signature in signatures:
+            continue
+        result.append(artifact)
+        signatures.add(signature)
+        if len(result) >= limit:
+            break
+    return tuple(result)
 
 
 def _build_chart(
@@ -406,11 +540,20 @@ def _build_chart(
     mentioned = [index for index, name in enumerate(sheet.columns) if name.casefold() in message]
     numeric = [index for index, kind in enumerate(kinds) if kind == "number"]
     dimensions = [index for index, kind in enumerate(kinds) if kind != "number"]
-    chart_type: Literal["bar", "line", "pie", "scatter"] = "bar"
+    chart_type: Literal["bar", "horizontal_bar", "line", "area", "pie", "donut", "scatter"] = "bar"
     if any(term in message for term in ("dispers", "scatter", "correl")) and len(numeric) >= 2:
         chart_type = "scatter"
-    elif any(term in message for term in ("línea", "linea", "line", "tendencia", "evolución", "evolucion")):
+    elif any(term in message for term in ("área", "area")):
+        chart_type = "area"
+    elif any(
+        term in message
+        for term in ("línea", "linea", "line", "tendencia", "evolución", "evolucion")
+    ):
         chart_type = "line"
+    elif any(term in message for term in ("horizontal", "ranking")):
+        chart_type = "horizontal_bar"
+    elif any(term in message for term in ("donut", "anillo", "rosquilla")):
+        chart_type = "donut"
     elif any(term in message for term in ("pastel", "torta", "pie", "circular")):
         chart_type = "pie"
     if chart_type == "scatter":
@@ -426,8 +569,14 @@ def _build_chart(
         columns = (sheet.columns[x], sheet.columns[y])
         description = f"Relación entre {columns[0]} y {columns[1]} con {len(points)} observaciones."
     else:
-        dimension = next((item for item in mentioned if item in dimensions), dimensions[0] if dimensions else 0)
-        measure = next((item for item in mentioned if item in numeric), numeric[0] if numeric else None)
+        dimension = next(
+            (item for item in mentioned if item in dimensions), dimensions[0] if dimensions else 0
+        )
+        measure = next(
+            (item for item in mentioned if item in numeric), numeric[0] if numeric else None
+        )
+        if chart_type == "bar" and kinds[dimension] == "date":
+            chart_type = "line"
         grouped: dict[str, list[float]] = defaultdict(list)
         for row in sheet.rows:
             label = str(row[dimension] if row[dimension] not in (None, "") else "Sin valor")[:80]
@@ -441,10 +590,14 @@ def _build_chart(
             for label, items in grouped.items()
             if items
         ]
-        values.sort(key=lambda item: item[1], reverse=chart_type != "line")
+        if chart_type in {"pie", "donut"}:
+            values = [item for item in values if item[1] > 0]
+        if chart_type in {"line", "area"}:
+            values.sort(key=lambda item: _date_sort_key(item[0]))
+        else:
+            values.sort(key=lambda item: item[1], reverse=True)
         points = tuple(
-            ChartPoint(x=label, y=round(value, 4))
-            for label, value in values[:MAX_CHART_POINTS]
+            ChartPoint(x=label, y=round(value, 4)) for label, value in values[:MAX_CHART_POINTS]
         )
         if not points:
             return None
@@ -453,7 +606,7 @@ def _build_chart(
         operation = "promedio" if average else "total" if measure is not None else "conteo"
         description = f"{operation.capitalize()} de {metric} agrupado por {columns[0]}."
     title = f"{columns[1]} por {columns[0]}"
-    return ChartArtifact(
+    artifact = ChartArtifact(
         title=title,
         chart_type=chart_type,
         columns=columns,
@@ -463,6 +616,241 @@ def _build_chart(
         sheet=sheet.name,
         description=description,
     )
+    return _decorate_chart(artifact, sheet)
+
+
+def _build_correlation_chart(
+    sheet: DatasetSheet,
+    numeric: list[int],
+    message: str,
+    *,
+    document_id: str,
+    document_name: str,
+) -> ChartArtifact | None:
+    mentioned = [index for index, name in enumerate(sheet.columns) if name.casefold() in message]
+    x = next((item for item in mentioned if item in numeric), numeric[0])
+    y = next((item for item in mentioned if item in numeric and item != x), numeric[1])
+    pairs = [
+        (float(row[x]), float(row[y]))
+        for row in sheet.rows
+        if x < len(row) and y < len(row) and _is_number(row[x]) and _is_number(row[y])
+    ]
+    sampled = _even_sample(pairs, MAX_CHART_POINTS)
+    if len(sampled) < 3:
+        return None
+    coefficient = _pearson(pairs)
+    strength = (
+        "fuerte" if abs(coefficient) >= 0.7 else "moderada" if abs(coefficient) >= 0.4 else "débil"
+    )
+    direction = "positiva" if coefficient >= 0 else "negativa"
+    return ChartArtifact(
+        title=f"Relación entre {sheet.columns[x]} y {sheet.columns[y]}",
+        chart_type="scatter",
+        columns=(sheet.columns[x], sheet.columns[y]),
+        rows=tuple(ChartPoint(x=round(a, 4), y=round(b, 4)) for a, b in sampled),
+        source_document_id=document_id,
+        source_name=document_name,
+        sheet=sheet.name,
+        description="Diagrama de dispersión con línea de tendencia para detectar relaciones entre métricas.",
+        variant="correlation",
+        metrics=(
+            ChartMetric(label="Correlación", value=f"{coefficient:.2f}"),
+            ChartMetric(label="Observaciones", value=str(len(pairs))),
+            ChartMetric(
+                label=f"Media {sheet.columns[x]}"[:40],
+                value=_compact_number(_mean(a for a, _ in pairs)),
+            ),
+            ChartMetric(
+                label=f"Media {sheet.columns[y]}"[:40],
+                value=_compact_number(_mean(b for _, b in pairs)),
+            ),
+        ),
+        insights=(f"La relación observada es {strength} y {direction}.",),
+    )
+
+
+def _build_composition_chart(
+    sheet: DatasetSheet,
+    dimensions: list[int],
+    numeric: list[int],
+    message: str,
+    *,
+    document_id: str,
+    document_name: str,
+) -> ChartArtifact | None:
+    mentioned = [index for index, name in enumerate(sheet.columns) if name.casefold() in message]
+    dimension = next((item for item in mentioned if item in dimensions), dimensions[0])
+    measure = next((item for item in mentioned if item in numeric), numeric[0])
+    grouped: dict[str, float] = defaultdict(float)
+    for row in sheet.rows:
+        if dimension >= len(row) or measure >= len(row) or not _is_number(row[measure]):
+            continue
+        label = str(row[dimension] if row[dimension] not in (None, "") else "Sin valor")[:80]
+        grouped[label] += float(row[measure])
+    ranked = sorted(
+        ((label, value) for label, value in grouped.items() if value > 0),
+        key=lambda item: item[1],
+        reverse=True,
+    )
+    if not 2 <= len(ranked) <= 80:
+        return None
+    visible = ranked[:8]
+    remainder = sum(value for _, value in ranked[8:])
+    if remainder:
+        visible.append(("Otros", remainder))
+    total = sum(value for _, value in ranked)
+    leader, leader_value = ranked[0]
+    share = (leader_value / total * 100) if total else 0
+    return ChartArtifact(
+        title=f"Composición de {sheet.columns[measure]}",
+        chart_type="donut",
+        columns=(sheet.columns[dimension], sheet.columns[measure]),
+        rows=tuple(ChartPoint(x=label, y=round(value, 4)) for label, value in visible),
+        source_document_id=document_id,
+        source_name=document_name,
+        sheet=sheet.name,
+        description=f"Participación relativa de {sheet.columns[measure]} por {sheet.columns[dimension]}.",
+        variant="composition",
+        metrics=(
+            ChartMetric(label="Total", value=_compact_number(total)),
+            ChartMetric(label="Categorías", value=str(len(ranked))),
+            ChartMetric(label="Líder", value=leader[:60]),
+            ChartMetric(label="Participación líder", value=f"{share:.1f}%"),
+        ),
+        insights=(f"{leader} concentra el {share:.1f}% del total analizado.",),
+    )
+
+
+def _build_distribution_chart(
+    sheet: DatasetSheet,
+    numeric: list[int],
+    message: str,
+    *,
+    document_id: str,
+    document_name: str,
+) -> ChartArtifact | None:
+    mentioned = [index for index, name in enumerate(sheet.columns) if name.casefold() in message]
+    measure = next((item for item in mentioned if item in numeric), numeric[0])
+    values = sorted(
+        float(row[measure]) for row in sheet.rows if measure < len(row) and _is_number(row[measure])
+    )
+    if len(values) < 4:
+        return None
+    minimum, maximum = values[0], values[-1]
+    if math.isclose(minimum, maximum):
+        points = (ChartPoint(x=_compact_number(minimum), y=len(values)),)
+    else:
+        bucket_count = min(10, max(5, round(math.sqrt(len(values)))))
+        width = (maximum - minimum) / bucket_count
+        counts = [0] * bucket_count
+        for value in values:
+            index = min(bucket_count - 1, int((value - minimum) / width))
+            counts[index] += 1
+        points = tuple(
+            ChartPoint(
+                x=f"{_compact_number(minimum + index * width)}–{_compact_number(minimum + (index + 1) * width)}",
+                y=count,
+            )
+            for index, count in enumerate(counts)
+        )
+    median = (
+        values[len(values) // 2]
+        if len(values) % 2
+        else (values[len(values) // 2 - 1] + values[len(values) // 2]) / 2
+    )
+    return ChartArtifact(
+        title=f"Distribución de {sheet.columns[measure]}",
+        chart_type="bar",
+        columns=("Rango", "Frecuencia"),
+        rows=points,
+        source_document_id=document_id,
+        source_name=document_name,
+        sheet=sheet.name,
+        description=f"Histograma para revelar concentración y dispersión de {sheet.columns[measure]}.",
+        variant="distribution",
+        metrics=(
+            ChartMetric(label="Mínimo", value=_compact_number(minimum)),
+            ChartMetric(label="Mediana", value=_compact_number(median)),
+            ChartMetric(label="Promedio", value=_compact_number(_mean(values))),
+            ChartMetric(label="Máximo", value=_compact_number(maximum)),
+        ),
+        insights=(
+            f"El rango observado abarca de {_compact_number(minimum)} a {_compact_number(maximum)}.",
+        ),
+    )
+
+
+def _decorate_chart(artifact: ChartArtifact, sheet: DatasetSheet) -> ChartArtifact:
+    values = [float(point.y) for point in artifact.rows if _is_number(point.y)]
+    if not values:
+        return artifact
+    leader = max(
+        artifact.rows, key=lambda point: float(point.y) if _is_number(point.y) else -math.inf
+    )
+    variant = {
+        "line": "trend",
+        "area": "trend",
+        "pie": "composition",
+        "donut": "composition",
+        "scatter": "correlation",
+    }.get(artifact.chart_type, "comparison")
+    return artifact.model_copy(
+        update={
+            "variant": variant,
+            "metrics": (
+                ChartMetric(label="Filas analizadas", value=str(sheet.total_rows)),
+                ChartMetric(label="Total", value=_compact_number(sum(values))),
+                ChartMetric(label="Promedio", value=_compact_number(_mean(values))),
+                ChartMetric(label="Máximo", value=_compact_number(max(values))),
+            ),
+            "insights": (
+                f"{leader.x} presenta el valor más alto: {_compact_number(float(leader.y))}.",
+            ),
+        }
+    )
+
+
+def _even_sample(values: list[tuple[float, float]], limit: int) -> list[tuple[float, float]]:
+    if len(values) <= limit:
+        return values
+    return [values[round(index * (len(values) - 1) / (limit - 1))] for index in range(limit)]
+
+
+def _pearson(values: list[tuple[float, float]]) -> float:
+    if len(values) < 2:
+        return 0.0
+    mean_x = _mean(a for a, _ in values)
+    mean_y = _mean(b for _, b in values)
+    numerator = sum((a - mean_x) * (b - mean_y) for a, b in values)
+    denominator = math.sqrt(
+        sum((a - mean_x) ** 2 for a, _ in values) * sum((b - mean_y) ** 2 for _, b in values)
+    )
+    return numerator / denominator if denominator else 0.0
+
+
+def _mean(values: Any) -> float:
+    collected = list(values)
+    return sum(collected) / len(collected) if collected else 0.0
+
+
+def _compact_number(value: float) -> str:
+    absolute = abs(value)
+    if absolute >= 1_000_000_000:
+        return f"{value / 1_000_000_000:.1f} mil M"
+    if absolute >= 1_000_000:
+        return f"{value / 1_000_000:.1f} M"
+    if absolute >= 1_000:
+        return f"{value / 1_000:.1f} mil"
+    if math.isclose(value, round(value)):
+        return f"{value:,.0f}".replace(",", ".")
+    return f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _date_sort_key(value: str) -> tuple[int, str]:
+    try:
+        return (0, datetime.fromisoformat(value.replace("Z", "+00:00")).isoformat())
+    except ValueError:
+        return (1, value.casefold())
 
 
 def _column_kind(rows: tuple[tuple[CellValue, ...], ...], index: int) -> str:
@@ -475,7 +863,11 @@ def _column_kind(rows: tuple[tuple[CellValue, ...], ...], index: int) -> str:
 
 
 def _is_number(value: CellValue) -> bool:
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value))
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+    )
 
 
 def _is_date(value: CellValue) -> bool:

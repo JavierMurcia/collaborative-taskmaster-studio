@@ -21,16 +21,17 @@ def test_csv_is_preserved_as_structured_data_and_generates_a_chart(tmp_path) -> 
 
     assert dataset["sheets"][0]["columns"] == ["mes", "ventas"]
     assert dataset["sheets"][0]["total_rows"] == 3
-    artifacts = DatasetAnalysisService().analyze(
-        "Crea una gráfica de ventas por mes", (inspected,)
-    )
-    assert len(artifacts) == 1
+    artifacts = DatasetAnalysisService().analyze("Crea una gráfica de ventas por mes", (inspected,))
+    assert len(artifacts) == 2
     assert artifacts[0].chart_type == "bar"
     assert artifacts[0].columns == ("mes", "ventas")
     assert [(point.x, point.y) for point in artifacts[0].rows] == [
         ("Febrero", 180.0),
         ("Enero", 150.0),
     ]
+    assert artifacts[1].chart_type == "donut"
+    assert artifacts[0].metrics
+    assert artifacts[0].insights
 
 
 def test_dataset_analysis_does_not_run_without_an_explicit_data_request(tmp_path) -> None:
@@ -52,9 +53,12 @@ def test_explicit_demo_request_renders_charts_instead_of_requiring_python() -> N
     assert [artifact.chart_type for artifact in artifacts] == ["line", "bar"]
     assert all(artifact.source_document_id is None for artifact in artifacts)
     assert all(artifact.source_name == "Datos simulados" for artifact in artifacts)
-    assert artifacts[0].rows == DatasetAnalysisService().analyze(
-        "Genera gráficos visuales con datos aleatorios", ()
-    )[0].rows
+    assert (
+        artifacts[0].rows
+        == DatasetAnalysisService()
+        .analyze("Genera gráficos visuales con datos aleatorios", ())[0]
+        .rows
+    )
 
 
 def test_plain_chart_request_renders_demo_instead_of_returning_code() -> None:
@@ -62,8 +66,7 @@ def test_plain_chart_request_renders_demo_instead_of_returning_code() -> None:
 
     assert len(artifacts) == 2
     assert all(
-        artifact.model_dump(mode="json")["rows"][0].keys() == {"x", "y"}
-        for artifact in artifacts
+        artifact.model_dump(mode="json")["rows"][0].keys() == {"x", "y"} for artifact in artifacts
     )
 
 
@@ -77,10 +80,10 @@ def test_multiple_attached_datasets_each_generate_a_chart(tmp_path) -> None:
         (library.inspect("owner", first.id), library.inspect("owner", second.id)),
     )
 
-    assert [artifact.source_name for artifact in artifacts] == ["ventas.csv", "costos.csv"]
+    assert len(artifacts) == 4
+    assert {artifact.source_name for artifact in artifacts} == {"ventas.csv", "costos.csv"}
     assert all(
-        isinstance(artifact.model_dump(mode="json")["rows"][0], dict)
-        for artifact in artifacts
+        isinstance(artifact.model_dump(mode="json")["rows"][0], dict) for artifact in artifacts
     )
     reply = _chart_aware_reply(
         "Genera graficas para todos los archivos",
@@ -90,6 +93,35 @@ def test_multiple_attached_datasets_each_generate_a_chart(tmp_path) -> None:
     )
     assert "código" in reply
     assert "matplotlib" not in reply.casefold()
+
+
+def test_deep_dataset_request_builds_a_rich_analytical_dashboard(tmp_path) -> None:
+    library = DocumentLibrary(tmp_path)
+    record = library.add(
+        "owner",
+        "rendimiento.csv",
+        (
+            b"region,ventas,margen\n"
+            b"Norte,120,24\nSur,180,39\nEste,90,18\nOeste,210,46\n"
+            b"Norte,150,31\nSur,195,42\n"
+        ),
+    )
+
+    artifacts = DatasetAnalysisService().analyze(
+        "Revisa en profundidad el archivo y genera graficas complejas y coloridas",
+        (library.inspect("owner", record.id),),
+    )
+
+    assert len(artifacts) == 4
+    assert {artifact.variant for artifact in artifacts} == {
+        "comparison",
+        "correlation",
+        "composition",
+        "distribution",
+    }
+    assert all(artifact.metrics for artifact in artifacts)
+    assert all(artifact.insights for artifact in artifacts)
+    assert all(len(artifact.palette) >= 6 for artifact in artifacts)
 
 
 def test_xlsx_keeps_sheet_names_columns_and_numeric_values(tmp_path) -> None:

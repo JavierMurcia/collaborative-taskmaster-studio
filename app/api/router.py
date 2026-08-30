@@ -260,13 +260,10 @@ def create_router(services: ServiceContainer) -> APIRouter:
         )
         payload = result.model_dump(mode="json")
         attached = tuple(
-            services.documents.inspect(session_id, document_id)
-            for document_id in body.document_ids
+            services.documents.inspect(session_id, document_id) for document_id in body.document_ids
         )
         chart_artifacts = services.dataset_analysis.analyze(body.message, attached)
-        payload["artifacts"] = [
-            artifact.model_dump(mode="json") for artifact in chart_artifacts
-        ]
+        payload["artifacts"] = [artifact.model_dump(mode="json") for artifact in chart_artifacts]
         payload["reply"] = _chart_aware_reply(
             body.message, str(payload["reply"]), chart_artifacts, attached
         )
@@ -632,9 +629,9 @@ def create_router(services: ServiceContainer) -> APIRouter:
         session_id: SessionHeader,
     ) -> dict[str, Any]:
         del session_id
-        return services.connections.revoke(
-            _identity(request), connection_id
-        ).model_dump(mode="json")
+        return services.connections.revoke(_identity(request), connection_id).model_dump(
+            mode="json"
+        )
 
     @router.get("/collaborative/connections/google.drive/files")
     def search_google_drive(
@@ -730,8 +727,7 @@ def create_router(services: ServiceContainer) -> APIRouter:
                 "La ejecución de Taskmasters publicados no está disponible.",
             )
         attached = tuple(
-            services.documents.inspect(session_id, document_id)
-            for document_id in body.document_ids
+            services.documents.inspect(session_id, document_id) for document_id in body.document_ids
         )
         result = services.catalog_agent_runtime.run(
             agent_id,
@@ -743,9 +739,7 @@ def create_router(services: ServiceContainer) -> APIRouter:
             document_media=services.documents.media(session_id, tuple(body.document_ids)),
         ).model_dump(mode="json")
         chart_artifacts = services.dataset_analysis.analyze(body.message, attached)
-        result["artifacts"] = [
-            artifact.model_dump(mode="json") for artifact in chart_artifacts
-        ]
+        result["artifacts"] = [artifact.model_dump(mode="json") for artifact in chart_artifacts]
         result["reply"] = _chart_aware_reply(
             body.message, str(result["reply"]), chart_artifacts, attached
         )
@@ -1119,9 +1113,20 @@ def _chart_aware_reply(
     if DatasetAnalysisService.requests_chart(message):
         noun = "visualización" if len(artifacts) == 1 else "visualizaciones"
         sources = ", ".join(dict.fromkeys(artifact.source_name for artifact in artifacts))
+        analysis_labels = {
+            "comparison": "comparaciones",
+            "trend": "tendencias",
+            "composition": "composición",
+            "distribution": "distribución",
+            "correlation": "correlaciones",
+        }
+        analyses = ", ".join(
+            dict.fromkeys(analysis_labels[artifact.variant] for artifact in artifacts)
+        )
         return (
-            f"He pintado {len(artifacts)} {noun} directamente en el chat usando {sources}. "
-            "Puedes pedirme otro tipo de gráfica, columnas o forma de agrupación; no necesitas código."
+            f"He construido un panel con {len(artifacts)} {noun} directamente en el chat "
+            f"usando {sources}. Incluye {analyses}, indicadores clave y hallazgos derivados "
+            "de los datos. Puedes pedirme otro enfoque o columnas; no necesitas código."
         )
     normalized = reply.casefold()
     code_markers = ("```python", "matplotlib", "seaborn", "plotly", "chart.js")
