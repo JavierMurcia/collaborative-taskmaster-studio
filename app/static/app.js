@@ -249,7 +249,7 @@ async function sendPartnerMessage(message) {
       background: true,
       body: JSON.stringify({ message: requestMessage, history, conversation_id: state.activeConversationId, document_ids: state.attachedDocumentIds }),
     });
-    state.partnerMessages.push({ role: "assistant", content: payload.reply, model: payload.model, provider: payload.provider, intent: payload.intent, agentDraft: payload.agent_draft, toolActivity: payload.tool_activity, connectionOffers: payload.connection_offers || [], revealResponse: true });
+    state.partnerMessages.push({ role: "assistant", content: payload.reply, model: payload.model, provider: payload.provider, intent: payload.intent, agentDraft: payload.agent_draft, toolActivity: payload.tool_activity, connectionOffers: payload.connection_offers || [], artifacts: payload.artifacts || [], revealResponse: true });
     state.partnerPhase = payload.phase;
     persistPartnerHistory();
   } catch (error) {
@@ -286,6 +286,7 @@ async function sendCatalogAgentMessage(message) {
       content: `${payload.reply}${stepSummary}`,
       model: payload.model,
       provider: "Taskmaster Runtime",
+      artifacts: payload.artifacts || [],
       revealResponse: true,
     });
     persistPartnerHistory();
@@ -346,12 +347,13 @@ function renderPartnerConversation() {
   const turns = state.partnerMessages.map((item, index) => {
     if (item.role === "user") return `<article class="partner-turn user-turn"><div class="turn-label">Tú</div><div class="turn-content">${formatChatText(item.content)}</div></article>`;
     if (item.kind === "agent_build") return renderAgentBuild(item, index);
-    return `<article class="partner-turn assistant-turn${item.revealResponse ? " response-arrival" : ""}"><div class="partner-avatar" aria-hidden="true">${item.sourceLabel === "Studio" ? "C" : "✦"}</div><div><div class="turn-label">${escapeHtml(item.sourceLabel || "Gemini")}</div><div class="turn-content">${formatChatText(item.content)}</div>${renderAgentDraft(item, index)}${renderConnectionOffers(item.connectionOffers)}${renderToolActivity(item.toolActivity)}<div class="turn-meta"><small>${escapeHtml(item.model || state.runtime.model)} · ${escapeHtml(item.provider || "Vertex AI")}</small><button class="copy-response" type="button" data-copy-index="${index}" aria-label="Copiar respuesta">Copiar</button></div></div></article>`;
+    return `<article class="partner-turn assistant-turn${item.revealResponse ? " response-arrival" : ""}"><div class="partner-avatar" aria-hidden="true">${item.sourceLabel === "Studio" ? "C" : "✦"}</div><div><div class="turn-label">${escapeHtml(item.sourceLabel || "Gemini")}</div><div class="turn-content">${formatChatText(item.content)}</div>${renderChartArtifacts(item.artifacts, index)}${renderAgentDraft(item, index)}${renderConnectionOffers(item.connectionOffers)}${renderToolActivity(item.toolActivity)}<div class="turn-meta"><small>${escapeHtml(item.model || state.runtime.model)} · ${escapeHtml(item.provider || "Vertex AI")}</small><button class="copy-response" type="button" data-copy-index="${index}" aria-label="Copiar respuesta">Copiar</button></div></div></article>`;
   }).join("");
   const typingTurn = state.partnerPending && state.partnerTypingVisible
     ? `<article class="partner-turn assistant-turn typing-turn inline-typing-turn" aria-live="polite"><div class="partner-avatar" aria-hidden="true">✦</div><div><div class="turn-label">Gemini</div><div class="typing-dots" aria-label="Gemini está respondiendo"><span></span><span></span><span></span></div></div></article>`
     : "";
   $("#partner-conversation").innerHTML = turns + typingTurn;
+  drawChartArtifacts();
   // The marker is consumed by this render. Keeping it out of later renders
   // prevents old answers from replaying their entrance animation.
   state.partnerMessages.forEach((item) => { if (item.revealResponse) item.revealResponse = false; });
@@ -366,6 +368,54 @@ function renderPartnerConversation() {
     $("#partner-message-input").focus({ preventScroll: true });
   });
   resumeBuildPolling();
+}
+
+function renderChartArtifacts(artifacts, messageIndex) {
+  if (!Array.isArray(artifacts) || !artifacts.length) return "";
+  return artifacts.map((artifact, artifactIndex) => {
+    if (artifact?.type !== "chart" || !Array.isArray(artifact.rows)) return "";
+    const rows = artifact.rows.map((row) => `<tr><td>${escapeHtml(row?.[0])}</td><td>${escapeHtml(row?.[1])}</td></tr>`).join("");
+    return `<section class="chat-chart-card"><header><div><span>VISUALIZACIÓN DE DATOS</span><strong>${escapeHtml(artifact.title || "Gráfico")}</strong></div><b>${escapeHtml(artifact.chart_type || "chart")}</b></header><div class="chat-chart-canvas" data-chart-message="${messageIndex}" data-chart-artifact="${artifactIndex}" role="img" aria-label="${escapeHtml(artifact.description || artifact.title || "Gráfico de datos")}"><span>Preparando gráfico interactivo…</span></div><p>${escapeHtml(artifact.description || "")}</p><footer><small>${escapeHtml(artifact.source_name || "Dataset")} · ${escapeHtml(artifact.sheet || "Datos")}</small><details><summary>Ver datos</summary><div class="chat-chart-table"><table><thead><tr><th>${escapeHtml(artifact.columns?.[0] || "Categoría")}</th><th>${escapeHtml(artifact.columns?.[1] || "Valor")}</th></tr></thead><tbody>${rows}</tbody></table></div></details></footer></section>`;
+  }).join("");
+}
+
+let googleChartsReady = null;
+function ensureGoogleCharts() {
+  if (googleChartsReady) return googleChartsReady;
+  googleChartsReady = new Promise((resolve) => {
+    if (!window.google?.charts) { resolve(false); return; }
+    google.charts.load("current", { packages: ["corechart"], language: "es" });
+    google.charts.setOnLoadCallback(() => resolve(true));
+  });
+  return googleChartsReady;
+}
+
+async function drawChartArtifacts() {
+  const targets = [...document.querySelectorAll(".chat-chart-canvas")];
+  if (!targets.length || !(await ensureGoogleCharts())) return;
+  for (const target of targets) {
+    const message = state.partnerMessages[Number(target.dataset.chartMessage)];
+    const artifact = message?.artifacts?.[Number(target.dataset.chartArtifact)];
+    if (!artifact || target.dataset.chartDrawn === "true") continue;
+    const rows = (artifact.rows || []).map((row) => [row[0], Number(row[1])]);
+    if (!rows.length || rows.some((row) => !Number.isFinite(row[1]))) continue;
+    const data = google.visualization.arrayToDataTable([[artifact.columns?.[0] || "Categoría", artifact.columns?.[1] || "Valor"], ...rows]);
+    const constructors = { bar: "ColumnChart", line: "LineChart", pie: "PieChart", scatter: "ScatterChart" };
+    const Constructor = google.visualization[constructors[artifact.chart_type] || "ColumnChart"];
+    const chart = new Constructor(target);
+    chart.draw(data, {
+      backgroundColor: "transparent",
+      colors: ["#8b7cf6", "#55d4df", "#f3b65a"],
+      chartArea: { left: 58, top: 28, width: "78%", height: "68%" },
+      fontName: "Inter, system-ui, sans-serif",
+      legend: { position: artifact.chart_type === "pie" ? "right" : "none", textStyle: { color: "#b9bac5", fontSize: 11 } },
+      hAxis: { textStyle: { color: "#8e919e", fontSize: 10 }, gridlines: { color: "#252834" }, baselineColor: "#383b49" },
+      vAxis: { textStyle: { color: "#8e919e", fontSize: 10 }, gridlines: { color: "#252834" }, baselineColor: "#383b49", minValue: 0 },
+      tooltip: { textStyle: { color: "#171922", fontSize: 12 } },
+      animation: { startup: true, duration: 520, easing: "out" },
+    });
+    target.dataset.chartDrawn = "true";
+  }
 }
 
 function renderToolActivity(activity) {
@@ -507,7 +557,7 @@ function persistPartnerHistory() {
 }
 
 function serializeConversation(conversation) {
-  const allowedMessageKeys = ["role", "content", "model", "provider", "intent", "agentDraft", "toolActivity", "connectionOffers", "kind", "createdProjectId", "buildId", "build", "activityExpanded", "sourceLabel"];
+  const allowedMessageKeys = ["role", "content", "model", "provider", "intent", "agentDraft", "toolActivity", "connectionOffers", "artifacts", "kind", "createdProjectId", "buildId", "build", "activityExpanded", "sourceLabel"];
   const compactMessage = (message) => {
     const serialized = Object.fromEntries(allowedMessageKeys.filter((key) => message[key] !== undefined).map((key) => [key, message[key]]));
     if (serialized.build && Array.isArray(serialized.build.events)) {

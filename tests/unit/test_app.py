@@ -33,8 +33,9 @@ def test_home_serves_the_chat_only_experience() -> None:
     assert "Ejecutar 3 escenarios" not in response.text
     assert 'id="taskmaster-studio-access"' in response.text
     assert "Taskmaster Studio" in response.text
-    assert '/static/styles.css?v=20260829-rich-results-v21' in response.text
-    assert '/static/app.js?v=20260829-rich-results-v21' in response.text
+    assert '/static/styles.css?v=20260829-dataset-charts-v22' in response.text
+    assert '/static/app.js?v=20260829-dataset-charts-v22' in response.text
+    assert 'https://www.gstatic.com/charts/loader.js' in response.text
     assert 'id="document-inspector"' in response.text
     assert 'id="partner-typing"' not in response.text
     assert "Gemini 3.7 Flash diseña · El Ingeniero construye con aprobación · Sin efectos externos" not in response.text
@@ -84,6 +85,18 @@ def test_taskmaster_results_render_markdown_sections_and_comparison_tables() -> 
     assert "isMarkdownTableDivider" in script
     assert ".chat-table-wrap table" in styles
     assert ".turn-content h3" in styles
+
+
+def test_all_conversational_chats_render_and_persist_dataset_charts() -> None:
+    root = Path(__file__).parents[2]
+    script = (root / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    styles = (root / "app" / "static" / "styles.css").read_text(encoding="utf-8")
+
+    assert "function renderChartArtifacts" in script
+    assert "function drawChartArtifacts" in script
+    assert 'artifacts: payload.artifacts || []' in script
+    assert '"artifacts", "kind"' in script
+    assert ".chat-chart-card" in styles
 
 
 def test_taskmaster_chat_keeps_the_composer_docked_below_a_scrolling_transcript() -> None:

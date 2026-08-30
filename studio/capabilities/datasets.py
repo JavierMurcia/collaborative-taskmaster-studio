@@ -1,0 +1,327 @@
+"""Bounded, deterministic dataset inspection and chart generation."""
+
+from __future__ import annotations
+
+import csv
+import io
+import math
+import re
+import zipfile
+from collections import defaultdict
+from datetime import datetime
+from typing import Any, Literal
+from xml.etree import ElementTree
+
+from pydantic import BaseModel, ConfigDict, Field
+
+MAX_DATASET_ROWS = 2_500
+MAX_DATASET_COLUMNS = 40
+MAX_CHART_POINTS = 24
+
+CellValue = str | int | float | bool | None
+
+
+class DatasetSheet(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    name: str = Field(min_length=1, max_length=100)
+    columns: tuple[str, ...] = Field(min_length=1, max_length=MAX_DATASET_COLUMNS)
+    rows: tuple[tuple[CellValue, ...], ...] = Field(max_length=MAX_DATASET_ROWS)
+    total_rows: int = Field(ge=0)
+    truncated: bool = False
+
+    def summary(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "rows": self.total_rows,
+            "columns": list(self.columns),
+            "truncated": self.truncated,
+        }
+
+
+class DatasetSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    sheets: tuple[DatasetSheet, ...] = Field(min_length=1, max_length=24)
+
+    def summary(self) -> dict[str, Any]:
+        return {"kind": "dataset", "sheets": [sheet.summary() for sheet in self.sheets]}
+
+
+class ChartArtifact(BaseModel):
+    """A small chart contract that is safe to persist with a conversation."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    type: Literal["chart"] = "chart"
+    title: str = Field(min_length=1, max_length=160)
+    chart_type: Literal["bar", "line", "pie", "scatter"]
+    columns: tuple[str, str]
+    rows: tuple[tuple[CellValue, CellValue], ...] = Field(min_length=1, max_length=MAX_CHART_POINTS)
+    source_document_id: str = Field(pattern=r"^doc_[a-f0-9]{16}$")
+    source_name: str = Field(min_length=1, max_length=180)
+    sheet: str = Field(min_length=1, max_length=100)
+    description: str = Field(min_length=1, max_length=300)
+
+
+class DatasetAnalysisService:
+    """Create chart artifacts from attached structured data without arbitrary code."""
+
+    _REQUEST_TERMS = (
+        "gráfic", "grafic", "chart", "visualiza", "diagrama", "tendencia",
+        "distribución", "distribucion", "correlación", "correlacion",
+        "analiza", "analice", "comparar", "compara",
+    )
+
+    def analyze(
+        self, message: str, documents: tuple[dict[str, Any], ...]
+    ) -> tuple[ChartArtifact, ...]:
+        normalized = message.casefold()
+        if not any(term in normalized for term in self._REQUEST_TERMS):
+            return ()
+        document = next((item for item in documents if isinstance(item.get("dataset"), dict)), None)
+        if document is None:
+            return ()
+        snapshot = DatasetSnapshot.model_validate(document["dataset"])
+        sheet = _select_sheet(snapshot, normalized)
+        artifact = _build_chart(
+            sheet,
+            normalized,
+            document_id=str(document["id"]),
+            document_name=str(document.get("name") or "dataset"),
+        )
+        return (artifact,) if artifact is not None else ()
+
+
+def parse_dataset(suffix: str, payload: bytes) -> DatasetSnapshot | None:
+    if suffix == ".csv":
+        return DatasetSnapshot(sheets=(_parse_csv(payload),))
+    if suffix == ".xlsx":
+        sheets = _parse_xlsx(payload)
+        return DatasetSnapshot(sheets=tuple(sheets)) if sheets else None
+    return None
+
+
+def _parse_csv(payload: bytes) -> DatasetSheet:
+    text = payload.decode("utf-8-sig")
+    sample = text[:8_192]
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
+    except csv.Error:
+        dialect = csv.excel
+    raw_rows = list(csv.reader(io.StringIO(text), dialect))
+    return _sheet_from_rows("Datos", raw_rows)
+
+
+def _parse_xlsx(payload: bytes) -> list[DatasetSheet]:
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        members = archive.infolist()
+        if len(members) > 1_500 or sum(item.file_size for item in members) > 40_000_000:
+            return []
+        shared: list[str] = []
+        if "xl/sharedStrings.xml" in archive.namelist():
+            root = ElementTree.fromstring(archive.read("xl/sharedStrings.xml"))
+            shared = [
+                "".join(node.text or "" for node in item.iter() if node.tag.endswith("}t"))
+                for item in root
+                if item.tag.endswith("}si")
+            ]
+        names = _xlsx_sheet_names(archive)
+        paths = sorted(
+            (name for name in archive.namelist() if re.fullmatch(r"xl/worksheets/sheet\d+\.xml", name)),
+            key=lambda value: int(re.search(r"sheet(\d+)", value).group(1)),  # type: ignore[union-attr]
+        )
+        result: list[DatasetSheet] = []
+        for index, path in enumerate(paths):
+            root = ElementTree.fromstring(archive.read(path))
+            rows: list[list[CellValue]] = []
+            for row in (node for node in root.iter() if node.tag.endswith("}row")):
+                values: list[CellValue] = []
+                expected_column = 0
+                for cell in (node for node in row if node.tag.endswith("}c")):
+                    reference = cell.attrib.get("r", "")
+                    column_index = _column_index(reference) if reference else expected_column
+                    while len(values) < min(column_index, MAX_DATASET_COLUMNS):
+                        values.append(None)
+                    if column_index >= MAX_DATASET_COLUMNS:
+                        continue
+                    cell_type = cell.attrib.get("t", "")
+                    raw = next((node.text or "" for node in cell.iter() if node.tag.endswith("}v")), "")
+                    if cell_type == "s" and raw.isdigit() and int(raw) < len(shared):
+                        value: CellValue = shared[int(raw)]
+                    elif cell_type == "inlineStr":
+                        value = "".join(node.text or "" for node in cell.iter() if node.tag.endswith("}t"))
+                    elif cell_type == "b":
+                        value = raw == "1"
+                    else:
+                        value = _coerce_value(raw)
+                    values.append(value)
+                    expected_column = column_index + 1
+                if any(value not in (None, "") for value in values):
+                    rows.append(values)
+            if rows:
+                result.append(_sheet_from_rows(names[index] if index < len(names) else f"Hoja {index + 1}", rows))
+        return result
+
+
+def _xlsx_sheet_names(archive: zipfile.ZipFile) -> list[str]:
+    if "xl/workbook.xml" not in archive.namelist():
+        return []
+    root = ElementTree.fromstring(archive.read("xl/workbook.xml"))
+    return [
+        (node.attrib.get("name") or f"Hoja {index + 1}")[:100]
+        for index, node in enumerate(node for node in root.iter() if node.tag.endswith("}sheet"))
+    ]
+
+
+def _column_index(reference: str) -> int:
+    letters = re.match(r"[A-Z]+", reference.upper())
+    if not letters:
+        return 0
+    result = 0
+    for character in letters.group(0):
+        result = result * 26 + ord(character) - 64
+    return max(0, result - 1)
+
+
+def _sheet_from_rows(name: str, raw_rows: list[list[Any]]) -> DatasetSheet:
+    nonempty = [row[:MAX_DATASET_COLUMNS] for row in raw_rows if any(str(value).strip() for value in row)]
+    if not nonempty:
+        return DatasetSheet(name=name, columns=("Valor",), rows=(), total_rows=0)
+    width = min(MAX_DATASET_COLUMNS, max(len(row) for row in nonempty))
+    headers = _headers(nonempty[0], width)
+    body = nonempty[1:]
+    rows = tuple(
+        tuple(_coerce_value(row[index] if index < len(row) else None) for index in range(width))
+        for row in body[:MAX_DATASET_ROWS]
+    )
+    return DatasetSheet(
+        name=name[:100] or "Datos",
+        columns=headers,
+        rows=rows,
+        total_rows=len(body),
+        truncated=len(body) > MAX_DATASET_ROWS,
+    )
+
+
+def _headers(values: list[Any], width: int) -> tuple[str, ...]:
+    seen: dict[str, int] = {}
+    headers: list[str] = []
+    for index in range(width):
+        base = str(values[index] if index < len(values) else "").strip()[:80] or f"Columna {index + 1}"
+        count = seen.get(base.casefold(), 0) + 1
+        seen[base.casefold()] = count
+        headers.append(base if count == 1 else f"{base} ({count})")
+    return tuple(headers)
+
+
+def _coerce_value(value: Any) -> CellValue:
+    if value is None or isinstance(value, (int, float, bool)):
+        return value
+    clean = str(value).strip()[:500]
+    if not clean:
+        return None
+    normalized = clean.replace(" ", "")
+    if re.fullmatch(r"-?\d+", normalized):
+        try:
+            return int(normalized)
+        except ValueError:
+            return clean
+    if re.fullmatch(r"-?(?:\d+\.\d+|\d+,\d+)", normalized):
+        try:
+            return float(normalized.replace(",", "."))
+        except ValueError:
+            return clean
+    return clean
+
+
+def _select_sheet(snapshot: DatasetSnapshot, message: str) -> DatasetSheet:
+    return next((sheet for sheet in snapshot.sheets if sheet.name.casefold() in message), snapshot.sheets[0])
+
+
+def _build_chart(
+    sheet: DatasetSheet, message: str, *, document_id: str, document_name: str
+) -> ChartArtifact | None:
+    if not sheet.rows or len(sheet.columns) < 2:
+        return None
+    kinds = [_column_kind(sheet.rows, index) for index in range(len(sheet.columns))]
+    mentioned = [index for index, name in enumerate(sheet.columns) if name.casefold() in message]
+    numeric = [index for index, kind in enumerate(kinds) if kind == "number"]
+    dimensions = [index for index, kind in enumerate(kinds) if kind != "number"]
+    chart_type: Literal["bar", "line", "pie", "scatter"] = "bar"
+    if any(term in message for term in ("dispers", "scatter", "correl")) and len(numeric) >= 2:
+        chart_type = "scatter"
+    elif any(term in message for term in ("línea", "linea", "line", "tendencia", "evolución", "evolucion")):
+        chart_type = "line"
+    elif any(term in message for term in ("pastel", "torta", "pie", "circular")):
+        chart_type = "pie"
+    if chart_type == "scatter":
+        x = next((item for item in mentioned if item in numeric), numeric[0])
+        y = next((item for item in mentioned if item in numeric and item != x), numeric[1])
+        points = tuple(
+            (float(row[x]), float(row[y]))
+            for row in sheet.rows
+            if _is_number(row[x]) and _is_number(row[y])
+        )[:MAX_CHART_POINTS]
+        if not points:
+            return None
+        columns = (sheet.columns[x], sheet.columns[y])
+        description = f"Relación entre {columns[0]} y {columns[1]} con {len(points)} observaciones."
+    else:
+        dimension = next((item for item in mentioned if item in dimensions), dimensions[0] if dimensions else 0)
+        measure = next((item for item in mentioned if item in numeric), numeric[0] if numeric else None)
+        grouped: dict[str, list[float]] = defaultdict(list)
+        for row in sheet.rows:
+            label = str(row[dimension] if row[dimension] not in (None, "") else "Sin valor")[:80]
+            if measure is None:
+                grouped[label].append(1.0)
+            elif _is_number(row[measure]):
+                grouped[label].append(float(row[measure]))
+        average = any(term in message for term in ("promedio", "media", "average"))
+        values = [
+            (label, sum(items) / len(items) if average else sum(items))
+            for label, items in grouped.items()
+            if items
+        ]
+        values.sort(key=lambda item: item[1], reverse=chart_type != "line")
+        points = tuple((label, round(value, 4)) for label, value in values[:MAX_CHART_POINTS])
+        if not points:
+            return None
+        metric = sheet.columns[measure] if measure is not None else "Registros"
+        columns = (sheet.columns[dimension], metric)
+        operation = "promedio" if average else "total" if measure is not None else "conteo"
+        description = f"{operation.capitalize()} de {metric} agrupado por {columns[0]}."
+    title = f"{columns[1]} por {columns[0]}"
+    return ChartArtifact(
+        title=title,
+        chart_type=chart_type,
+        columns=columns,
+        rows=points,
+        source_document_id=document_id,
+        source_name=document_name,
+        sheet=sheet.name,
+        description=description,
+    )
+
+
+def _column_kind(rows: tuple[tuple[CellValue, ...], ...], index: int) -> str:
+    values = [row[index] for row in rows[:200] if index < len(row) and row[index] not in (None, "")]
+    if values and sum(_is_number(value) for value in values) / len(values) >= 0.8:
+        return "number"
+    if values and sum(_is_date(value) for value in values) / len(values) >= 0.8:
+        return "date"
+    return "text"
+
+
+def _is_number(value: CellValue) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value))
+
+
+def _is_date(value: CellValue) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return True
+    except ValueError:
+        return False

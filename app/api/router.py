@@ -56,6 +56,7 @@ from studio.application.plugin_registry import PluginRegistry
 from studio.application.project_service import ProjectService
 from studio.application.revision_generator import StructuredRevisionGenerator
 from studio.application.specification_generator import StructuredSpecificationGenerator
+from studio.capabilities.datasets import DatasetAnalysisService
 from studio.capabilities.documents import MAX_UPLOAD_BYTES, DocumentLibrary
 from studio.capabilities.github import GitHubReader
 from studio.capabilities.google_calendar import GoogleCalendarReader
@@ -95,6 +96,7 @@ class ServiceContainer:
     collaborative_chat: CollaborativeChatService
     conversation_memory: ConversationMemoryService
     documents: DocumentLibrary
+    dataset_analysis: DatasetAnalysisService
     chat_builder: ChatBuildService | None
     agent_catalog: AgentCatalogRepository | None
     catalog_agent_runtime: CatalogAgentExecutionService | None
@@ -128,6 +130,7 @@ class ServiceContainer:
         collaborative_chat: CollaborativeChatService | None = None,
         conversation_memory: ConversationMemoryService | None = None,
         documents: DocumentLibrary | None = None,
+        dataset_analysis: DatasetAnalysisService | None = None,
         chat_builder: ChatBuildService | None = None,
         agent_catalog: AgentCatalogRepository | None = None,
         catalog_agent_runtime: CatalogAgentExecutionService | None = None,
@@ -187,6 +190,7 @@ class ServiceContainer:
             collaborative_chat=collaborative_chat,
             conversation_memory=conversation_memory,
             documents=documents,
+            dataset_analysis=dataset_analysis or DatasetAnalysisService(),
             chat_builder=chat_builder,
             agent_catalog=agent_catalog,
             catalog_agent_runtime=catalog_agent_runtime,
@@ -243,6 +247,14 @@ def create_router(services: ServiceContainer) -> APIRouter:
             identity=identity,
         )
         payload = result.model_dump(mode="json")
+        attached = tuple(
+            services.documents.inspect(session_id, document_id)
+            for document_id in body.document_ids
+        )
+        payload["artifacts"] = [
+            artifact.model_dump(mode="json")
+            for artifact in services.dataset_analysis.analyze(body.message, attached)
+        ]
         payload["connection_offers"] = [
             item.model_dump(mode="json")
             for item in services.connections.offers(
@@ -664,17 +676,23 @@ def create_router(services: ServiceContainer) -> APIRouter:
                 "CATALOG_AGENT_RUNTIME_UNAVAILABLE",
                 "La ejecución de Taskmasters publicados no está disponible.",
             )
-        return services.catalog_agent_runtime.run(
+        attached = tuple(
+            services.documents.inspect(session_id, document_id)
+            for document_id in body.document_ids
+        )
+        result = services.catalog_agent_runtime.run(
             agent_id,
             message=body.message,
             owner_session_id=session_id,
             idempotency_key=idempotency_key,
             identity=_identity(request),
-            documents=tuple(
-                services.documents.inspect(session_id, document_id)
-                for document_id in body.document_ids
-            ),
+            documents=attached,
         ).model_dump(mode="json")
+        result["artifacts"] = [
+            artifact.model_dump(mode="json")
+            for artifact in services.dataset_analysis.analyze(body.message, attached)
+        ]
+        return result
 
     @router.patch("/collaborative/agents/{agent_id}")
     def update_catalog_agent(

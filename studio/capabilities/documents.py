@@ -13,6 +13,7 @@ from xml.etree import ElementTree
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from studio.capabilities.datasets import DatasetSnapshot, parse_dataset
 from studio.domain.errors import DomainError
 
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
@@ -32,9 +33,10 @@ class DocumentRecord(BaseModel):
     sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     text: str = Field(max_length=MAX_EXTRACTED_CHARACTERS)
     truncated: bool = False
+    dataset: DatasetSnapshot | None = None
 
     def summary(self) -> dict[str, Any]:
-        return {
+        summary = {
             "id": self.id,
             "name": self.name,
             "suffix": self.suffix,
@@ -42,6 +44,9 @@ class DocumentRecord(BaseModel):
             "characters": len(self.text),
             "truncated": self.truncated,
         }
+        if self.dataset is not None:
+            summary["dataset"] = self.dataset.summary()
+        return summary
 
 
 class DocumentLibrary:
@@ -80,6 +85,7 @@ class DocumentLibrary:
                 "DOCUMENT_TEXT_EMPTY",
                 "No fue posible extraer texto utilizable del documento.",
             )
+        dataset = parse_dataset(suffix, payload)
         record = DocumentRecord(
             id=f"doc_{uuid4().hex[:16]}",
             name=safe_name,
@@ -88,6 +94,7 @@ class DocumentLibrary:
             sha256=hashlib.sha256(payload).hexdigest(),
             text=clean,
             truncated=truncated,
+            dataset=dataset,
         )
         (directory / f"{record.id}.json").write_text(
             record.model_dump_json(indent=2), encoding="utf-8"
@@ -103,7 +110,14 @@ class DocumentLibrary:
 
     def inspect(self, owner_session_id: str, document_id: str) -> dict[str, Any]:
         record = self._require(owner_session_id, document_id)
-        return {"kind": "document", **record.summary(), "content": record.text[:24_000]}
+        payload: dict[str, Any] = {
+            "kind": "document",
+            **record.summary(),
+            "content": record.text[:24_000],
+        }
+        if record.dataset is not None:
+            payload["dataset"] = record.dataset.model_dump(mode="json")
+        return payload
 
     def search(self, owner_session_id: str, document_id: str, query: str) -> dict[str, Any]:
         record = self._require(owner_session_id, document_id)
