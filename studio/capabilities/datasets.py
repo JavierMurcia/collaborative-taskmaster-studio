@@ -50,6 +50,15 @@ class DatasetSnapshot(BaseModel):
         return {"kind": "dataset", "sheets": [sheet.summary() for sheet in self.sheets]}
 
 
+class ChartPoint(BaseModel):
+    """Firestore-safe chart point; Firestore rejects arrays nested inside arrays."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    x: CellValue
+    y: CellValue
+
+
 class ChartArtifact(BaseModel):
     """A small chart contract that is safe to persist with a conversation."""
 
@@ -59,7 +68,7 @@ class ChartArtifact(BaseModel):
     title: str = Field(min_length=1, max_length=160)
     chart_type: Literal["bar", "line", "pie", "scatter"]
     columns: tuple[str, str]
-    rows: tuple[tuple[CellValue, CellValue], ...] = Field(min_length=1, max_length=MAX_CHART_POINTS)
+    rows: tuple[ChartPoint, ...] = Field(min_length=1, max_length=MAX_CHART_POINTS)
     source_document_id: str | None = Field(default=None, pattern=r"^doc_[a-f0-9]{16}$")
     source_name: str = Field(min_length=1, max_length=180)
     sheet: str = Field(min_length=1, max_length=100)
@@ -69,8 +78,11 @@ class ChartArtifact(BaseModel):
 class DatasetAnalysisService:
     """Create chart artifacts from attached structured data without arbitrary code."""
 
-    _REQUEST_TERMS = (
-        "gráfic", "grafic", "chart", "visualiza", "diagrama", "tendencia",
+    _CHART_TERMS = (
+        "gráfic", "grafic", "chart", "visualiza", "diagrama",
+    )
+    _REQUEST_TERMS = _CHART_TERMS + (
+        "tendencia",
         "distribución", "distribucion", "correlación", "correlacion",
         "analiza", "analice", "comparar", "compara",
     )
@@ -84,20 +96,33 @@ class DatasetAnalysisService:
         normalized = message.casefold()
         if not any(term in normalized for term in self._REQUEST_TERMS):
             return ()
-        document = next((item for item in documents if isinstance(item.get("dataset"), dict)), None)
-        if document is None:
-            if any(term in normalized for term in self._SYNTHETIC_TERMS):
+        dataset_documents = tuple(
+            item for item in documents if isinstance(item.get("dataset"), dict)
+        )
+        if not dataset_documents:
+            if self.requests_chart(message) or any(
+                term in normalized for term in self._SYNTHETIC_TERMS
+            ):
                 return _build_demo_charts(message)
             return ()
-        snapshot = DatasetSnapshot.model_validate(document["dataset"])
-        sheet = _select_sheet(snapshot, normalized)
-        artifact = _build_chart(
-            sheet,
-            normalized,
-            document_id=str(document["id"]),
-            document_name=str(document.get("name") or "dataset"),
-        )
-        return (artifact,) if artifact is not None else ()
+        artifacts: list[ChartArtifact] = []
+        for document in dataset_documents[:8]:
+            snapshot = DatasetSnapshot.model_validate(document["dataset"])
+            sheet = _select_sheet(snapshot, normalized)
+            artifact = _build_chart(
+                sheet,
+                normalized,
+                document_id=str(document["id"]),
+                document_name=str(document.get("name") or "dataset"),
+            )
+            if artifact is not None:
+                artifacts.append(artifact)
+        return tuple(artifacts)
+
+    @classmethod
+    def requests_chart(cls, message: str) -> bool:
+        normalized = message.casefold()
+        return any(term in normalized for term in cls._CHART_TERMS)
 
 
 def _build_demo_charts(message: str) -> tuple[ChartArtifact, ...]:
@@ -106,11 +131,11 @@ def _build_demo_charts(message: str) -> tuple[ChartArtifact, ...]:
     seed = int.from_bytes(hashlib.sha256(message.encode("utf-8")).digest()[:8], "big")
     generator = random.Random(seed)
     latency = tuple(
-        (f"Muestra {index}", generator.randint(82, 148))
+        ChartPoint(x=f"Muestra {index}", y=generator.randint(82, 148))
         for index in range(1, 13)
     )
     success = tuple(
-        (label, round(generator.uniform(88.0, 99.4), 1))
+        ChartPoint(x=label, y=round(generator.uniform(88.0, 99.4), 1))
         for label in ("API", "Datos", "Búsqueda", "Agentes", "Reportes")
     )
     return (
@@ -151,8 +176,22 @@ def _parse_csv(payload: bytes) -> DatasetSheet:
         dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
     except csv.Error:
         dialect = csv.excel
-    raw_rows = list(csv.reader(io.StringIO(text), dialect))
-    return _sheet_from_rows("Datos", raw_rows)
+    raw_rows: list[list[str]] = []
+    total_nonempty = 0
+    for row in csv.reader(io.StringIO(text), dialect):
+        if not any(str(value).strip() for value in row):
+            continue
+        total_nonempty += 1
+        if len(raw_rows) <= MAX_DATASET_ROWS:
+            raw_rows.append(row)
+    sheet = _sheet_from_rows("Datos", raw_rows)
+    total_rows = max(0, total_nonempty - 1)
+    return sheet.model_copy(
+        update={
+            "total_rows": total_rows,
+            "truncated": total_rows > MAX_DATASET_ROWS,
+        }
+    )
 
 
 def _parse_xlsx(payload: bytes) -> list[DatasetSheet]:
@@ -301,7 +340,7 @@ def _build_chart(
         x = next((item for item in mentioned if item in numeric), numeric[0])
         y = next((item for item in mentioned if item in numeric and item != x), numeric[1])
         points = tuple(
-            (float(row[x]), float(row[y]))
+            ChartPoint(x=float(row[x]), y=float(row[y]))
             for row in sheet.rows
             if _is_number(row[x]) and _is_number(row[y])
         )[:MAX_CHART_POINTS]
@@ -326,7 +365,10 @@ def _build_chart(
             if items
         ]
         values.sort(key=lambda item: item[1], reverse=chart_type != "line")
-        points = tuple((label, round(value, 4)) for label, value in values[:MAX_CHART_POINTS])
+        points = tuple(
+            ChartPoint(x=label, y=round(value, 4))
+            for label, value in values[:MAX_CHART_POINTS]
+        )
         if not points:
             return None
         metric = sheet.columns[measure] if measure is not None else "Registros"

@@ -104,7 +104,7 @@ ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
 LOGGER = logging.getLogger("collaborative-taskmaster-studio")
 MAX_REQUEST_BYTES = 32_768
-MAX_DOCUMENT_REQUEST_BYTES = 8_500_000
+MAX_DOCUMENT_REQUEST_BYTES = 26_500_000
 def _workspace_read_limit() -> int:
     try:
         return int(os.getenv("STUDIO_COLLABORATOR_MAX_READ_BYTES", "16384"))

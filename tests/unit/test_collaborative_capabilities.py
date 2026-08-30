@@ -80,6 +80,37 @@ def test_document_upload_api_lists_and_deletes(tmp_path: Path) -> None:
     assert api.delete(f"/api/v1/collaborative/documents/{document_id}", headers=headers).status_code == 204
 
 
+def test_multiple_dataset_files_can_be_uploaded_to_one_session(tmp_path: Path) -> None:
+    clock = FrozenClock(NOW)
+    projects = InMemoryRepository(clock)
+    api = TestClient(
+        create_app(
+            projects,
+            projects,
+            clock,
+            document_library=DocumentLibrary(tmp_path),
+        )
+    )
+    headers = {"X-Studio-Session": "browser_multiple_datasets"}
+    document_ids: list[str] = []
+    for name, content in (
+        ("ventas.csv", b"mes,ventas\nEnero,10\nFebrero,20\n"),
+        ("costos.csv", b"area,costo\nProducto,8\nSoporte,4\n"),
+    ):
+        response = api.post(
+            "/api/v1/collaborative/documents",
+            headers=headers,
+            files={"file": (name, content, "text/csv")},
+        )
+        assert response.status_code == 201
+        document_ids.append(response.json()["id"])
+
+    listed = api.get("/api/v1/collaborative/documents", headers=headers)
+
+    assert listed.status_code == 200
+    assert {item["id"] for item in listed.json()["documents"]} == set(document_ids)
+
+
 def test_workspace_project_map_and_relations_are_bounded(tmp_path: Path) -> None:
     (tmp_path / "studio").mkdir()
     (tmp_path / "tests").mkdir()

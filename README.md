@@ -202,7 +202,7 @@ son necesarias y el usuario proporciona el contexto correspondiente:
   descarta. No inicia sesión, completa formularios ni ejecuta acciones en sitios externos.
 - **Lectura de documentos:** carga explícita de TXT, Markdown, CSV, JSON, YAML, XML, PDF, DOCX,
   XLSX o PPTX.
-  Se extrae únicamente texto, el original nunca se ejecuta, cada archivo se limita a 8 MiB y solo
+  Se extrae únicamente texto, el original nunca se ejecuta, cada archivo se limita a 25 MiB y solo
   queda disponible en la sesión que lo adjuntó.
 - **Memoria avanzada:** recupera fragmentos visibles y relevantes de conversaciones anteriores de
   la misma sesión. No mezcla usuarios ni expone cargas internas de herramientas.

@@ -29,7 +29,7 @@ class ConversationRecord(BaseModel):
     id: str = Field(pattern=r"^chat_[A-Za-z0-9-]{1,80}$")
     title: str = Field(min_length=1, max_length=100)
     messages: tuple[ConversationMessage, ...] = Field(max_length=32)
-    document_ids: tuple[str, ...] = Field(default_factory=tuple, max_length=8)
+    document_ids: tuple[str, ...] = Field(default_factory=tuple, max_length=12)
     phase: Literal["discovery", "clarification", "alignment", "runtime"] = "discovery"
     agent_id: str | None = Field(default=None, max_length=80)
     updated_at: str

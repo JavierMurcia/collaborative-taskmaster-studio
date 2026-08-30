@@ -33,8 +33,8 @@ def test_home_serves_the_chat_only_experience() -> None:
     assert "Ejecutar 3 escenarios" not in response.text
     assert 'id="taskmaster-studio-access"' in response.text
     assert "Taskmaster Studio" in response.text
-    assert '/static/styles.css?v=20260830-sidebar-signin-v26' in response.text
-    assert '/static/app.js?v=20260830-sidebar-signin-v26' in response.text
+    assert '/static/styles.css?v=20260830-multi-dataset-v27' in response.text
+    assert '/static/app.js?v=20260830-multi-dataset-v27' in response.text
     assert 'https://www.gstatic.com/charts/loader.js' in response.text
     assert 'id="document-inspector"' in response.text
     assert 'id="partner-typing"' not in response.text

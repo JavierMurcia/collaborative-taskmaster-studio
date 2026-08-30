@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import zipfile
 
+from app.api.router import _chart_aware_reply
 from studio.capabilities.datasets import DatasetAnalysisService
 from studio.capabilities.documents import DocumentLibrary
 
@@ -26,7 +27,10 @@ def test_csv_is_preserved_as_structured_data_and_generates_a_chart(tmp_path) -> 
     assert len(artifacts) == 1
     assert artifacts[0].chart_type == "bar"
     assert artifacts[0].columns == ("mes", "ventas")
-    assert artifacts[0].rows == (("Febrero", 180.0), ("Enero", 150.0))
+    assert [(point.x, point.y) for point in artifacts[0].rows] == [
+        ("Febrero", 180.0),
+        ("Enero", 150.0),
+    ]
 
 
 def test_dataset_analysis_does_not_run_without_an_explicit_data_request(tmp_path) -> None:
@@ -51,6 +55,41 @@ def test_explicit_demo_request_renders_charts_instead_of_requiring_python() -> N
     assert artifacts[0].rows == DatasetAnalysisService().analyze(
         "Genera gráficos visuales con datos aleatorios", ()
     )[0].rows
+
+
+def test_plain_chart_request_renders_demo_instead_of_returning_code() -> None:
+    artifacts = DatasetAnalysisService().analyze("genera graficas", ())
+
+    assert len(artifacts) == 2
+    assert all(
+        artifact.model_dump(mode="json")["rows"][0].keys() == {"x", "y"}
+        for artifact in artifacts
+    )
+
+
+def test_multiple_attached_datasets_each_generate_a_chart(tmp_path) -> None:
+    library = DocumentLibrary(tmp_path)
+    first = library.add("owner", "ventas.csv", b"mes,ventas\nEnero,120\nFebrero,180\n")
+    second = library.add("owner", "costos.csv", b"area,costo\nProducto,80\nSoporte,45\n")
+
+    artifacts = DatasetAnalysisService().analyze(
+        "Genera graficas para todos los archivos",
+        (library.inspect("owner", first.id), library.inspect("owner", second.id)),
+    )
+
+    assert [artifact.source_name for artifact in artifacts] == ["ventas.csv", "costos.csv"]
+    assert all(
+        isinstance(artifact.model_dump(mode="json")["rows"][0], dict)
+        for artifact in artifacts
+    )
+    reply = _chart_aware_reply(
+        "Genera graficas para todos los archivos",
+        "Aquí tienes código con matplotlib.",
+        artifacts,
+        (library.inspect("owner", first.id), library.inspect("owner", second.id)),
+    )
+    assert "código" in reply
+    assert "matplotlib" not in reply.casefold()
 
 
 def test_xlsx_keeps_sheet_names_columns_and_numeric_values(tmp_path) -> None:

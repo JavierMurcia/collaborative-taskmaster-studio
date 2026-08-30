@@ -255,7 +255,9 @@ def create_router(services: ServiceContainer) -> APIRouter:
         payload["artifacts"] = [
             artifact.model_dump(mode="json") for artifact in chart_artifacts
         ]
-        payload["reply"] = _chart_aware_reply(str(payload["reply"]), chart_artifacts)
+        payload["reply"] = _chart_aware_reply(
+            body.message, str(payload["reply"]), chart_artifacts, attached
+        )
         payload["connection_offers"] = [
             item.model_dump(mode="json")
             for item in services.connections.offers(
@@ -694,7 +696,9 @@ def create_router(services: ServiceContainer) -> APIRouter:
         result["artifacts"] = [
             artifact.model_dump(mode="json") for artifact in chart_artifacts
         ]
-        result["reply"] = _chart_aware_reply(str(result["reply"]), chart_artifacts)
+        result["reply"] = _chart_aware_reply(
+            body.message, str(result["reply"]), chart_artifacts, attached
+        )
         return result
 
     @router.patch("/collaborative/agents/{agent_id}")
@@ -1034,12 +1038,26 @@ def _identity(request: Request) -> IdentityContext:
 
 
 def _chart_aware_reply(
-    reply: str, artifacts: tuple[ChartArtifact, ...]
+    message: str,
+    reply: str,
+    artifacts: tuple[ChartArtifact, ...],
+    documents: tuple[dict[str, Any], ...],
 ) -> str:
     """Keep the language model from offering code for charts already rendered by the UI."""
 
-    if not artifacts:
+    if not artifacts and not DatasetAnalysisService.requests_chart(message):
         return reply
+    if not artifacts:
+        has_dataset = any(isinstance(item.get("dataset"), dict) for item in documents)
+        if has_dataset:
+            return (
+                "No encontré columnas compatibles para pintar la gráfica solicitada. "
+                "Indícame qué columnas quieres usar como categoría y valor; no generaré código."
+            )
+        return (
+            "No encontré datos estructurados adjuntos para esa gráfica. "
+            "Carga uno o varios archivos CSV/XLSX o pídeme una demostración; no generaré código."
+        )
     if all(artifact.source_document_id is None for artifact in artifacts):
         count = len(artifacts)
         noun = "visualización" if count == 1 else "visualizaciones"
@@ -1047,6 +1065,13 @@ def _chart_aware_reply(
             f"He generado {count} {noun} directamente en el chat con datos simulados. "
             "Puedes pedirme otro tipo de gráfico, cambiar las métricas o adjuntar un CSV/XLSX "
             "para usar datos reales."
+        )
+    if DatasetAnalysisService.requests_chart(message):
+        noun = "visualización" if len(artifacts) == 1 else "visualizaciones"
+        sources = ", ".join(dict.fromkeys(artifact.source_name for artifact in artifacts))
+        return (
+            f"He pintado {len(artifacts)} {noun} directamente en el chat usando {sources}. "
+            "Puedes pedirme otro tipo de gráfica, columnas o forma de agrupación; no necesitas código."
         )
     normalized = reply.casefold()
     code_markers = ("```python", "matplotlib", "seaborn", "plotly", "chart.js")

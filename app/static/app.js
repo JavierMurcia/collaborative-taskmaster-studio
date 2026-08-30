@@ -6,6 +6,8 @@ const PARTNER_CHAT_KEY = "taskmaster_studio_partner_chat";
 const PARTNER_CONVERSATIONS_KEY = "taskmaster_studio_conversations";
 const ID_TOKEN_KEY = "taskmaster_studio_id_token";
 const REFRESH_TOKEN_KEY = "taskmaster_studio_refresh_token";
+const MAX_SESSION_DOCUMENTS = 12;
+const MAX_DOCUMENT_UPLOAD_BYTES = 25 * 1024 * 1024;
 const CONNECTION_CATALOG = [
   { plugin_id: "google.drive", title: "Google Drive", provider: "Google" },
   { plugin_id: "google.gmail", title: "Gmail", provider: "Google" },
@@ -404,9 +406,13 @@ function renderChartArtifacts(artifacts, messageIndex) {
   if (!Array.isArray(artifacts) || !artifacts.length) return "";
   return artifacts.map((artifact, artifactIndex) => {
     if (artifact?.type !== "chart" || !Array.isArray(artifact.rows)) return "";
-    const rows = artifact.rows.map((row) => `<tr><td>${escapeHtml(row?.[0])}</td><td>${escapeHtml(row?.[1])}</td></tr>`).join("");
+    const rows = artifact.rows.map((row) => { const [x, y] = chartPointValues(row); return `<tr><td>${escapeHtml(x)}</td><td>${escapeHtml(y)}</td></tr>`; }).join("");
     return `<section class="chat-chart-card"><header><div><span>VISUALIZACIÓN DE DATOS</span><strong>${escapeHtml(artifact.title || "Gráfico")}</strong></div><b>${escapeHtml(artifact.chart_type || "chart")}</b></header><div class="chat-chart-canvas" data-chart-message="${messageIndex}" data-chart-artifact="${artifactIndex}" role="img" aria-label="${escapeHtml(artifact.description || artifact.title || "Gráfico de datos")}"><span>Preparando gráfico interactivo…</span></div><p>${escapeHtml(artifact.description || "")}</p><footer><small>${escapeHtml(artifact.source_name || "Dataset")} · ${escapeHtml(artifact.sheet || "Datos")}</small><details><summary>Ver datos</summary><div class="chat-chart-table"><table><thead><tr><th>${escapeHtml(artifact.columns?.[0] || "Categoría")}</th><th>${escapeHtml(artifact.columns?.[1] || "Valor")}</th></tr></thead><tbody>${rows}</tbody></table></div></details></footer></section>`;
   }).join("");
+}
+
+function chartPointValues(row) {
+  return Array.isArray(row) ? [row[0], row[1]] : [row?.x, row?.y];
 }
 
 let googleChartsReady = null;
@@ -427,7 +433,7 @@ async function drawChartArtifacts() {
     const message = state.partnerMessages[Number(target.dataset.chartMessage)];
     const artifact = message?.artifacts?.[Number(target.dataset.chartArtifact)];
     if (!artifact || target.dataset.chartDrawn === "true") continue;
-    const rows = (artifact.rows || []).map((row) => [row[0], Number(row[1])]);
+    const rows = (artifact.rows || []).map((row) => { const [x, y] = chartPointValues(row); return [x, Number(y)]; });
     if (!rows.length || rows.some((row) => !Number.isFinite(row[1]))) continue;
     const data = google.visualization.arrayToDataTable([[artifact.columns?.[0] || "Categoría", artifact.columns?.[1] || "Valor"], ...rows]);
     const constructors = { bar: "ColumnChart", line: "LineChart", pie: "PieChart", scatter: "ScatterChart" };
@@ -873,15 +879,28 @@ async function loadDocumentLibrary() {
 }
 
 async function uploadDocuments(files) {
-  const uploads = [...files].slice(0, 8).map((file) => ({ id: `upload_${crypto.randomUUID()}`, file, name: file.name, size_bytes: file.size, progress: 0, status: "uploading", error: "" }));
+  const remaining = Math.max(0, MAX_SESSION_DOCUMENTS - state.documents.length - state.documentUploads.filter((item) => item.status === "uploading").length);
+  if (!remaining) { notify("La sesión ya contiene 12 archivos. Elimina uno para cargar otro.", "error"); return; }
+  const selected = [...files].slice(0, remaining);
+  if (files.length > remaining) notify(`Se cargarán ${remaining} archivos; la sesión admite un máximo de 12.`, "error");
+  const uploads = selected.map((file) => ({
+    id: `upload_${crypto.randomUUID()}`,
+    file,
+    name: file.name,
+    size_bytes: file.size,
+    progress: 0,
+    status: file.size > MAX_DOCUMENT_UPLOAD_BYTES ? "failed" : "uploading",
+    error: file.size > MAX_DOCUMENT_UPLOAD_BYTES ? "El archivo supera el límite de 25 MB." : "",
+  }));
   state.documentUploads.push(...uploads);
   renderAttachments();
   for (const upload of uploads) {
+    if (upload.status === "failed") continue;
     try {
       const payload = await uploadDocumentWithProgress(upload);
       state.documentUploads = state.documentUploads.filter((item) => item.id !== upload.id);
       state.documents = [payload, ...state.documents.filter((item) => item.id !== payload.id)];
-      if (!state.attachedDocumentIds.includes(payload.id) && state.attachedDocumentIds.length < 8) state.attachedDocumentIds.push(payload.id);
+      if (!state.attachedDocumentIds.includes(payload.id) && state.attachedDocumentIds.length < MAX_SESSION_DOCUMENTS) state.attachedDocumentIds.push(payload.id);
       renderAttachments();
       if (state.partnerMessages.length) persistPartnerHistory();
     } catch (error) {
@@ -913,7 +932,10 @@ function uploadDocumentWithProgress(upload) {
       activeDocumentUploads.delete(upload.id);
       let payload = {};
       try { payload = request.responseText ? JSON.parse(request.responseText) : {}; }
-      catch { reject(new Error("El servidor devolvió una respuesta inesperada.")); return; }
+      catch {
+        reject(new Error(request.status === 413 ? "El archivo supera el límite de 25 MB." : "El servidor devolvió una respuesta inesperada."));
+        return;
+      }
       if (request.status < 200 || request.status >= 300) { reject(new Error(payload.error?.message || `No se pudo leer ${upload.name}.`)); return; }
       upload.progress = 100;
       renderAttachments();
@@ -985,7 +1007,7 @@ function handleAttachmentClick(event) {
 function toggleDocumentAttachment(documentId) {
   if (state.attachedDocumentIds.includes(documentId)) state.attachedDocumentIds = state.attachedDocumentIds.filter((id) => id !== documentId);
   else {
-    if (state.attachedDocumentIds.length >= 8) { notify("Puedes adjuntar hasta 8 archivos a una conversación. Quita uno para añadir otro.", "error"); return; }
+    if (state.attachedDocumentIds.length >= MAX_SESSION_DOCUMENTS) { notify("Puedes adjuntar hasta 12 archivos a una conversación. Quita uno para añadir otro.", "error"); return; }
     state.attachedDocumentIds.push(documentId);
   }
   renderAttachments();

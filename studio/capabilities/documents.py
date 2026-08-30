@@ -18,7 +18,7 @@ from studio.capabilities.datasets import DatasetSnapshot, parse_dataset
 from studio.domain.errors import DomainError
 from studio.ports.model_gateway import ModelMedia
 
-MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 MAX_MULTIMODAL_BYTES = 16 * 1024 * 1024
 MAX_EXTRACTED_CHARACTERS = 100_000
 MAX_DOCUMENTS_PER_SESSION = 12
@@ -79,7 +79,7 @@ class DocumentLibrary:
         if not payload or len(payload) > MAX_UPLOAD_BYTES:
             raise DomainError(
                 "DOCUMENT_SIZE_INVALID",
-                "El documento debe contener datos y no superar 8 MB.",
+                "El documento debe contener datos y no superar 25 MB.",
             )
         directory = self._owner_directory(owner_session_id)
         directory.mkdir(parents=True, exist_ok=True)
