@@ -52,7 +52,11 @@ def prepare_demo_data() -> dict[str, object]:
 
 
 def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    # The evidence identifies the JSON content, not the checkout's platform-specific
+    # newline representation. Cloud Build uploads the Windows working tree directly,
+    # so normalize line endings before calculating the versioned digest.
+    content = b"\n".join(path.read_bytes().splitlines()) + b"\n"
+    return hashlib.sha256(content).hexdigest()
 
 
 def main() -> int:
