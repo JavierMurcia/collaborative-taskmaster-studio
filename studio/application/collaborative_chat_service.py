@@ -162,6 +162,7 @@ class CollaborativeChatService:
         conversation_id: str | None = None,
         document_ids: tuple[str, ...] = (),
         identity: IdentityContext | None = None,
+        language: Literal["es", "en"] = "es",
     ) -> CollaborativeChatResult:
         if self._gateway is None:
             model_label = self._model_name.removeprefix("gemini-").replace("-", " ").title()
@@ -202,6 +203,7 @@ class CollaborativeChatService:
             else ()
         )
         current_date = date.today().isoformat()
+        response_language = "English" if language == "en" else "Spanish"
         connection_facts = self._connection_facts(identity)
         runtime_facts = {
             "collaborator_model": self._model_name,
@@ -257,7 +259,7 @@ class CollaborativeChatService:
                     "disponible, la aplicación bloquea el chat antes del primer envío. Cuando te pregunten "
                     "por tu modelo, proveedor, gateway, fallback o capacidades actuales, responde únicamente "
                     "con estos hechos verificados y no completes vacíos con conocimiento general. "
-                    "Conversas en español con naturalidad y ayudas al usuario a pensar con claridad. "
+                    f"Respond exclusively in {response_language} with natural language and help the user think clearly. "
                     "Cuando el usuario quiera crear un agente, lo acompañas en su diseño dentro de esta "
                     "misma conversación. Detecta ese propósito, conserva un borrador incremental y aclara "
                     "su misión, usuario, entradas, resultados, flujo, acciones externas, límites, aprobación "
@@ -330,6 +332,7 @@ class CollaborativeChatService:
                     {
                         "conversation_history": transcript,
                         "latest_user_message": clean_message,
+                        "response_language": language,
                         "verified_runtime_facts": runtime_facts,
                         "relevant_memory": list(memories),
                         "attached_documents": attached_documents,

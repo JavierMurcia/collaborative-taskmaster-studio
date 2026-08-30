@@ -20,6 +20,18 @@ _WORKSPACE_READ_TERMS = (
     "local documents",
     "documentos locales",
     "fuentes locales",
+    "hoja de cálculo",
+    "hojas de cálculo",
+    "hoja de calculo",
+    "hojas de calculo",
+    "excel",
+    "xlsx",
+    "csv",
+    "dataset",
+    "conjunto de datos",
+    "procesar documentos",
+    "analizar documentos",
+    "leer documentos",
 )
 
 

@@ -61,13 +61,19 @@ def test_explicit_demo_request_renders_charts_instead_of_requiring_python() -> N
     )
 
 
-def test_plain_chart_request_renders_demo_instead_of_returning_code() -> None:
+def test_plain_chart_request_without_data_does_not_invent_a_dataset() -> None:
     artifacts = DatasetAnalysisService().analyze("genera graficas", ())
 
-    assert len(artifacts) == 2
-    assert all(
-        artifact.model_dump(mode="json")["rows"][0].keys() == {"x", "y"} for artifact in artifacts
+    assert artifacts == ()
+
+
+def test_agent_description_that_mentions_diagrams_does_not_create_random_charts() -> None:
+    artifacts = DatasetAnalysisService().analyze(
+        "Analista financiero capaz de inspeccionar hojas de cálculo, diagramas y redactar informes",
+        (),
     )
+
+    assert artifacts == ()
 
 
 def test_multiple_attached_datasets_each_generate_a_chart(tmp_path) -> None:

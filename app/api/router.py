@@ -29,6 +29,7 @@ from app.api.schemas import (
     InterviewAnswerRequest,
     LargeUploadStartRequest,
     RefreshIdentityRequest,
+    TranslationRequest,
 )
 from studio.application.agent_catalog import AgentCatalogRepository
 from studio.application.agent_runtime_service import AgentRuntimeService
@@ -57,6 +58,7 @@ from studio.application.plugin_registry import PluginRegistry
 from studio.application.project_service import ProjectService
 from studio.application.revision_generator import StructuredRevisionGenerator
 from studio.application.specification_generator import StructuredSpecificationGenerator
+from studio.application.translation_service import TranslationService
 from studio.capabilities.datasets import ChartArtifact, DatasetAnalysisService
 from studio.capabilities.documents import (
     MAX_UPLOAD_BYTES,
@@ -112,6 +114,7 @@ class ServiceContainer:
     google_gmail: GoogleGmailReader | None
     google_calendar: GoogleCalendarReader | None
     github: GitHubReader | None
+    translation: TranslationService
     builder_readiness: BuilderReadiness
     worker_tokens: WorkerTokenVerifier | None
     repository: ProjectRepository
@@ -147,6 +150,7 @@ class ServiceContainer:
         google_gmail: GoogleGmailReader | None = None,
         google_calendar: GoogleCalendarReader | None = None,
         github: GitHubReader | None = None,
+        translation: TranslationService | None = None,
         builder_readiness: BuilderReadiness | None = None,
         worker_tokens: WorkerTokenVerifier | None = None,
     ) -> ServiceContainer:
@@ -212,6 +216,7 @@ class ServiceContainer:
             google_gmail=google_gmail,
             google_calendar=google_calendar,
             github=github,
+            translation=translation or TranslationService(None, "gemini-3.7-flash"),
             builder_readiness=builder_readiness or inspect_builder_readiness(),
             worker_tokens=worker_tokens,
             repository=repository,
@@ -257,6 +262,7 @@ def create_router(services: ServiceContainer) -> APIRouter:
             conversation_id=body.conversation_id,
             document_ids=tuple(body.document_ids),
             identity=identity,
+            language=body.language,
         )
         payload = result.model_dump(mode="json")
         attached = tuple(
@@ -737,6 +743,7 @@ def create_router(services: ServiceContainer) -> APIRouter:
             identity=_identity(request),
             documents=attached,
             document_media=services.documents.media(session_id, tuple(body.document_ids)),
+            language=body.language,
         ).model_dump(mode="json")
         chart_artifacts = services.dataset_analysis.analyze(body.message, attached)
         result["artifacts"] = [artifact.model_dump(mode="json") for artifact in chart_artifacts]
@@ -744,6 +751,14 @@ def create_router(services: ServiceContainer) -> APIRouter:
             body.message, str(result["reply"]), chart_artifacts, attached
         )
         return result
+
+    @router.post("/collaborative/translations")
+    def translate_conversation(
+        body: TranslationRequest,
+        _session_id: SessionHeader,
+    ) -> dict[str, Any]:
+        translated = services.translation.translate(tuple(body.texts), body.target_language)
+        return {"target_language": body.target_language, "translations": list(translated)}
 
     @router.patch("/collaborative/agents/{agent_id}")
     def update_catalog_agent(

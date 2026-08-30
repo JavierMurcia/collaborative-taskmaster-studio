@@ -6,7 +6,7 @@ import json
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from infrastructure.local.project_storage import LocalProjectArtifactStore
 from studio.application.agent_catalog import AgentCatalogRepository
@@ -45,6 +45,7 @@ class CatalogAgentExecutionService:
         identity: IdentityContext | None = None,
         documents: tuple[dict[str, Any], ...] = (),
         document_media: tuple[ModelMedia, ...] = (),
+        language: Literal["es", "en"] = "es",
     ) -> AgentRuntimeResult:
         agent = self._catalog.get(agent_id, owner_session_id)
         stored_name = Path(agent.artifact_directory).name
@@ -92,6 +93,7 @@ class CatalogAgentExecutionService:
             identity=identity,
             document_evidence=document_evidence,
             document_media=document_media,
+            language=language,
         )
         self._remember(root, message, result)
         if agent.artifact_uri:
@@ -105,10 +107,14 @@ class CatalogAgentExecutionService:
 
     @staticmethod
     def _document_evidence(
-        specification: TaskmasterSpecification,
+        _specification: TaskmasterSpecification,
         documents: tuple[dict[str, Any], ...],
     ) -> str:
-        if not documents or not any(tool.id == "workspace_read" for tool in specification.tools):
+        # An attachment selected in the chat is already an explicit, per-message
+        # grant. It is conversational evidence, not an autonomous workspace scan,
+        # so even older Taskmasters (created before workspace_read existed) must be
+        # able to inspect it.
+        if not documents:
             return ""
         character_budget = 16_000
         per_document = max(2_000, character_budget // len(documents))

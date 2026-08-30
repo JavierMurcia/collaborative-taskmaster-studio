@@ -86,6 +86,7 @@ from studio.application.interview_question_generator import (
 from studio.application.plugin_registry import PluginRegistry
 from studio.application.revision_generator import StructuredRevisionGenerator
 from studio.application.specification_generator import StructuredSpecificationGenerator
+from studio.application.translation_service import TranslationService
 from studio.capabilities.documents import DocumentLibrary, LargeUploadManager
 from studio.capabilities.github import GitHubReader
 from studio.capabilities.google_calendar import GoogleCalendarReader
@@ -467,6 +468,7 @@ def create_app(
         google_gmail=google_gmail,
         google_calendar=google_calendar,
         github=github,
+        translation=TranslationService(model_gateway, active_vertex_settings.model),
         builder_readiness=builder_readiness,
         worker_tokens=worker_tokens,
     )

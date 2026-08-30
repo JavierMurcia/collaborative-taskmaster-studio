@@ -150,7 +150,11 @@ class DatasetAnalysisService:
             item for item in documents if isinstance(item.get("dataset"), dict)
         )
         if not dataset_documents:
-            if self.requests_chart(message) or any(
+            # Never invent a dataset merely because a project description mentions
+            # charts or diagrams. Demo data is an explicit, two-part request: the
+            # user must ask for a chart and also say that simulated/example data is
+            # acceptable.
+            if self.requests_chart(message) and any(
                 term in normalized for term in self._SYNTHETIC_TERMS
             ):
                 return _build_demo_charts(message)

@@ -367,3 +367,28 @@ def test_catalog_agent_runs_from_projects_and_keeps_its_own_memory(tmp_path: Pat
     assert "Contexto persistente de ejecuciones anteriores" in runtime.messages[1]
     assert "paper.pdf" in runtime.document_evidence[0]
     assert "resultados verificables" in runtime.document_evidence[0]
+
+
+def test_catalog_agent_accepts_explicit_chat_attachments_for_older_specs(tmp_path: Path) -> None:
+    catalog = AgentCatalog(tmp_path / "data")
+    service = _service(tmp_path, catalog=catalog)
+    started = service.start(
+        _draft(), owner_session_id="owner_one", confirmation="CONSTRUIR_AGENTE"
+    )
+    _wait(service, started.build_id, "owner_one", {"awaiting_test_approval"})
+    service.decide_tests(started.build_id, owner_session_id="owner_one", decision="approved")
+    completed = _wait(service, started.build_id, "owner_one", {"completed", "failed"})
+    assert completed.state == "completed"
+
+    runtime = _RuntimeSpy()
+    execution = CatalogAgentExecutionService(catalog, runtime, tmp_path / "projects")
+    execution.run(
+        catalog.list("owner_one")[0].id,
+        message="Analiza el Excel adjunto",
+        owner_session_id="owner_one",
+        idempotency_key="xlsx-run",
+        documents=({"name": "ventas.xlsx", "content": "Hoja: Ventas\nmes\ttotal\nEnero\t420"},),
+    )
+
+    assert "ventas.xlsx" in runtime.document_evidence[0]
+    assert "Enero\t420" in runtime.document_evidence[0]

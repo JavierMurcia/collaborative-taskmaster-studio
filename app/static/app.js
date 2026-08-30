@@ -6,6 +6,7 @@ const PARTNER_CHAT_KEY = "taskmaster_studio_partner_chat";
 const PARTNER_CONVERSATIONS_KEY = "taskmaster_studio_conversations";
 const ID_TOKEN_KEY = "taskmaster_studio_id_token";
 const REFRESH_TOKEN_KEY = "taskmaster_studio_refresh_token";
+const LANGUAGE_KEY = "taskmaster_studio_language";
 const MAX_SESSION_DOCUMENTS = 12;
 const MAX_DOCUMENT_UPLOAD_BYTES = 25 * 1024 * 1024;
 const MAX_LARGE_DOCUMENT_UPLOAD_BYTES = 600 * 1024 * 1024;
@@ -21,14 +22,158 @@ localStorage.setItem(SESSION_KEY, sessionId);
 function conversationStorageKey(owner = state?.identity?.user_id || sessionId) { return `${PARTNER_CONVERSATIONS_KEY}:${owner}`; }
 
 const restoredConversations = readPartnerConversations(sessionId);
-const state = { projectId: localStorage.getItem(PROJECT_KEY), partnerConversations: restoredConversations, activeConversationId: null, activeCatalogAgent: null, partnerMessages: [], partnerPhase: "discovery", entryMode: "radar", documents: [], documentUploads: [], agents: [], builds: [], connections: [], identity: null, identityConfig: { mode: "local" }, authReady: true, attachedDocumentIds: [], partnerPending: false, partnerTypingVisible: false, entryTransitionPending: false, runtimeLoaded: false, buildRuntime: "", runtime: { mode: "local", label: "Comprobando Gemini", provider: "Vertex AI", model: "gemini-3.7-flash", model_calls_enabled: false } };
+const state = { projectId: localStorage.getItem(PROJECT_KEY), partnerConversations: restoredConversations, activeConversationId: null, activeCatalogAgent: null, partnerMessages: [], partnerPhase: "discovery", entryMode: "radar", language: localStorage.getItem(LANGUAGE_KEY) === "en" ? "en" : "es", languageTranslating: false, documents: [], documentUploads: [], agents: [], builds: [], connections: [], identity: null, identityConfig: { mode: "local" }, authReady: true, attachedDocumentIds: [], partnerPending: false, partnerTypingVisible: false, entryTransitionPending: false, runtimeLoaded: false, buildRuntime: "", runtime: { mode: "local", label: "Comprobando Gemini", provider: "Vertex AI", model: "gemini-3.7-flash", model_calls_enabled: false } };
 const buildPollers = new Map();
 const conversationSyncTimers = new Map();
 const activeDocumentUploads = new Map();
 const terminalBuildStates = new Set(["completed", "failed", "stopped"]);
 
+const UI_COPY = {
+  "Saltar al contenido": "Skip to content", "Nuevo chat": "New chat", "Ir al taller": "Open Studio", "Diseñar · probar · publicar": "Design · test · publish",
+  "AGENTES APROBADOS": "APPROVED AGENTS", "Todavía no has publicado agentes.": "You have not published any agents yet.", "Conversaciones": "Conversations",
+  "Todavía no hay conversaciones guardadas.": "There are no saved conversations yet.", "Conexiones": "Connections", "Selecciona un servicio para conectarlo.": "Select a service to connect it.",
+  "CAPACIDADES DEL RADAR": "RADAR CAPABILITIES", "Analista de oportunidades": "Opportunity analyst", "GitHub · Drive · tendencias verificadas": "GitHub · Drive · verified trends",
+  "Investigación profunda": "Deep research", "Fuentes visibles · actualidad · contraste": "Visible sources · freshness · comparison", "Diseño y construcción": "Design and construction",
+  "Framework automático · aprobación humana": "Automatic framework · human approval", "Efectos externos": "External effects", "Bloqueados hasta autorizar cada acción": "Blocked until each action is authorized",
+  "Iniciar sesión": "Sign in", "Comprobando cuenta": "Checking account", "Espacio personal": "Personal space", "Gestionar archivos": "Manage files", "Cerrar sesión": "Sign out", "Salir de esta cuenta": "Leave this account",
+  "Escribe un mensaje…": "Type a message…", "Gemini no está conectado": "Gemini is not connected", "Subir archivo": "Upload file", "PDF, Office, texto o datos": "PDF, Office, text or data",
+  "Subir imagen": "Upload image", "PNG, JPG o WEBP": "PNG, JPG or WEBP", "Enter para enviar · Shift + Enter para nueva línea": "Enter to send · Shift + Enter for a new line",
+  "Analizar mi portafolio": "Analyze my portfolio", "Investigar tendencias": "Research trends", "Descubrir una oportunidad": "Discover an opportunity", "Diseñar un Taskmaster": "Design a Taskmaster",
+  "Automatizar un proceso": "Automate a process", "Evaluar una arquitectura": "Evaluate an architecture", "Aprobación humana": "Human approval", "Nada se construye sin confirmar": "Nothing is built without confirmation",
+  "Experiencia, activos y vacíos": "Experience, assets and gaps", "Documentos, requisitos y contexto": "Documents, requirements and context", "Web verificada": "Verified web", "Tendencias, adopción y fuentes": "Trends, adoption and sources",
+  "Explorando": "Exploring", "Aclarando": "Clarifying", "Alineados": "Aligned", "Conversando": "Conversing", "Tú": "You", "Copiar": "Copy", "Gemini está respondiendo": "Gemini is responding",
+  "Archivos de la sesión": "Session files", "Gestionar archivos": "Manage files", "INSPECCIÓN SEGURA": "SAFE INSPECTION", "Documento": "Document", "Trabajando…": "Working…",
+  "ANÁLISIS VISUAL": "VISUAL ANALYSIS", "Gráfico": "Chart", "Preparando gráfico interactivo…": "Preparing interactive chart…", "Ver datos": "View data", "Categoría": "Category", "Valor": "Value",
+  "LECTURA PROFUNDA DEL DATASET": "DEEP DATASET ANALYSIS", "Panel analítico": "Analytics dashboard", "Barras": "Bars", "Tendencia": "Trend", "Área": "Area", "Composición": "Composition", "Correlación": "Correlation", "Ranking": "Ranking",
+  "Diseño aprobado": "Design approved", "Espacio preparado": "Workspace prepared", "Taskmaster construido": "Taskmaster built", "Autorización humana": "Human authorization", "Verificaciones": "Verifications", "Entrega completada": "Delivery completed",
+  "RADAR DE PROYECTOS · SOCIO COLABORATIVO": "PROJECT RADAR · COLLABORATIVE PARTNER", "TASKMASTER STUDIO · INGENIERO DE AGENTES": "TASKMASTER STUDIO · AGENT ENGINEER",
+  "¿Qué proyecto deberíamos construir?": "What project should we build?", "Construye tu Taskmaster": "Build your Taskmaster", "Escribe un mensaje para explorar una oportunidad…": "Type a message to explore an opportunity…",
+  "Describe el agente, sus usuarios o el proceso que quieres automatizar…": "Describe the agent, its users, or the process you want to automate…",
+  "Gemini contrasta tu portafolio de GitHub, el contexto de tus documentos y tendencias actuales en fuentes verificables para encontrar oportunidades de sistemas con evidencia.": "Gemini compares your GitHub portfolio, document context, and current trends from verifiable sources to find evidence-backed system opportunities.",
+  "Describe el trabajo que quieres delegar. Gemini aclarará el objetivo y el Ingeniero de agentes seleccionará el framework, preparará las pruebas y pedirá tu aprobación antes de construir.": "Describe the work you want to delegate. Gemini will clarify the goal, and the Agent Engineer will select the framework, prepare tests, and request your approval before building.",
+  "El análisis es de solo lectura. Las fuentes no disponibles se declaran y ningún proyecto se crea sin tu confirmación.": "The analysis is read-only. Unavailable sources are disclosed, and no project is created without your confirmation.",
+  "El Socio colaborativo diseña contigo. El Ingeniero construye solo después de tu confirmación y solicita permiso antes de ejecutar pruebas o efectos externos.": "The Collaborative Partner designs with you. The Engineer builds only after your confirmation and requests permission before running tests or external effects.",
+  "Consulta, adjunta o elimina los documentos e imágenes disponibles en tu espacio personal.": "Inspect, attach, or delete the documents and images available in your personal space.",
+  "Crear una conversación nueva": "Create a new conversation", "Cerrar historial": "Close history", "Abrir historial": "Open history", "Abrir configuración": "Open settings", "Configuración": "Settings",
+  "Cambiar cuenta": "Switch account", "Cambiar cuenta de Google": "Switch Google account", "Iniciar sesión con Google": "Sign in with Google", "Accede a tu espacio personal": "Access your personal space",
+  "Cerrar gestor de archivos": "Close file manager", "Cerrar inspección": "Close inspector", "Vista previa del archivo adjunto": "Attachment preview", "Enviar mensaje": "Send message", "Adjuntar": "Attach",
+};
+const UI_COPY_REVERSE = Object.fromEntries(Object.entries(UI_COPY).map(([es, en]) => [en, es]));
+
 function operationKey(prefix) { return `${prefix}-${crypto.randomUUID()}`; }
 function newConversationId() { return `chat_${crypto.randomUUID()}`; }
+function uiText(value) {
+  const clean = String(value ?? "").trim();
+  if (!clean) return value;
+  const translated = state.language === "en" ? UI_COPY[clean] : UI_COPY_REVERSE[clean];
+  if (!translated) {
+    const files = clean.match(/^(\d+) archivos cargados$/);
+    const visualizations = clean.match(/^(\d+) visualizaciones$/);
+    if (state.language === "en" && files) return `${files[1]} uploaded files`;
+    if (state.language === "en" && visualizations) return `${visualizations[1]} visualizations`;
+    const uploaded = clean.match(/^(\d+) uploaded files$/);
+    if (state.language === "es" && uploaded) return `${uploaded[1]} archivos cargados`;
+    return value;
+  }
+  return translated;
+}
+function localizeInterface(root = document.body) {
+  document.documentElement.lang = state.language;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach((node) => {
+    if (node.parentElement?.closest(".turn-content,pre,code,[data-no-translate]")) return;
+    const original = node.nodeValue || ""; const clean = original.trim(); if (!clean) return;
+    const translated = uiText(clean); if (translated === clean) return;
+    node.nodeValue = original.replace(clean, translated);
+  });
+  root.querySelectorAll?.("[placeholder],[aria-label],[title]").forEach((element) => {
+    ["placeholder", "aria-label", "title"].forEach((attribute) => {
+      const value = element.getAttribute(attribute); if (!value) return;
+      const translated = uiText(value); if (translated !== value) element.setAttribute(attribute, translated);
+    });
+  });
+  const languageButton = $("#language-action");
+  if (languageButton) {
+    const title = state.language === "es" ? "English" : "Español";
+    const copy = state.language === "es" ? "Translate page and conversations" : "Traducir página y conversaciones";
+    if ($("#language-action-title").textContent !== title) $("#language-action-title").textContent = title;
+    if ($("#language-action-copy").textContent !== copy) $("#language-action-copy").textContent = copy;
+    languageButton.setAttribute("aria-label", state.language === "es" ? "Translate to English" : "Traducir al español");
+    languageButton.disabled = state.languageTranslating;
+  }
+}
+function localizedMessageContent(message) {
+  const sourceLanguage = message.sourceLanguage || "es";
+  if (sourceLanguage === state.language) return message.content;
+  return message.translations?.[state.language] || message.content;
+}
+function localizedArtifact(artifact, sourceLanguage = "es") {
+  if (sourceLanguage === state.language) return artifact;
+  const translated = artifact?.translations?.[state.language];
+  if (!translated) return artifact;
+  return {
+    ...artifact,
+    ...translated,
+    columns: translated.columns || artifact.columns,
+    insights: translated.insights || artifact.insights,
+    metrics: (artifact.metrics || []).map((metric, index) => ({
+      ...metric,
+      label: translated.metricLabels?.[index] || metric.label,
+    })),
+  };
+}
+function conversationTranslationTargets() {
+  const targets = [];
+  state.partnerMessages.forEach((message) => {
+    const sourceLanguage = message.sourceLanguage || "es";
+    if (sourceLanguage === state.language) return;
+    if (message.content && !message.translations?.[state.language]) {
+      targets.push({
+        text: message.content,
+        apply(value) { message.translations = { ...(message.translations || {}), [state.language]: value }; },
+      });
+    }
+    (message.artifacts || []).forEach((artifact) => {
+      if (artifact?.type !== "chart") return;
+      artifact.translations ||= {};
+      const translated = artifact.translations[state.language] ||= { columns: [], insights: [], metricLabels: [] };
+      const add = (text, current, apply) => { if (text && !current) targets.push({ text, apply }); };
+      add(artifact.title, translated.title, (value) => { translated.title = value; });
+      add(artifact.description, translated.description, (value) => { translated.description = value; });
+      (artifact.columns || []).forEach((text, index) => add(text, translated.columns[index], (value) => { translated.columns[index] = value; }));
+      (artifact.insights || []).forEach((text, index) => add(text, translated.insights[index], (value) => { translated.insights[index] = value; }));
+      (artifact.metrics || []).forEach((metric, index) => add(metric.label, translated.metricLabels[index], (value) => { translated.metricLabels[index] = value; }));
+    });
+  });
+  return targets;
+}
+async function translateCurrentConversation() {
+  const targets = conversationTranslationTargets();
+  if (!targets.length || state.languageTranslating) return;
+  state.languageTranslating = true; localizeInterface();
+  try {
+    for (let index = 0; index < targets.length; index += 8) {
+      const batch = targets.slice(index, index + 8);
+      const payload = await api("/api/v1/collaborative/translations", {
+        method: "POST", background: true,
+        body: JSON.stringify({ texts: batch.map((target) => target.text), target_language: state.language }),
+      });
+      batch.forEach((target, offset) => target.apply(payload.translations[offset]));
+    }
+    persistPartnerHistory(); renderPartnerConversation();
+  } catch (error) { handle(error); }
+  finally { state.languageTranslating = false; localizeInterface(); }
+}
+async function toggleLanguage() {
+  state.language = state.language === "es" ? "en" : "es";
+  localStorage.setItem(LANGUAGE_KEY, state.language);
+  $("#account-settings").removeAttribute("open");
+  renderWelcomeMode(); renderConversationHistory(); renderAgentCatalog(); renderConnectionCatalog(); renderAttachments(); renderAccountIdentity(); renderPartnerConversation();
+  localizeInterface();
+  await translateCurrentConversation();
+}
 function identityHeaders(extra = {}) {
   const headers = { "X-Studio-Session": sessionId, ...extra };
   const idToken = localStorage.getItem(ID_TOKEN_KEY);
@@ -264,7 +409,7 @@ async function sendPartnerMessage(message) {
     ? `Quiero diseñar y construir un agente Taskmaster en Taskmaster Studio. Mi solicitud es: ${message}`
     : message;
   const history = state.partnerMessages.filter((item) => ["user", "assistant"].includes(item.role)).slice(-16).map(({ role, content, toolActivity }) => ({ role, content, evidence: Array.isArray(toolActivity) ? toolActivity.slice(0, 8).map((entry) => `${entry.capability || "unknown"} | ${entry.status || "unknown"} | ${entry.path || "."} | ${entry.query || ""}`.slice(0, 500)) : [] }));
-  state.partnerMessages.push({ role: "user", content: message });
+  state.partnerMessages.push({ role: "user", content: message, sourceLanguage: state.language });
   state.partnerPending = true;
   state.partnerTypingVisible = !firstConversationTurn;
   persistPartnerHistory();
@@ -281,9 +426,9 @@ async function sendPartnerMessage(message) {
     const payload = await api("/api/v1/collaborative/messages", {
       method: "POST",
       background: true,
-      body: JSON.stringify({ message: requestMessage, history, conversation_id: state.activeConversationId, document_ids: state.attachedDocumentIds }),
+      body: JSON.stringify({ message: requestMessage, history, conversation_id: state.activeConversationId, document_ids: state.attachedDocumentIds, language: state.language }),
     });
-    state.partnerMessages.push({ role: "assistant", content: payload.reply, model: payload.model, provider: payload.provider, intent: payload.intent, agentDraft: payload.agent_draft, toolActivity: payload.tool_activity, connectionOffers: payload.connection_offers || [], artifacts: payload.artifacts || [], revealResponse: true });
+    state.partnerMessages.push({ role: "assistant", content: payload.reply, sourceLanguage: state.language, model: payload.model, provider: payload.provider, intent: payload.intent, agentDraft: payload.agent_draft, toolActivity: payload.tool_activity, connectionOffers: payload.connection_offers || [], artifacts: payload.artifacts || [], revealResponse: true });
     state.partnerPhase = payload.phase;
     persistPartnerHistory();
   } catch (error) {
@@ -299,7 +444,7 @@ async function sendPartnerMessage(message) {
 async function sendCatalogAgentMessage(message) {
   if (!message.trim() || state.partnerPending || !state.activeCatalogAgent) return;
   const agent = state.activeCatalogAgent;
-  state.partnerMessages.push({ role: "user", content: message });
+  state.partnerMessages.push({ role: "user", content: message, sourceLanguage: state.language });
   state.partnerPending = true;
   state.partnerTypingVisible = true;
   persistPartnerHistory();
@@ -309,15 +454,16 @@ async function sendCatalogAgentMessage(message) {
     const payload = await api(`/api/v1/collaborative/agents/${encodeURIComponent(agent.id)}/messages`, {
       method: "POST",
       idempotent: "catalog-agent-run",
-      body: JSON.stringify({ message, document_ids: state.attachedDocumentIds }),
+      body: JSON.stringify({ message, document_ids: state.attachedDocumentIds, language: state.language }),
     });
     const stepSummary = Array.isArray(payload.steps) && payload.steps.length
-      ? `\n\n**Ejecución controlada**\n${payload.steps.map((step) => `- ${step.name}: ${step.detail}`).join("\n")}`
+      ? `\n\n**${state.language === "en" ? "Controlled execution" : "Ejecución controlada"}**\n${payload.steps.map((step) => `- ${step.name}: ${step.detail}`).join("\n")}`
       : "";
     state.partnerMessages.push({
       role: "assistant",
       sourceLabel: agent.name,
       content: `${payload.reply}${stepSummary}`,
+      sourceLanguage: state.language,
       model: payload.model,
       provider: "Taskmaster Runtime",
       artifacts: payload.artifacts || [],
@@ -348,6 +494,7 @@ function showWelcome() {
 
 function renderWelcomeMode() {
   const builder = state.entryMode === "builder";
+  const english = state.language === "en";
   $("#taskmaster-studio-access").setAttribute("aria-pressed", String(builder));
   document.body.classList.toggle("taskmaster-studio-mode", builder);
   $("#welcome-eyebrow").textContent = builder ? "TASKMASTER STUDIO · INGENIERO DE AGENTES" : "RADAR DE PROYECTOS · SOCIO COLABORATIVO";
@@ -357,8 +504,12 @@ function renderWelcomeMode() {
     : "Gemini contrasta tu portafolio de GitHub, el contexto de tus documentos y tendencias actuales en fuentes verificables para encontrar oportunidades de sistemas con evidencia.";
   $("#project-description").placeholder = builder ? "Describe el agente, sus usuarios o el proceso que quieres automatizar…" : "Escribe un mensaje para explorar una oportunidad…";
   $("#welcome-examples").innerHTML = builder
-    ? `<button type="button" data-example="Quiero crear un agente Taskmaster que organice un flujo de trabajo de varios pasos y solicite aprobación antes de actuar."><span>✦</span> Diseñar un Taskmaster</button><button type="button" data-example="Ayúdame a convertir este proceso manual en un agente seguro, con herramientas, memoria y pruebas."><span>⌁</span> Automatizar un proceso</button><button type="button" data-example="Quiero evaluar la arquitectura y los riesgos de un agente antes de construirlo."><span>◇</span> Evaluar una arquitectura</button>`
-    : `<button type="button" data-example="Analiza mis repositorios de GitHub y dime qué oportunidad de proyecto complementaría mejor mi portafolio."><span>⌘</span> Analizar mi portafolio</button><button type="button" data-example="Investiga proyectos en tendencia este año en el área de sistemas y propón oportunidades respaldadas por fuentes verificadas."><span>◎</span> Investigar tendencias</button><button type="button" data-example="Revisa mis proyectos de GitHub, mis documentos de Google Drive y tendencias actuales para recomendarme qué proyecto construir."><span>◇</span> Descubrir una oportunidad</button>`;
+    ? english
+      ? `<button type="button" data-example="I want to create a Taskmaster agent that organizes a multi-step workflow and requests approval before acting."><span>✦</span> Design a Taskmaster</button><button type="button" data-example="Help me turn this manual process into a safe agent with tools, memory, and tests."><span>⌁</span> Automate a process</button><button type="button" data-example="I want to assess an agent's architecture and risks before building it."><span>◇</span> Evaluate an architecture</button>`
+      : `<button type="button" data-example="Quiero crear un agente Taskmaster que organice un flujo de trabajo de varios pasos y solicite aprobación antes de actuar."><span>✦</span> Diseñar un Taskmaster</button><button type="button" data-example="Ayúdame a convertir este proceso manual en un agente seguro, con herramientas, memoria y pruebas."><span>⌁</span> Automatizar un proceso</button><button type="button" data-example="Quiero evaluar la arquitectura y los riesgos de un agente antes de construirlo."><span>◇</span> Evaluar una arquitectura</button>`
+    : english
+      ? `<button type="button" data-example="Analyze my GitHub repositories and tell me which project opportunity would best complement my portfolio."><span>⌘</span> Analyze my portfolio</button><button type="button" data-example="Research trending systems projects this year and propose opportunities backed by verified sources."><span>◎</span> Research trends</button><button type="button" data-example="Review my GitHub projects, Google Drive documents, and current trends to recommend what project to build."><span>◇</span> Discover an opportunity</button>`
+      : `<button type="button" data-example="Analiza mis repositorios de GitHub y dime qué oportunidad de proyecto complementaría mejor mi portafolio."><span>⌘</span> Analizar mi portafolio</button><button type="button" data-example="Investiga proyectos en tendencia este año en el área de sistemas y propón oportunidades respaldadas por fuentes verificadas."><span>◎</span> Investigar tendencias</button><button type="button" data-example="Revisa mis proyectos de GitHub, mis documentos de Google Drive y tendencias actuales para recomendarme qué proyecto construir."><span>◇</span> Descubrir una oportunidad</button>`;
   $("#welcome-sources").innerHTML = builder
     ? `<article><span>✦</span><div><strong>Gemini 3.7 Flash</strong><small>Descubre y especifica contigo</small></div></article><article><span>⌁</span><div><strong>Agents CLI + ADK</strong><small>Estructura, herramientas y pruebas</small></div></article><article><span>◇</span><div><strong>Aprobación humana</strong><small>Nada se construye sin confirmar</small></div></article>`
     : `<article><span>⌘</span><div><strong>GitHub</strong><small>Experiencia, activos y vacíos</small></div></article><article><span>▤</span><div><strong>Google Drive</strong><small>Documentos, requisitos y contexto</small></div></article><article><span>◎</span><div><strong>Web verificada</strong><small>Tendencias, adopción y fuentes</small></div></article>`;
@@ -379,9 +530,10 @@ function openTaskmasterStudio() {
 function renderPartnerConversation() {
   const phaseLabels = { discovery: "Explorando", clarification: "Aclarando", alignment: "Alineados" };
   const turns = state.partnerMessages.map((item, index) => {
-    if (item.role === "user") return `<article class="partner-turn user-turn"><div class="turn-label">Tú</div><div class="turn-content">${formatChatText(item.content)}</div></article>`;
+    const visibleContent = localizedMessageContent(item);
+    if (item.role === "user") return `<article class="partner-turn user-turn"><div class="turn-label">Tú</div><div class="turn-content">${formatChatText(visibleContent)}</div></article>`;
     if (item.kind === "agent_build") return renderAgentBuild(item, index);
-    return `<article class="partner-turn assistant-turn${item.revealResponse ? " response-arrival" : ""}"><div class="partner-avatar" aria-hidden="true">${item.sourceLabel === "Studio" ? "C" : "✦"}</div><div><div class="turn-label">${escapeHtml(item.sourceLabel || "Gemini")}</div><div class="turn-content">${formatChatText(item.content)}</div>${renderChartArtifacts(item.artifacts, index)}${renderAgentDraft(item, index)}${renderConnectionOffers(item.connectionOffers)}${renderToolActivity(item.toolActivity)}<div class="turn-meta"><small>${escapeHtml(item.model || state.runtime.model)} · ${escapeHtml(item.provider || "Vertex AI")}</small><button class="copy-response" type="button" data-copy-index="${index}" aria-label="Copiar respuesta">Copiar</button></div></div></article>`;
+    return `<article class="partner-turn assistant-turn${item.revealResponse ? " response-arrival" : ""}"><div class="partner-avatar" aria-hidden="true">${item.sourceLabel === "Studio" ? "C" : "✦"}</div><div><div class="turn-label">${escapeHtml(item.sourceLabel || "Gemini")}</div><div class="turn-content">${formatChatText(visibleContent)}</div>${renderChartArtifacts(item.artifacts, index)}${renderAgentDraft(item, index)}${renderConnectionOffers(item.connectionOffers)}${renderToolActivity(item.toolActivity)}<div class="turn-meta"><small>${escapeHtml(item.model || state.runtime.model)} · ${escapeHtml(item.provider || "Vertex AI")}</small><button class="copy-response" type="button" data-copy-index="${index}" aria-label="Copiar respuesta">Copiar</button></div></div></article>`;
   }).join("");
   const typingTurn = state.partnerPending && state.partnerTypingVisible
     ? `<article class="partner-turn assistant-turn typing-turn inline-typing-turn" aria-live="polite"><div class="partner-avatar" aria-hidden="true">✦</div><div><div class="turn-label">Gemini</div><div class="typing-dots" aria-label="Gemini está respondiendo"><span></span><span></span><span></span></div></div></article>`
@@ -402,11 +554,14 @@ function renderPartnerConversation() {
     $("#partner-message-input").focus({ preventScroll: true });
   });
   resumeBuildPolling();
+  localizeInterface($("#partner-chat-view"));
 }
 
 function renderChartArtifacts(artifacts, messageIndex) {
   if (!Array.isArray(artifacts) || !artifacts.length) return "";
-  const cards = artifacts.map((artifact, artifactIndex) => {
+  const sourceLanguage = state.partnerMessages[messageIndex]?.sourceLanguage || "es";
+  const cards = artifacts.map((originalArtifact, artifactIndex) => {
+    const artifact = localizedArtifact(originalArtifact, sourceLanguage);
     if (artifact?.type !== "chart" || !Array.isArray(artifact.rows)) return "";
     const rows = artifact.rows.map((row) => { const [x, y] = chartPointValues(row); return `<tr><td>${escapeHtml(x)}</td><td>${escapeHtml(y)}</td></tr>`; }).join("");
     const metrics = (artifact.metrics || []).map((metric) => `<li><span>${escapeHtml(metric.label)}</span><strong>${escapeHtml(metric.value)}</strong></li>`).join("");
@@ -431,7 +586,7 @@ function chartPalette(artifact) {
 }
 
 function formatChartValue(value) {
-  return new Intl.NumberFormat("es-CO", { notation: Math.abs(value) >= 100000 ? "compact" : "standard", maximumFractionDigits: 1 }).format(value);
+  return new Intl.NumberFormat(state.language === "en" ? "en-US" : "es-CO", { notation: Math.abs(value) >= 100000 ? "compact" : "standard", maximumFractionDigits: 1 }).format(value);
 }
 
 let googleChartsReady = null;
@@ -450,7 +605,8 @@ async function drawChartArtifacts() {
   if (!targets.length || !(await ensureGoogleCharts())) return;
   for (const target of targets) {
     const message = state.partnerMessages[Number(target.dataset.chartMessage)];
-    const artifact = message?.artifacts?.[Number(target.dataset.chartArtifact)];
+    const originalArtifact = message?.artifacts?.[Number(target.dataset.chartArtifact)];
+    const artifact = localizedArtifact(originalArtifact, message?.sourceLanguage || "es");
     if (!artifact || target.dataset.chartDrawn === "true") continue;
     const rows = (artifact.rows || []).map((row) => { const [x, y] = chartPointValues(row); return [x, Number(y)]; });
     if (!rows.length || rows.some((row) => !Number.isFinite(row[1]))) continue;
@@ -599,11 +755,11 @@ function renderAgentBuild(message, index) {
   const events = Array.isArray(build.events) ? build.events : [];
   const terminal = terminalBuildStates.has(build.state);
   const expanded = Boolean(message.activityExpanded) || !terminal;
-  const visibleEvents = expanded ? events : events.filter((event) => !event.transient);
   const runtimeLabel = build.builder_runtime === "antigravity_sdk" ? "SDK Antigravity" : "Constructor local seguro";
-  const eventMarkup = visibleEvents.map((event) => {
-    const statusIcon = { running: "◌", passed: "✓", waiting: "!", failed: "×", stopped: "■" }[event.status] || "•";
-    return `<li class="build-event ${escapeHtml(event.status)} ${event.transient ? "transient" : "persistent"}"><span>${statusIcon}</span><div><strong>${escapeHtml(event.message)}</strong><small>${escapeHtml(buildPhaseLabel(event.phase))}</small></div></li>`;
+  const stages = buildProgressStages(build, events);
+  const eventMarkup = stages.map((stage, stageIndex) => {
+    const statusIcon = stage.status === "complete" ? "✓" : stage.status === "failed" ? "×" : stage.status === "active" ? "" : String(stageIndex + 1);
+    return `<li class="build-stage ${escapeHtml(stage.status)}"><span>${statusIcon}</span><div><strong>${escapeHtml(stage.label)}</strong><small>${escapeHtml(stage.detail)}</small></div></li>`;
   }).join("");
   const waiting = build.state === "awaiting_test_approval";
   const approval = waiting ? `<section class="build-approval"><span>APROBACIÓN HUMANA REQUERIDA</span><strong>¿Autorizar las verificaciones aisladas?</strong><p>Sin red, sin credenciales y sin acciones externas. Rechazar conserva los archivos y detiene el proceso.</p><div><button type="button" class="secondary" data-build-decision="rejected" data-build-index="${index}">Detener</button><button type="button" data-build-decision="approved" data-build-index="${index}">Autorizar pruebas</button></div></section>` : "";
@@ -612,7 +768,35 @@ function renderAgentBuild(message, index) {
   const plugins = Array.isArray(build.plugins) && build.plugins.length ? `<div class="build-capabilities build-plugins"><span>Plugins seleccionados</span>${build.plugins.map((plugin) => `<b class="${escapeHtml(plugin.availability)}">${escapeHtml(plugin.title)} · ${plugin.availability === "available" ? "listo" : "requiere conexión"}</b>`).join("")}</div>` : `<div class="build-capabilities"><span>Plugins</span><b>Ninguno necesario</b></div>`;
   const complete = build.state === "completed" ? `<section class="build-result"><span>TASKMASTER GUARDADO EN PROYECTOS</span><strong>${escapeHtml(build.agent_name || "Taskmaster")}</strong><p>${Number(build.file_count || 0)} archivos · ${build.tests?.filter((test) => test.passed).length || 0}/${build.tests?.length || 0} verificaciones aprobadas · ${escapeHtml(build.framework?.label || "Framework seleccionado")}</p><p class="build-project-path">${escapeHtml(build.project_directory || "projects/")}</p>${capabilities}${plugins}${tests}<div><button type="button" class="secondary" data-toggle-build-index="${index}">${expanded ? "Ocultar actividad" : "Ver actividad"}</button><button type="button" data-open-built-agent-index="${index}">Usar Taskmaster</button></div></section>` : "";
   const stopped = ["failed", "stopped"].includes(build.state) ? `<section class="build-result build-stopped"><span>${build.state === "failed" ? "DETENIDO DE FORMA SEGURA" : "CONSTRUCCIÓN DETENIDA"}</span><strong>${escapeHtml(build.error || "No se realizaron efectos externos.")}</strong><button type="button" class="secondary" data-toggle-build-index="${index}">${expanded ? "Ocultar actividad" : "Ver actividad"}</button></section>` : "";
-  return `<article class="partner-turn assistant-turn builder-turn"><div class="partner-avatar builder-avatar" aria-hidden="true">⌘</div><div><div class="builder-heading"><div><div class="turn-label">${escapeHtml(build.builder || "Ingeniero de agentes")}</div><strong>${escapeHtml(build.agent_name || "Construyendo agente")}</strong></div><span>${escapeHtml(runtimeLabel)}</span></div><p class="builder-boundary">Gemini terminó el diseño. Este constructor trabaja solo sobre la especificación confirmada y no muestra razonamiento privado.</p>${eventMarkup ? `<ol class="build-events ${terminal && !expanded ? "collapsed" : ""}">${eventMarkup}</ol>` : ""}${approval}${complete}${stopped}<div class="turn-meta"><small>${escapeHtml(build.framework?.label || "Selección automática")} · ${escapeHtml(build.state || "queued")}</small></div></div></article>`;
+  return `<article class="partner-turn assistant-turn builder-turn"><div class="partner-avatar builder-avatar" aria-hidden="true">⌘</div><div><div class="builder-heading"><div><div class="turn-label">${escapeHtml(build.builder || "Ingeniero de agentes")}</div><strong>${escapeHtml(build.agent_name || "Construyendo agente")}</strong></div><span>${escapeHtml(runtimeLabel)}</span></div><p class="builder-boundary">Gemini terminó el diseño. Este constructor trabaja solo sobre la especificación confirmada y no muestra razonamiento privado.</p>${expanded && eventMarkup ? `<ol class="build-progress" aria-label="Progreso de construcción">${eventMarkup}</ol>` : ""}${approval}${complete}${stopped}<div class="turn-meta"><small>${escapeHtml(build.framework?.label || "Selección automática")} · ${escapeHtml(build.state || "queued")}</small></div></div></article>`;
+}
+function buildProgressStages(build, events) {
+  const definitions = [
+    { label: "Diseño aprobado", phases: ["handoff", "analysis", "framework"], fallback: "Contrato recibido por el Ingeniero de agentes." },
+    { label: "Espacio preparado", phases: ["queue", "workspace"], fallback: "Preparando el entorno aislado." },
+    { label: "Taskmaster construido", phases: ["generation", "policies"], fallback: "Generando archivos y políticas." },
+    { label: "Autorización humana", phases: ["approval"], fallback: "Esperando la decisión para verificar." },
+    { label: "Verificaciones", phases: ["testing"], fallback: "Ejecutando pruebas autorizadas." },
+    { label: "Entrega completada", phases: ["completed"], fallback: "Guardando el Taskmaster en Proyectos." },
+  ];
+  const terminalComplete = build.state === "completed";
+  const failedBuild = ["failed", "stopped"].includes(build.state);
+  const stageData = definitions.map((definition) => {
+    const matching = events.filter((event) => definition.phases.includes(event.phase));
+    const latest = matching.at(-1);
+    const passed = matching.some((event) => event.status === "passed");
+    const failed = matching.some((event) => ["failed", "stopped"].includes(event.status));
+    return { ...definition, latest, passed, failed };
+  });
+  let current = stageData.findIndex((stage) => !stage.passed);
+  if (build.state === "awaiting_test_approval") current = 3;
+  if (terminalComplete) current = -1;
+  if (failedBuild && current < 0) current = Math.max(0, stageData.findIndex((stage) => stage.failed));
+  return stageData.map((stage, index) => ({
+    label: stage.label,
+    detail: stage.latest?.message || stage.fallback,
+    status: terminalComplete || stage.passed || (current >= 0 && index < current) ? "complete" : stage.failed || (failedBuild && index === current) ? "failed" : index === current ? "active" : "pending",
+  }));
 }
 function buildPhaseLabel(phase) {
   return ({ handoff: "Relevo", analysis: "Especificación", framework: "Framework", workspace: "Espacio aislado", generation: "Archivos", policies: "Gobernanza", testing: "Laboratorio", approval: "Decisión humana", completed: "Entrega" })[phase] || phase;
@@ -628,7 +812,7 @@ function persistPartnerHistory() {
 }
 
 function serializeConversation(conversation) {
-  const allowedMessageKeys = ["role", "content", "model", "provider", "intent", "agentDraft", "toolActivity", "connectionOffers", "artifacts", "kind", "createdProjectId", "buildId", "build", "activityExpanded", "sourceLabel"];
+  const allowedMessageKeys = ["role", "content", "sourceLanguage", "translations", "model", "provider", "intent", "agentDraft", "toolActivity", "connectionOffers", "artifacts", "kind", "createdProjectId", "buildId", "build", "activityExpanded", "sourceLabel"];
   const compactMessage = (message) => {
     const serialized = Object.fromEntries(allowedMessageKeys.filter((key) => message[key] !== undefined).map((key) => [key, message[key]]));
     if (serialized.build && Array.isArray(serialized.build.events)) {
@@ -855,6 +1039,7 @@ function openCatalogAgent(agent) {
   state.partnerMessages = [{
     role: "assistant",
     sourceLabel: agent.name,
+    sourceLanguage: "es",
     content: `**${agent.name} está activo.**\n\n${agent.purpose}\n\nProyecto persistente: ${agent.artifact_directory}\nFramework: ${agent.framework_label}\n\nEscribe una solicitud para ejecutar este Taskmaster. Sus herramientas respetarán las conexiones y aprobaciones disponibles.`,
     provider: "Taskmaster Runtime",
     model: state.runtime.model,
@@ -865,6 +1050,7 @@ function openCatalogAgent(agent) {
   renderConversationHistory();
   renderAttachments();
   document.body.classList.remove("sidebar-open");
+  translateCurrentConversation();
 }
 async function archiveAgent(agentId) {
   const agent = state.agents.find((item) => item.id === agentId); if (!agent || !window.confirm(`¿Archivar “${agent.name}”? El paquete generado no se eliminará.`)) return;
@@ -883,7 +1069,7 @@ function handleConversationHistory(event) {
   if (state.activeCatalogAgent && !conversation.agentId) conversation.agentId = state.activeCatalogAgent.id;
   state.entryMode = state.activeCatalogAgent ? "runtime" : "radar";
   state.attachedDocumentIds = [...(conversation.documentIds || [])];
-  showPartnerChat(); renderPartnerConversation(); renderConversationHistory(); renderAttachments(); document.body.classList.remove("sidebar-open");
+  showPartnerChat(); renderPartnerConversation(); renderConversationHistory(); renderAttachments(); document.body.classList.remove("sidebar-open"); translateCurrentConversation();
 }
 function deleteConversation(conversationId) {
   const conversation = state.partnerConversations.find((item) => item.id === conversationId); if (!conversation) return;
@@ -1166,7 +1352,7 @@ async function handlePartnerConversationAction(event) {
   if (toggleButton) { const message = state.partnerMessages[Number(toggleButton.dataset.toggleBuildIndex)]; if (message) { message.activityExpanded = !message.activityExpanded; persistPartnerHistory(); renderPartnerConversation(); } return; }
   const button = event.target.closest("[data-copy-index]"); if (!button) return;
   const message = state.partnerMessages[Number(button.dataset.copyIndex)]; if (!message) return;
-  await navigator.clipboard.writeText(message.content); button.textContent = "Copiado"; setTimeout(() => { button.textContent = "Copiar"; }, 1500);
+  await navigator.clipboard.writeText(localizedMessageContent(message)); button.textContent = state.language === "en" ? "Copied" : "Copiado"; setTimeout(() => { button.textContent = state.language === "en" ? "Copy" : "Copiar"; }, 1500);
 }
 
 function handleConnectionCatalog(event) {
@@ -1205,10 +1391,13 @@ function scheduleBuildPoll(buildId, delay = 500) {
       const payload = await api(`/api/v1/collaborative/builds/${encodeURIComponent(buildId)}`, { background: true });
       const message = state.partnerMessages.find((item) => item.kind === "agent_build" && item.build?.build_id === buildId);
       if (!message) return;
-      const previousState = message.build.state; message.build = payload;
+      const previousState = message.build.state;
+      const previousSnapshot = JSON.stringify(message.build);
+      const changed = previousSnapshot !== JSON.stringify(payload);
+      message.build = payload;
       if (payload.state === "completed") message.activityExpanded = false;
       if (payload.state === "completed" && previousState !== "completed") loadAgentCatalog();
-      persistPartnerHistory(); renderPartnerConversation();
+      if (changed) { persistPartnerHistory(); renderPartnerConversation(); }
       if (!terminalBuildStates.has(payload.state) && payload.state !== "awaiting_test_approval") scheduleBuildPoll(buildId, 500);
       if (previousState !== payload.state && payload.state === "awaiting_test_approval") notify("El Ingeniero de agentes solicita autorización para ejecutar las pruebas.");
     } catch (error) { console.warn("Build polling paused.", error); scheduleBuildPoll(buildId, 1500); }
@@ -1273,6 +1462,7 @@ $("#partner-message-form").addEventListener("submit", continuePartnerChat);
 $("#header-new-chat").addEventListener("click", resetPartnerChat);
 $("#account-switch").addEventListener("click", switchIdentityAccount);
 $("#manage-session-files").addEventListener("click", openFileManager);
+$("#language-action").addEventListener("click", toggleLanguage);
 $("#logout-action").addEventListener("click", logoutIdentity);
 $("#sidebar-new-chat").addEventListener("click", resetPartnerChat);
 $("#partner-conversation").addEventListener("click", handlePartnerConversationAction);
@@ -1329,6 +1519,12 @@ $("#project-description").addEventListener("input", (event) => { $("#char-count"
 $("#partner-message-input").addEventListener("input", (event) => { $("#partner-char-count").textContent = `${event.target.value.length} / 6000`; });
 enableComposerKeyboard($("#project-description"), $("#project-form"));
 enableComposerKeyboard($("#partner-message-input"), $("#partner-message-form"));
+let localeFrame = 0;
+new MutationObserver(() => {
+  if (localeFrame) return;
+  localeFrame = requestAnimationFrame(() => { localeFrame = 0; localizeInterface(); });
+}).observe(document.body, { childList: true, subtree: true });
+localizeInterface();
 renderConversationHistory();
 if (state.partnerMessages.length) { showPartnerChat(); renderPartnerConversation(); }
 loadRuntimeInfo();

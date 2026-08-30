@@ -275,6 +275,17 @@ def test_collaborative_chat_uses_gemini_and_preserves_recent_context() -> None:
     assert '"collaborator_model": "gemini-3.7-flash"' in gateway.request.prompt
 
 
+def test_collaborative_chat_requests_the_selected_response_language() -> None:
+    gateway = RecordingGateway()
+    service = CollaborativeChatService(gateway, "gemini-3.7-flash")
+
+    service.reply("Explain the project", (), language="en")
+
+    assert gateway.request is not None
+    assert "Respond exclusively in English" in gateway.request.system_instruction
+    assert '"response_language": "en"' in gateway.request.prompt
+
+
 def test_collaborative_chat_exposes_build_approval_for_a_complete_contract() -> None:
     gateway = CompleteDraftWithContradictoryFlagGateway()
     service = CollaborativeChatService(gateway, "gemini-3.7-flash")

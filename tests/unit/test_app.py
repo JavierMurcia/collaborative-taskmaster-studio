@@ -75,7 +75,7 @@ def test_document_tray_reports_progress_and_supports_inspection_and_deletion() -
     assert 'data-inspect-document="${escapeHtml(item.id)}"' in script
     assert 'data-delete-document="${escapeHtml(item.id)}"' in script
     assert "/api/v1/collaborative/documents/${encodeURIComponent(documentId)}" in script
-    assert "JSON.stringify({ message, document_ids: state.attachedDocumentIds })" in script
+    assert "JSON.stringify({ message, document_ids: state.attachedDocumentIds, language: state.language })" in script
     assert "agent_id: conversation.agentId || null" in script
 
 
@@ -105,6 +105,7 @@ def test_account_and_file_management_live_below_radar_capabilities() -> None:
     assert 'id="account-switch"' in html
     assert 'id="manage-session-files"' in html
     assert 'id="logout-action"' in html
+    assert 'id="language-action"' in html
     assert 'id="file-manager-attachments"' in html
     assert 'id="identity-action"' not in html
     assert '"Iniciar sesión"' in script
@@ -112,6 +113,23 @@ def test_account_and_file_management_live_below_radar_capabilities() -> None:
     assert 'window.location.assign("/api/v1/collaborative/auth/google/start")' in script
     assert 'fetch("/api/v1/collaborative/auth/logout"' in script
     assert ".sidebar-account" in styles
+    assert ".sidebar-account.is-signed-out .account-settings{display:none}" not in styles
+
+
+def test_account_language_switch_translates_interface_and_conversation_content() -> None:
+    root = Path(__file__).parents[2]
+    html = (root / "app" / "static" / "index.html").read_text(encoding="utf-8")
+    script = (root / "app" / "static" / "app.js").read_text(encoding="utf-8")
+
+    assert "Translate page and conversations" in html
+    assert 'const LANGUAGE_KEY = "taskmaster_studio_language"' in script
+    assert "function toggleLanguage()" in script
+    assert "function localizeInterface" in script
+    assert "function localizedMessageContent" in script
+    assert "function localizedArtifact" in script
+    assert 'api("/api/v1/collaborative/translations"' in script
+    assert "language: state.language" in script
+    assert '"sourceLanguage", "translations"' in script
 
 
 def test_taskmaster_results_render_markdown_sections_and_comparison_tables() -> None:
@@ -256,6 +274,10 @@ def test_chat_keeps_the_draft_approval_footer_visible_and_names_the_builder() ->
     assert 'api("/api/v1/collaborative/builds", { background: true })' in script
     assert "reconcileOrphanBuilds()" in script
     assert 'kind: "agent_build"' in script
+    assert "function buildProgressStages" in script
+    assert 'class="build-progress"' in script
+    assert ".build-stage.active>span" in styles
+    assert "const changed = previousSnapshot !== JSON.stringify(payload)" in script
 
 
 def test_startup_keeps_the_entry_chat_instead_of_opening_latest_history() -> None:
