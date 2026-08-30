@@ -8,7 +8,7 @@ import pytest
 
 from infrastructure.vertex import VertexModelGateway, VertexReadiness, VertexSettings
 from studio.domain.errors import DomainError
-from studio.ports.model_gateway import ModelRequest
+from studio.ports.model_gateway import ModelMedia, ModelRequest
 
 SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -153,6 +153,27 @@ def test_gateway_prefers_sdk_parsed_structured_output() -> None:
     result = gateway.generate_structured(request())
 
     assert result.payload == {"question": "Pregunta verificada"}
+
+
+def test_gateway_sends_validated_images_as_multimodal_parts() -> None:
+    client = FakeClient(FakeResponse('{"question":"Veo la imagen"}'))
+    gateway = VertexModelGateway(
+        settings(), readiness(), client_factory=lambda _: client, timer=timer((0.0, 0.1))
+    )
+    multimodal = request().model_copy(
+        update={
+            "media": (
+                ModelMedia(mime_type="image/png", data_base64="iVBORw0KGgo="),
+            )
+        }
+    )
+
+    gateway.generate_structured(multimodal)
+
+    contents = client.models.calls[0]["contents"]
+    assert contents[0] == multimodal.prompt
+    assert contents[1].inline_data.mime_type == "image/png"
+    assert contents[1].inline_data.data == b"\x89PNG\r\n\x1a\n"
 
 
 def test_gateway_accepts_an_exact_json_markdown_fence() -> None:

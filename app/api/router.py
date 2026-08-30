@@ -56,7 +56,7 @@ from studio.application.plugin_registry import PluginRegistry
 from studio.application.project_service import ProjectService
 from studio.application.revision_generator import StructuredRevisionGenerator
 from studio.application.specification_generator import StructuredSpecificationGenerator
-from studio.capabilities.datasets import DatasetAnalysisService
+from studio.capabilities.datasets import ChartArtifact, DatasetAnalysisService
 from studio.capabilities.documents import MAX_UPLOAD_BYTES, DocumentLibrary
 from studio.capabilities.github import GitHubReader
 from studio.capabilities.google_calendar import GoogleCalendarReader
@@ -251,10 +251,11 @@ def create_router(services: ServiceContainer) -> APIRouter:
             services.documents.inspect(session_id, document_id)
             for document_id in body.document_ids
         )
+        chart_artifacts = services.dataset_analysis.analyze(body.message, attached)
         payload["artifacts"] = [
-            artifact.model_dump(mode="json")
-            for artifact in services.dataset_analysis.analyze(body.message, attached)
+            artifact.model_dump(mode="json") for artifact in chart_artifacts
         ]
+        payload["reply"] = _chart_aware_reply(str(payload["reply"]), chart_artifacts)
         payload["connection_offers"] = [
             item.model_dump(mode="json")
             for item in services.connections.offers(
@@ -687,11 +688,13 @@ def create_router(services: ServiceContainer) -> APIRouter:
             idempotency_key=idempotency_key,
             identity=_identity(request),
             documents=attached,
+            document_media=services.documents.media(session_id, tuple(body.document_ids)),
         ).model_dump(mode="json")
+        chart_artifacts = services.dataset_analysis.analyze(body.message, attached)
         result["artifacts"] = [
-            artifact.model_dump(mode="json")
-            for artifact in services.dataset_analysis.analyze(body.message, attached)
+            artifact.model_dump(mode="json") for artifact in chart_artifacts
         ]
+        result["reply"] = _chart_aware_reply(str(result["reply"]), chart_artifacts)
         return result
 
     @router.patch("/collaborative/agents/{agent_id}")
@@ -1028,6 +1031,33 @@ def _identity(request: Request) -> IdentityContext:
     if not isinstance(identity, IdentityContext):
         raise DomainError("AUTHENTICATION_REQUIRED", "No fue posible resolver la identidad.")
     return identity
+
+
+def _chart_aware_reply(
+    reply: str, artifacts: tuple[ChartArtifact, ...]
+) -> str:
+    """Keep the language model from offering code for charts already rendered by the UI."""
+
+    if not artifacts:
+        return reply
+    if all(artifact.source_document_id is None for artifact in artifacts):
+        count = len(artifacts)
+        noun = "visualización" if count == 1 else "visualizaciones"
+        return (
+            f"He generado {count} {noun} directamente en el chat con datos simulados. "
+            "Puedes pedirme otro tipo de gráfico, cambiar las métricas o adjuntar un CSV/XLSX "
+            "para usar datos reales."
+        )
+    normalized = reply.casefold()
+    code_markers = ("```python", "matplotlib", "seaborn", "plotly", "chart.js")
+    refusal_markers = ("no dispongo", "no puedo renderizar", "proporcionarte el código")
+    if any(marker in normalized for marker in (*code_markers, *refusal_markers)):
+        noun = "visualización" if len(artifacts) == 1 else "visualizaciones"
+        return (
+            f"He generado {len(artifacts)} {noun} directamente en el chat a partir "
+            "de los datos adjuntos. Puedes pedirme que cambie el tipo de gráfico o las métricas."
+        )
+    return reply
 
 
 def _snapshot_payload(

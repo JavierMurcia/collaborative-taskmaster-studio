@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 from collections.abc import Callable
@@ -87,10 +88,29 @@ class VertexModelGateway:
         ):
             config["thinking_config"] = {"thinking_level": "MINIMAL"}
         started = self._timer()
+        contents: object = request.prompt
+        if request.media:
+            try:
+                from google.genai import types
+            except ModuleNotFoundError as error:
+                raise DomainError(
+                    "MODEL_SDK_UNAVAILABLE",
+                    'Instala el extra ".[vertex]" para utilizar imágenes con Vertex AI.',
+                ) from error
+            contents = [
+                request.prompt,
+                *(
+                    types.Part.from_bytes(
+                        data=base64.b64decode(item.data_base64, validate=True),
+                        mime_type=item.mime_type,
+                    )
+                    for item in request.media
+                ),
+            ]
         try:
             response = client.models.generate_content(
                 model=self._settings.model,
-                contents=request.prompt,
+                contents=contents,
                 config=config,
             )
         except TimeoutError as error:

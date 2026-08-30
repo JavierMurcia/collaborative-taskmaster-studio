@@ -196,6 +196,11 @@ class CollaborativeChatService:
         attached_documents = self._attached_document_manifests(
             owner_session_id, document_ids
         )
+        attached_media = (
+            self._document_library.media(owner_session_id, document_ids)
+            if self._document_library is not None
+            else ()
+        )
         current_date = date.today().isoformat()
         connection_facts = self._connection_facts(identity)
         runtime_facts = {
@@ -335,7 +340,9 @@ class CollaborativeChatService:
                             "usuario está definiendo un agente y devuelve el mejor borrador acumulado posible. "
                             "Si no está creando un agente, usa intent=conversation y un borrador vacío. "
                             "workspace_action debe ser none salvo que necesites una herramienta. Los documentos "
-                            "solo pueden consultarse usando uno de attached_documents."
+                            "solo pueden consultarse usando uno de attached_documents. Las imágenes adjuntas "
+                            "se incluyen directamente como contenido multimodal: analízalas visualmente y no "
+                            "afirmes que careces de acceso a ellas."
                         ),
                     },
                     ensure_ascii=False,
@@ -398,6 +405,7 @@ class CollaborativeChatService:
                 },
                 max_output_tokens=self._max_output_tokens,
             temperature=0.55,
+            media=attached_media,
         )
         result = self._generate_structured_resilient(request)
         activities: list[WorkspaceToolActivity] = []
@@ -680,6 +688,7 @@ class CollaborativeChatService:
             response_schema=request.response_schema,
             max_output_tokens=request.max_output_tokens,
             temperature=0.0,
+            media=request.media,
         )
         return self._gateway.generate_structured(repair_request)
 
@@ -1302,14 +1311,28 @@ def _github_activity_items(payload: dict[str, object]) -> list[dict[str, str]]:
 def _compact_tool_result(payload: object, limit: int) -> object:
     """Keep tool evidence useful while respecting the bounded model request contract."""
 
-    serialized = json.dumps(payload, ensure_ascii=False)
+    safe_payload = _without_inline_media(payload)
+    serialized = json.dumps(safe_payload, ensure_ascii=False)
     if len(serialized) <= limit:
-        return payload
+        return safe_payload
     return {
         "truncated": True,
         "original_characters": len(serialized),
         "excerpt": serialized[:limit],
     }
+
+
+def _without_inline_media(value: object) -> object:
+    if isinstance(value, dict):
+        return {
+            key: "[imagen multimodal incluida en la solicitud]"
+            if key == "data_base64"
+            else _without_inline_media(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_without_inline_media(item) for item in value]
+    return value
 
 
 def _framework_selection_ready(draft: AgentDraft) -> bool:

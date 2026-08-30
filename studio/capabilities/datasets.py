@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import math
+import random
 import re
 import zipfile
 from collections import defaultdict
@@ -58,7 +60,7 @@ class ChartArtifact(BaseModel):
     chart_type: Literal["bar", "line", "pie", "scatter"]
     columns: tuple[str, str]
     rows: tuple[tuple[CellValue, CellValue], ...] = Field(min_length=1, max_length=MAX_CHART_POINTS)
-    source_document_id: str = Field(pattern=r"^doc_[a-f0-9]{16}$")
+    source_document_id: str | None = Field(default=None, pattern=r"^doc_[a-f0-9]{16}$")
     source_name: str = Field(min_length=1, max_length=180)
     sheet: str = Field(min_length=1, max_length=100)
     description: str = Field(min_length=1, max_length=300)
@@ -72,6 +74,9 @@ class DatasetAnalysisService:
         "distribución", "distribucion", "correlación", "correlacion",
         "analiza", "analice", "comparar", "compara",
     )
+    _SYNTHETIC_TERMS = (
+        "aleatori", "simulad", "demostración", "demostracion", "demo", "ejemplo",
+    )
 
     def analyze(
         self, message: str, documents: tuple[dict[str, Any], ...]
@@ -81,6 +86,8 @@ class DatasetAnalysisService:
             return ()
         document = next((item for item in documents if isinstance(item.get("dataset"), dict)), None)
         if document is None:
+            if any(term in normalized for term in self._SYNTHETIC_TERMS):
+                return _build_demo_charts(message)
             return ()
         snapshot = DatasetSnapshot.model_validate(document["dataset"])
         sheet = _select_sheet(snapshot, normalized)
@@ -91,6 +98,41 @@ class DatasetAnalysisService:
             document_name=str(document.get("name") or "dataset"),
         )
         return (artifact,) if artifact is not None else ()
+
+
+def _build_demo_charts(message: str) -> tuple[ChartArtifact, ...]:
+    """Render deterministic demonstration charts without executing model code."""
+
+    seed = int.from_bytes(hashlib.sha256(message.encode("utf-8")).digest()[:8], "big")
+    generator = random.Random(seed)
+    latency = tuple(
+        (f"Muestra {index}", generator.randint(82, 148))
+        for index in range(1, 13)
+    )
+    success = tuple(
+        (label, round(generator.uniform(88.0, 99.4), 1))
+        for label in ("API", "Datos", "Búsqueda", "Agentes", "Reportes")
+    )
+    return (
+        ChartArtifact(
+            title="Latencia por muestra",
+            chart_type="line",
+            columns=("Muestra", "Latencia (ms)"),
+            rows=latency,
+            source_name="Datos simulados",
+            sheet="Demostración",
+            description="Serie simulada para demostrar una visualización temporal.",
+        ),
+        ChartArtifact(
+            title="Tasa de éxito por módulo",
+            chart_type="bar",
+            columns=("Módulo", "Tasa de éxito (%)"),
+            rows=success,
+            source_name="Datos simulados",
+            sheet="Demostración",
+            description="Comparación simulada del desempeño entre módulos.",
+        ),
+    )
 
 
 def parse_dataset(suffix: str, payload: bytes) -> DatasetSnapshot | None:

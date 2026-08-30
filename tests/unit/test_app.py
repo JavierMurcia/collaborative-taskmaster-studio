@@ -33,8 +33,8 @@ def test_home_serves_the_chat_only_experience() -> None:
     assert "Ejecutar 3 escenarios" not in response.text
     assert 'id="taskmaster-studio-access"' in response.text
     assert "Taskmaster Studio" in response.text
-    assert '/static/styles.css?v=20260829-dataset-charts-v22' in response.text
-    assert '/static/app.js?v=20260829-dataset-charts-v22' in response.text
+    assert '/static/styles.css?v=20260830-sidebar-signin-v26' in response.text
+    assert '/static/app.js?v=20260830-sidebar-signin-v26' in response.text
     assert 'https://www.gstatic.com/charts/loader.js' in response.text
     assert 'id="document-inspector"' in response.text
     assert 'id="partner-typing"' not in response.text
@@ -75,6 +75,41 @@ def test_document_tray_reports_progress_and_supports_inspection_and_deletion() -
     assert "agent_id: conversation.agentId || null" in script
 
 
+def test_attachment_control_separates_files_and_multimodal_images() -> None:
+    root = Path(__file__).parents[2]
+    html = (root / "app" / "static" / "index.html").read_text(encoding="utf-8")
+    script = (root / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    styles = (root / "app" / "static" / "styles.css").read_text(encoding="utf-8")
+
+    assert html.count('class="attachment-menu"') == 2
+    assert "Subir archivo" in html
+    assert "Subir imagen" in html
+    assert 'accept="image/png,image/jpeg,image/webp"' in html
+    assert ".xml" in html
+    assert 'id="document-inspector-image"' in html
+    assert "payload.media?.data_base64" in script
+    assert ".attachment-menu-options" in styles
+
+
+def test_account_and_file_management_live_below_radar_capabilities() -> None:
+    root = Path(__file__).parents[2]
+    html = (root / "app" / "static" / "index.html").read_text(encoding="utf-8")
+    script = (root / "app" / "static" / "app.js").read_text(encoding="utf-8")
+    styles = (root / "app" / "static" / "styles.css").read_text(encoding="utf-8")
+
+    assert html.index('class="capability-status"') < html.index('class="sidebar-account"')
+    assert 'id="account-switch"' in html
+    assert 'id="manage-session-files"' in html
+    assert 'id="logout-action"' in html
+    assert 'id="file-manager-attachments"' in html
+    assert 'id="identity-action"' not in html
+    assert '"Iniciar sesión"' in script
+    assert "is-signed-out" in script
+    assert 'window.location.assign("/api/v1/collaborative/auth/google/start")' in script
+    assert 'fetch("/api/v1/collaborative/auth/logout"' in script
+    assert ".sidebar-account" in styles
+
+
 def test_taskmaster_results_render_markdown_sections_and_comparison_tables() -> None:
     root = Path(__file__).parents[2]
     script = (root / "app" / "static" / "app.js").read_text(encoding="utf-8")
@@ -110,6 +145,8 @@ def test_taskmaster_chat_keeps_the_composer_docked_below_a_scrolling_transcript(
     assert "body.taskmaster-studio-mode.chat-active #partner-message-form" in styles
     assert "overflow-y:auto" in styles
     assert "flex:0 0 auto" in styles
+    assert "body.chat-active{height:auto" not in styles
+    assert "body.chat-active .partner-conversation{min-height:0;overflow:visible" not in styles
 
 
 def test_new_chat_reserves_an_independent_conversation_before_first_message() -> None:

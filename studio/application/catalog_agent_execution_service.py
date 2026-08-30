@@ -13,6 +13,7 @@ from studio.application.agent_catalog import AgentCatalogRepository
 from studio.application.agent_runtime_service import AgentRuntimeResult, AgentRuntimeService
 from studio.domain.errors import DomainError
 from studio.domain.models import TaskmasterSpecification
+from studio.ports.model_gateway import ModelMedia
 from studio.ports.project_storage import ProjectArtifactStore
 from studio.security.identity import IdentityContext
 
@@ -43,6 +44,7 @@ class CatalogAgentExecutionService:
         idempotency_key: str,
         identity: IdentityContext | None = None,
         documents: tuple[dict[str, Any], ...] = (),
+        document_media: tuple[ModelMedia, ...] = (),
     ) -> AgentRuntimeResult:
         agent = self._catalog.get(agent_id, owner_session_id)
         stored_name = Path(agent.artifact_directory).name
@@ -89,6 +91,7 @@ class CatalogAgentExecutionService:
             idempotency_key=idempotency_key,
             identity=identity,
             document_evidence=document_evidence,
+            document_media=document_media,
         )
         self._remember(root, message, result)
         if agent.artifact_uri:

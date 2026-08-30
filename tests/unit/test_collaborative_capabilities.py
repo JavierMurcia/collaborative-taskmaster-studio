@@ -40,6 +40,20 @@ def test_document_library_extracts_docx_without_executing_it(tmp_path: Path) -> 
     assert record.text == "Contrato seguro"
 
 
+def test_document_library_preserves_validated_images_for_multimodal_chat(
+    tmp_path: Path,
+) -> None:
+    payload = b"\x89PNG\r\n\x1a\n" + b"safe-image-bytes"
+    library = DocumentLibrary(tmp_path)
+
+    record = library.add("browser_alpha", "captura.png", payload)
+    inspected = library.inspect("browser_alpha", record.id)
+
+    assert inspected["media"]["mime_type"] == "image/png"
+    assert library.media("browser_alpha", (record.id,))[0].mime_type == "image/png"
+    assert library.list("browser_alpha")[0]["media_type"] == "image/png"
+
+
 def test_document_upload_api_lists_and_deletes(tmp_path: Path) -> None:
     clock = FrozenClock(NOW)
     projects = InMemoryRepository(clock)

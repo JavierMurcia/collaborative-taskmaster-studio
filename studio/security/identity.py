@@ -23,6 +23,7 @@ class IdentityContext(BaseModel):
     tenant_id: str | None = Field(default=None, max_length=128)
     email: str | None = Field(default=None, max_length=320)
     display_name: str | None = Field(default=None, max_length=200)
+    picture_url: str | None = Field(default=None, max_length=2_048)
     role: Literal["owner", "admin", "builder", "operator", "viewer"] = "owner"
     authenticated: bool
     mode: Literal["local", "identity_platform"]
@@ -97,6 +98,11 @@ class IdentityVerifier:
             tenant_id=tenant,
             email=str(claims.get("email") or "").strip() or None,
             display_name=str(claims.get("name") or "").strip() or None,
+            picture_url=(
+                picture
+                if (picture := str(claims.get("picture") or "").strip()).startswith("https://")
+                else None
+            ),
             authenticated=True,
             mode="identity_platform",
         )

@@ -40,6 +40,19 @@ def test_dataset_analysis_does_not_run_without_an_explicit_data_request(tmp_path
     assert artifacts == ()
 
 
+def test_explicit_demo_request_renders_charts_instead_of_requiring_python() -> None:
+    artifacts = DatasetAnalysisService().analyze(
+        "Genera gráficos visuales con datos aleatorios", ()
+    )
+
+    assert [artifact.chart_type for artifact in artifacts] == ["line", "bar"]
+    assert all(artifact.source_document_id is None for artifact in artifacts)
+    assert all(artifact.source_name == "Datos simulados" for artifact in artifacts)
+    assert artifacts[0].rows == DatasetAnalysisService().analyze(
+        "Genera gráficos visuales con datos aleatorios", ()
+    )[0].rows
+
+
 def test_xlsx_keeps_sheet_names_columns_and_numeric_values(tmp_path) -> None:
     payload = io.BytesIO()
     with zipfile.ZipFile(payload, "w") as archive:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -11,6 +11,13 @@ from studio.domain.errors import DomainError
 
 class GatewayModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class ModelMedia(GatewayModel):
+    """A validated inline image supplied to a multimodal model request."""
+
+    mime_type: Literal["image/png", "image/jpeg", "image/webp"]
+    data_base64: str = Field(min_length=4, max_length=11_200_000)
 
 
 class ModelRequest(GatewayModel):
@@ -22,6 +29,7 @@ class ModelRequest(GatewayModel):
     response_schema: dict[str, Any]
     max_output_tokens: int = Field(default=512, ge=1, le=8_192)
     temperature: float = Field(default=0.2, ge=0.0, le=1.0)
+    media: tuple[ModelMedia, ...] = Field(default_factory=tuple, max_length=8)
 
 
 class ModelUsage(GatewayModel):

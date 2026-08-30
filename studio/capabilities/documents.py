@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import re
@@ -15,12 +16,20 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from studio.capabilities.datasets import DatasetSnapshot, parse_dataset
 from studio.domain.errors import DomainError
+from studio.ports.model_gateway import ModelMedia
 
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+MAX_MULTIMODAL_BYTES = 16 * 1024 * 1024
 MAX_EXTRACTED_CHARACTERS = 100_000
 MAX_DOCUMENTS_PER_SESSION = 12
 TEXT_SUFFIXES = frozenset({".txt", ".md", ".csv", ".json", ".yaml", ".yml", ".xml"})
-ALLOWED_SUFFIXES = TEXT_SUFFIXES | {".pdf", ".docx", ".xlsx", ".pptx"}
+IMAGE_MIME_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+}
+ALLOWED_SUFFIXES = TEXT_SUFFIXES | {".pdf", ".docx", ".xlsx", ".pptx"} | IMAGE_MIME_TYPES.keys()
 
 
 class DocumentRecord(BaseModel):
@@ -34,6 +43,7 @@ class DocumentRecord(BaseModel):
     text: str = Field(max_length=MAX_EXTRACTED_CHARACTERS)
     truncated: bool = False
     dataset: DatasetSnapshot | None = None
+    media: ModelMedia | None = None
 
     def summary(self) -> dict[str, Any]:
         summary = {
@@ -46,6 +56,8 @@ class DocumentRecord(BaseModel):
         }
         if self.dataset is not None:
             summary["dataset"] = self.dataset.summary()
+        if self.media is not None:
+            summary["media_type"] = self.media.mime_type
         return summary
 
 
@@ -62,7 +74,7 @@ class DocumentLibrary:
         if not safe_name or suffix not in ALLOWED_SUFFIXES:
             raise DomainError(
                 "DOCUMENT_FORMAT_UNSUPPORTED",
-                "El formato no está permitido. Usa PDF, DOCX, XLSX, PPTX, TXT, Markdown, CSV, JSON o YAML.",
+                "El formato no está permitido. Usa documentos compatibles o imágenes PNG, JPG y WEBP.",
             )
         if not payload or len(payload) > MAX_UPLOAD_BYTES:
             raise DomainError(
@@ -76,7 +88,12 @@ class DocumentLibrary:
                 "DOCUMENT_LIMIT_REACHED",
                 "La sesión alcanzó el límite de 12 documentos; elimina uno antes de continuar.",
             )
-        extracted = _extract_text(suffix, payload)
+        media = _image_media(suffix, payload) if suffix in IMAGE_MIME_TYPES else None
+        extracted = (
+            f"Imagen adjunta: {safe_name}. Gemini puede analizar sus píxeles directamente."
+            if media is not None
+            else _extract_text(suffix, payload)
+        )
         clean = _normalize_text(extracted)
         truncated = len(clean) > MAX_EXTRACTED_CHARACTERS
         clean = clean[:MAX_EXTRACTED_CHARACTERS]
@@ -95,6 +112,7 @@ class DocumentLibrary:
             text=clean,
             truncated=truncated,
             dataset=dataset,
+            media=media,
         )
         (directory / f"{record.id}.json").write_text(
             record.model_dump_json(indent=2), encoding="utf-8"
@@ -117,7 +135,26 @@ class DocumentLibrary:
         }
         if record.dataset is not None:
             payload["dataset"] = record.dataset.model_dump(mode="json")
+        if record.media is not None:
+            payload["media"] = record.media.model_dump(mode="json")
         return payload
+
+    def media(
+        self, owner_session_id: str, document_ids: tuple[str, ...]
+    ) -> tuple[ModelMedia, ...]:
+        result: list[ModelMedia] = []
+        total_bytes = 0
+        for document_id in document_ids:
+            record = self._require(owner_session_id, document_id)
+            if record.media is not None:
+                total_bytes += record.size_bytes
+                if total_bytes > MAX_MULTIMODAL_BYTES:
+                    raise DomainError(
+                        "DOCUMENT_MEDIA_LIMIT_REACHED",
+                        "Las imágenes adjuntas no pueden superar 16 MB en conjunto.",
+                    )
+                result.append(record.media)
+        return tuple(result)
 
     def search(self, owner_session_id: str, document_id: str, query: str) -> dict[str, Any]:
         record = self._require(owner_session_id, document_id)
@@ -180,6 +217,23 @@ def _extract_text(suffix: str, payload: bytes) -> str:
     if suffix == ".pptx":
         return _extract_pptx(payload)
     raise DomainError("DOCUMENT_FORMAT_UNSUPPORTED", "El formato no está permitido.")
+
+
+def _image_media(suffix: str, payload: bytes) -> ModelMedia:
+    mime_type = IMAGE_MIME_TYPES[suffix]
+    valid = (
+        payload.startswith(b"\x89PNG\r\n\x1a\n")
+        if suffix == ".png"
+        else payload.startswith(b"\xff\xd8\xff")
+        if suffix in {".jpg", ".jpeg"}
+        else len(payload) >= 12 and payload[:4] == b"RIFF" and payload[8:12] == b"WEBP"
+    )
+    if not valid:
+        raise DomainError("DOCUMENT_IMAGE_INVALID", "La imagen no coincide con su formato o está dañada.")
+    return ModelMedia(
+        mime_type=mime_type,
+        data_base64=base64.b64encode(payload).decode("ascii"),
+    )
 
 
 def extract_document_text(filename: str, payload: bytes) -> str:

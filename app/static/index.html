@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Descubre oportunidades de proyectos de sistemas con evidencia de GitHub, Google Drive y fuentes web verificadas.">
   <title>Collaborative Taskmaster Studio</title>
-  <link rel="stylesheet" href="/static/styles.css?v=20260829-dataset-charts-v22">
+  <link rel="stylesheet" href="/static/styles.css?v=20260830-sidebar-signin-v26">
 </head>
 <body>
   <a class="skip-link" href="#main-content">Saltar al contenido</a>
@@ -16,7 +16,6 @@
       <span>Collaborative Studio</span>
     </button>
     <div class="header-actions">
-      <button id="identity-action" class="identity-action" type="button" hidden>Iniciar sesión</button>
       <button id="header-new-chat" class="header-new-chat" type="button"><span aria-hidden="true">＋</span> Nuevo chat</button>
       <div class="local-badge" id="runtime-badge"><span></span><strong data-runtime-model>Gemini 3.7 Flash</strong><small data-runtime-provider> · Vertex AI</small></div>
     </div>
@@ -49,12 +48,24 @@
     </section>
     <div class="capability-status">
       <p>CAPACIDADES DEL RADAR</p>
-      <div><span class="status-dot active builder"></span><strong id="identity-label">Comprobando identidad</strong><small id="identity-detail">Aislando espacio personal</small></div>
       <div><span class="status-dot active"></span><strong>Analista de oportunidades</strong><small>GitHub · Drive · tendencias verificadas</small></div>
       <div><span class="status-dot active"></span><strong>Investigación profunda</strong><small>Fuentes visibles · actualidad · contraste</small></div>
       <div><span class="status-dot active builder"></span><strong>Diseño y construcción</strong><small>Framework automático · aprobación humana</small></div>
       <div><span class="status-dot"></span><strong>Efectos externos</strong><small>Bloqueados hasta autorizar cada acción</small></div>
     </div>
+    <section class="sidebar-account" aria-label="Cuenta y configuración">
+      <button id="account-switch" class="account-identity" type="button" aria-label="Cambiar cuenta">
+        <span class="account-avatar"><img id="account-avatar-image" alt="" hidden><b id="account-avatar-fallback" aria-hidden="true">U</b></span>
+        <span class="account-copy"><strong id="account-display-name">Comprobando cuenta</strong><small id="account-email">Espacio personal</small></span>
+      </button>
+      <details id="account-settings" class="account-settings">
+        <summary aria-label="Abrir configuración" title="Configuración">⚙</summary>
+        <div class="account-settings-menu">
+          <button id="manage-session-files" type="button"><span>▤</span><span><b>Gestionar archivos</b><small id="managed-file-count">0 archivos cargados</small></span></button>
+          <button id="logout-action" class="account-logout" type="button"><span>↪</span><span><b>Cerrar sesión</b><small>Salir de esta cuenta</small></span></button>
+        </div>
+      </details>
+    </section>
   </aside>
 
   <main id="main-content" class="shell" tabindex="-1">
@@ -72,8 +83,12 @@
         <div class="composer-footer">
           <span id="char-count">0 / 6000</span>
           <div class="composer-controls">
-            <label class="attach-button" for="welcome-document-input" title="Adjuntar documento">＋<span>Documento</span></label>
-            <input id="welcome-document-input" class="sr-only" type="file" accept=".pdf,.docx,.xlsx,.pptx,.txt,.md,.csv,.json,.yaml,.yml" multiple>
+            <details class="attachment-menu"><summary aria-label="Adjuntar">＋</summary><div class="attachment-menu-options">
+              <label for="welcome-document-input"><span>▤</span><b>Subir archivo</b><small>PDF, Office, texto o datos</small></label>
+              <label for="welcome-image-input"><span>▧</span><b>Subir imagen</b><small>PNG, JPG o WEBP</small></label>
+            </div></details>
+            <input id="welcome-document-input" class="sr-only" type="file" accept=".pdf,.docx,.xlsx,.pptx,.txt,.md,.csv,.json,.yaml,.yml,.xml" multiple>
+            <input id="welcome-image-input" class="sr-only" type="file" accept="image/png,image/jpeg,image/webp" multiple>
             <span class="composer-hint">Enter para enviar · Shift + Enter para nueva línea</span>
             <button class="send-button" type="submit" disabled aria-label="Enviar mensaje"><span aria-hidden="true">↑</span></button>
           </div>
@@ -102,8 +117,12 @@
         <div class="composer-footer">
           <span id="partner-char-count">0 / 6000</span>
           <div class="composer-controls">
-            <label class="attach-button" for="chat-document-input" title="Adjuntar documento">＋<span>Documento</span></label>
-            <input id="chat-document-input" class="sr-only" type="file" accept=".pdf,.docx,.xlsx,.pptx,.txt,.md,.csv,.json,.yaml,.yml" multiple>
+            <details class="attachment-menu"><summary aria-label="Adjuntar">＋</summary><div class="attachment-menu-options">
+              <label for="chat-document-input"><span>▤</span><b>Subir archivo</b><small>PDF, Office, texto o datos</small></label>
+              <label for="chat-image-input"><span>▧</span><b>Subir imagen</b><small>PNG, JPG o WEBP</small></label>
+            </div></details>
+            <input id="chat-document-input" class="sr-only" type="file" accept=".pdf,.docx,.xlsx,.pptx,.txt,.md,.csv,.json,.yaml,.yml,.xml" multiple>
+            <input id="chat-image-input" class="sr-only" type="file" accept="image/png,image/jpeg,image/webp" multiple>
             <span class="composer-hint">Enter para enviar · Shift + Enter para nueva línea</span>
             <button class="send-button" type="submit" disabled aria-label="Enviar a Gemini"><span aria-hidden="true">↑</span></button>
           </div>
@@ -120,11 +139,17 @@
       <button type="button" class="document-inspector-close" aria-label="Cerrar inspección">×</button>
     </header>
     <p id="document-inspector-meta" class="document-inspector-meta"></p>
+    <img id="document-inspector-image" class="document-inspector-image" alt="Vista previa del archivo adjunto" hidden>
     <pre id="document-inspector-content" tabindex="0"></pre>
+  </dialog>
+  <dialog id="file-manager" class="file-manager" aria-labelledby="file-manager-title">
+    <header><div><span>ARCHIVOS DE LA SESIÓN</span><h2 id="file-manager-title">Gestionar archivos</h2></div><button id="file-manager-close" type="button" aria-label="Cerrar gestor de archivos">×</button></header>
+    <p>Consulta, adjunta o elimina los documentos e imágenes disponibles en tu espacio personal.</p>
+    <div id="file-manager-attachments" class="attachment-list file-manager-attachments" aria-live="polite"></div>
   </dialog>
 
   <div id="loading" class="loading" role="status" aria-live="assertive" hidden><span></span><strong>Trabajando…</strong></div>
   <script src="https://www.gstatic.com/charts/loader.js" defer></script>
-  <script src="/static/app.js?v=20260829-dataset-charts-v22" defer></script>
+  <script src="/static/app.js?v=20260830-sidebar-signin-v26" defer></script>
 </body>
 </html>

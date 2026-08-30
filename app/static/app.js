@@ -133,9 +133,8 @@ function renderRuntimeInfo() {
 function chatIsReady() { return state.runtimeLoaded && state.authReady && state.runtime.mode === "gemini" && state.runtime.model_calls_enabled !== false; }
 
 async function initializeIdentity() {
-  const button = $("#identity-action");
-  if (state.identityConfig.mode !== "identity_platform") { state.authReady = true; button.hidden = true; return; }
-  state.authReady = false; button.hidden = false; button.disabled = false; button.textContent = "Iniciar con Google";
+  if (state.identityConfig.mode !== "identity_platform") { state.authReady = true; renderAccountIdentity(); return; }
+  state.authReady = false; renderAccountIdentity();
   let idToken = localStorage.getItem(ID_TOKEN_KEY);
   if (!idToken && await refreshIdentitySession()) idToken = localStorage.getItem(ID_TOKEN_KEY);
   if (!idToken) return;
@@ -147,23 +146,54 @@ async function initializeIdentity() {
     if (!response.ok) throw new Error("identity token rejected");
     const user = await response.json();
     state.authReady = true; state.identity = user;
-    button.textContent = user.email || "Cerrar sesión";
+    renderAccountIdentity();
     state.partnerConversations = readPartnerConversations(user.user_id);
     // Keep the entry screen on startup. Previous chats remain selectable from
     // history, but signing in must not open the most recent one automatically.
     state.activeConversationId = null; state.partnerMessages = []; state.partnerPhase = "discovery"; state.attachedDocumentIds = [];
   } catch (error) {
     console.warn("Stored identity expired.", error);
-    localStorage.removeItem(ID_TOKEN_KEY); state.identity = null;
+    localStorage.removeItem(ID_TOKEN_KEY); state.identity = null; renderAccountIdentity();
   }
 }
 
-async function handleIdentityAction() {
-  if (state.identity?.authenticated) {
-    await fetch("/api/v1/collaborative/auth/logout", { method: "POST", credentials: "same-origin" });
-    localStorage.removeItem(ID_TOKEN_KEY); localStorage.removeItem(REFRESH_TOKEN_KEY); window.location.reload(); return;
+function renderAccountIdentity() {
+  const authenticated = Boolean(state.identity?.authenticated);
+  const displayName = authenticated
+    ? (state.identity.display_name || state.identity.email || "Usuario verificado")
+    : "Iniciar sesión";
+  const email = authenticated ? (state.identity.email || "Cuenta verificada") : "Accede a tu espacio personal";
+  $(".sidebar-account").classList.toggle("is-signed-out", !authenticated);
+  $("#account-display-name").textContent = displayName;
+  $("#account-email").textContent = email;
+  $("#account-switch").setAttribute("aria-label", authenticated ? "Cambiar cuenta de Google" : "Iniciar sesión con Google");
+  const fallback = $("#account-avatar-fallback");
+  fallback.textContent = displayName.trim().charAt(0).toUpperCase() || "U";
+  const image = $("#account-avatar-image");
+  const picture = authenticated ? state.identity.picture_url : "";
+  if (picture) { image.src = picture; image.hidden = false; fallback.hidden = true; }
+  else { image.removeAttribute("src"); image.hidden = true; fallback.hidden = false; }
+  $("#logout-action").hidden = !authenticated;
+}
+
+async function clearBrowserIdentity() {
+  await fetch("/api/v1/collaborative/auth/logout", { method: "POST", credentials: "same-origin" });
+  localStorage.removeItem(ID_TOKEN_KEY); localStorage.removeItem(REFRESH_TOKEN_KEY);
+}
+
+async function switchIdentityAccount() {
+  if (state.identityConfig.mode !== "identity_platform") {
+    notify("El inicio de sesión con Google estará disponible en la aplicación publicada.", "info");
+    return;
   }
+  if (state.identity?.authenticated) await clearBrowserIdentity();
   window.location.assign("/api/v1/collaborative/auth/google/start");
+}
+
+async function logoutIdentity() {
+  if (!state.identity?.authenticated) return;
+  await clearBrowserIdentity();
+  window.location.reload();
 }
 
 async function createProject(event) {
@@ -681,6 +711,7 @@ async function loadIdentity() {
     const label = state.identity.authenticated ? (state.identity.email || "Usuario verificado") : "Sesión local de desarrollo";
     const target = $("#identity-label"); if (target) target.textContent = label;
     const detail = $("#identity-detail"); if (detail) detail.textContent = state.identity.authenticated ? "Datos y conexiones aislados" : "Sin cuentas externas reales";
+    renderAccountIdentity();
   } catch (error) { console.warn("Identity metadata unavailable.", error); }
 }
 
@@ -863,6 +894,8 @@ async function uploadDocuments(files) {
   }
 }
 
+function closeAttachmentMenus() { $$(".attachment-menu[open]").forEach((menu) => menu.removeAttribute("open")); }
+
 function uploadDocumentWithProgress(upload) {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
@@ -918,11 +951,24 @@ function renderAttachments() {
   const uploads = state.documentUploads.map((item) => `<article class="document-card ${escapeHtml(item.status)}"><b aria-hidden="true">▤</b><div class="document-card-copy"><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong><small>${item.status === "failed" ? escapeHtml(item.error) : `Cargando · ${item.progress}%`}</small><span class="document-progress"><i style="width:${item.progress}%"></i></span></div><button type="button" class="document-icon-action danger-action" data-cancel-upload="${escapeHtml(item.id)}" aria-label="${item.status === "failed" ? "Quitar" : "Cancelar carga de"} ${escapeHtml(item.name)}">×</button></article>`).join("");
   const documents = [...state.documents].sort((left, right) => Number(state.attachedDocumentIds.includes(right.id)) - Number(state.attachedDocumentIds.includes(left.id))).map((item) => {
     const attached = state.attachedDocumentIds.includes(item.id);
-    return `<article class="document-card ready${attached ? " attached" : ""}"><b aria-hidden="true">▤</b><button type="button" class="document-card-copy" data-inspect-document="${escapeHtml(item.id)}" aria-label="Inspeccionar ${escapeHtml(item.name)}"><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong><small>${Math.max(1, Math.round(item.size_bytes / 1024))} KB · ${attached ? "Adjunto a este chat" : "Disponible en la sesión"}</small></button><div class="document-card-actions"><button type="button" class="document-icon-action" data-toggle-document="${escapeHtml(item.id)}" aria-label="${attached ? "Quitar del chat" : "Adjuntar al chat"} ${escapeHtml(item.name)}" title="${attached ? "Quitar del chat" : "Adjuntar al chat"}">${attached ? "✓" : "+"}</button><button type="button" class="document-icon-action" data-inspect-document="${escapeHtml(item.id)}" aria-label="Inspeccionar ${escapeHtml(item.name)}" title="Inspeccionar">⌕</button><button type="button" class="document-icon-action danger-action" data-delete-document="${escapeHtml(item.id)}" aria-label="Eliminar ${escapeHtml(item.name)}" title="Eliminar">×</button></div></article>`;
+    const icon = item.media_type ? "▧" : "▤";
+    return `<article class="document-card ready${attached ? " attached" : ""}"><b aria-hidden="true">${icon}</b><button type="button" class="document-card-copy" data-inspect-document="${escapeHtml(item.id)}" aria-label="Inspeccionar ${escapeHtml(item.name)}"><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong><small>${Math.max(1, Math.round(item.size_bytes / 1024))} KB · ${attached ? "Adjunto a este chat" : "Disponible en la sesión"}</small></button><div class="document-card-actions"><button type="button" class="document-icon-action" data-toggle-document="${escapeHtml(item.id)}" aria-label="${attached ? "Quitar del chat" : "Adjuntar al chat"} ${escapeHtml(item.name)}" title="${attached ? "Quitar del chat" : "Adjuntar al chat"}">${attached ? "✓" : "+"}</button><button type="button" class="document-icon-action" data-inspect-document="${escapeHtml(item.id)}" aria-label="Inspeccionar ${escapeHtml(item.name)}" title="Inspeccionar">⌕</button><button type="button" class="document-icon-action danger-action" data-delete-document="${escapeHtml(item.id)}" aria-label="Eliminar ${escapeHtml(item.name)}" title="Eliminar">×</button></div></article>`;
   }).join("");
   const count = state.documents.length;
   const markup = uploads || documents ? `<div class="document-tray-heading"><strong>Archivos de la sesión</strong><small>${count} / 12</small></div><div class="document-cards">${uploads}${documents}</div>` : "";
   ["#welcome-attachments", "#chat-attachments"].forEach((selector) => { const target = $(selector); if (target) target.innerHTML = markup; });
+  const manager = $("#file-manager-attachments");
+  if (manager) manager.innerHTML = markup || '<p class="file-manager-empty">Todavía no hay archivos cargados.</p>';
+  const countLabel = $("#managed-file-count");
+  if (countLabel) countLabel.textContent = `${count} ${count === 1 ? "archivo cargado" : "archivos cargados"}`;
+}
+
+async function openFileManager() {
+  $("#account-settings").removeAttribute("open");
+  await loadDocumentLibrary();
+  renderAttachments();
+  const dialog = $("#file-manager");
+  if (!dialog.open) dialog.showModal();
 }
 
 function handleAttachmentClick(event) {
@@ -950,14 +996,20 @@ async function inspectDocument(documentId) {
   const document = state.documents.find((item) => item.id === documentId);
   if (!document) return;
   const dialog = $("#document-inspector");
+  const image = $("#document-inspector-image");
   $("#document-inspector-title").textContent = document.name;
   $("#document-inspector-meta").textContent = "Preparando vista segura…";
   $("#document-inspector-content").textContent = "Cargando contenido extraído…";
+  image.hidden = true; image.removeAttribute("src");
   if (!dialog.open) dialog.showModal();
   try {
     const payload = await api(`/api/v1/collaborative/documents/${encodeURIComponent(documentId)}`, { background: true });
     $("#document-inspector-meta").textContent = `${Math.max(1, Math.round(payload.size_bytes / 1024))} KB · ${payload.characters.toLocaleString()} caracteres${payload.truncated ? " · vista recortada" : ""}`;
     $("#document-inspector-content").textContent = payload.content || "El documento no contiene texto visible.";
+    if (payload.media?.data_base64 && payload.media?.mime_type) {
+      image.src = `data:${payload.media.mime_type};base64,${payload.media.data_base64}`;
+      image.hidden = false;
+    }
   } catch (error) { dialog.close(); handle(error); }
 }
 function openChatHome() {
@@ -1106,7 +1158,9 @@ function formatChatText(value) {
 $("#project-form").addEventListener("submit", createProject);
 $("#partner-message-form").addEventListener("submit", continuePartnerChat);
 $("#header-new-chat").addEventListener("click", resetPartnerChat);
-$("#identity-action").addEventListener("click", handleIdentityAction);
+$("#account-switch").addEventListener("click", switchIdentityAccount);
+$("#manage-session-files").addEventListener("click", openFileManager);
+$("#logout-action").addEventListener("click", logoutIdentity);
 $("#sidebar-new-chat").addEventListener("click", resetPartnerChat);
 $("#partner-conversation").addEventListener("click", handlePartnerConversationAction);
 $("#conversation-history").addEventListener("click", handleConversationHistory);
@@ -1116,12 +1170,17 @@ $("#connection-catalog").addEventListener("click", handleConnectionCatalog);
 $("#sidebar-toggle").addEventListener("click", () => document.body.classList.add("sidebar-open"));
 $("#sidebar-close").addEventListener("click", () => document.body.classList.remove("sidebar-open"));
 $("#home-button").addEventListener("click", openChatHome);
-$("#welcome-document-input").addEventListener("change", (event) => { uploadDocuments(event.target.files); event.target.value = ""; });
-$("#chat-document-input").addEventListener("change", (event) => { uploadDocuments(event.target.files); event.target.value = ""; });
+$("#welcome-document-input").addEventListener("change", (event) => { closeAttachmentMenus(); uploadDocuments(event.target.files); event.target.value = ""; });
+$("#chat-document-input").addEventListener("change", (event) => { closeAttachmentMenus(); uploadDocuments(event.target.files); event.target.value = ""; });
+$("#welcome-image-input").addEventListener("change", (event) => { closeAttachmentMenus(); uploadDocuments(event.target.files); event.target.value = ""; });
+$("#chat-image-input").addEventListener("change", (event) => { closeAttachmentMenus(); uploadDocuments(event.target.files); event.target.value = ""; });
 $("#welcome-attachments").addEventListener("click", handleAttachmentClick);
 $("#chat-attachments").addEventListener("click", handleAttachmentClick);
+$("#file-manager-attachments").addEventListener("click", handleAttachmentClick);
 $("#document-inspector").addEventListener("click", (event) => { if (event.target === event.currentTarget) event.currentTarget.close(); });
 $(".document-inspector-close").addEventListener("click", () => $("#document-inspector").close());
+$("#file-manager").addEventListener("click", (event) => { if (event.target === event.currentTarget) event.currentTarget.close(); });
+$("#file-manager-close").addEventListener("click", () => $("#file-manager").close());
 const builderCanvas = $("#main-content");
 const builderWelcome = $("#welcome-view");
 let builderPointerFrame = 0;

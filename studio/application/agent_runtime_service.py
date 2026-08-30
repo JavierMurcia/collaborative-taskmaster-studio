@@ -22,7 +22,7 @@ from studio.domain.enums import AuditEventType, ProjectState
 from studio.domain.errors import DomainError
 from studio.domain.models import AuditEvent, TaskmasterSpecification
 from studio.ports.clock import Clock
-from studio.ports.model_gateway import ModelGateway, ModelRequest
+from studio.ports.model_gateway import ModelGateway, ModelMedia, ModelRequest
 from studio.ports.repositories import EventRepository, ProjectRepository
 from studio.security.identity import IdentityContext
 
@@ -79,6 +79,7 @@ class AgentRuntimeService:
         idempotency_key: str,
         identity: IdentityContext | None = None,
         document_evidence: str = "",
+        document_media: tuple[ModelMedia, ...] = (),
     ) -> AgentRuntimeResult:
         snapshot = self._projects.get(project_id, owner_session_id=owner_session_id)
         if snapshot.project.owner_session_id != owner_session_id:
@@ -105,6 +106,7 @@ class AgentRuntimeService:
             idempotency_key=idempotency_key,
             identity=identity,
             document_evidence=document_evidence,
+            document_media=document_media,
         )
         self._record(project_id, owner_session_id, idempotency_key, result)
         return result
@@ -119,6 +121,7 @@ class AgentRuntimeService:
         idempotency_key: str,
         identity: IdentityContext | None = None,
         document_evidence: str = "",
+        document_media: tuple[ModelMedia, ...] = (),
     ) -> AgentRuntimeResult:
         """Run an already-approved specification loaded from a catalog project."""
 
@@ -147,7 +150,7 @@ class AgentRuntimeService:
         decision = route_intent(
             specification,
             normalized,
-            evidence_available=bool(document_evidence or drive_evidence),
+            evidence_available=bool(document_evidence or drive_evidence or document_media),
         )
         return self._run_model(
             specification,
@@ -157,6 +160,7 @@ class AgentRuntimeService:
             decision=decision,
             drive_evidence=drive_evidence,
             document_evidence=document_evidence,
+            document_media=document_media,
         )
 
     def _run_model(
@@ -169,6 +173,7 @@ class AgentRuntimeService:
         decision: IntentDecision,
         drive_evidence: str = "",
         document_evidence: str = "",
+        document_media: tuple[ModelMedia, ...] = (),
     ) -> AgentRuntimeResult:
         if self._model_gateway is None:
             return _fallback_result(
@@ -211,6 +216,7 @@ class AgentRuntimeService:
             response_schema=_response_schema(),
             max_output_tokens=self._max_output_tokens,
             temperature=0.2,
+            media=document_media,
         )
         try:
             generated = self._model_gateway.generate_structured(request)
