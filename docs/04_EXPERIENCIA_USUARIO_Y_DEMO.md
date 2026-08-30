@@ -1,5 +1,11 @@
 # Documento 04 — Experiencia de usuario y guion de demostración
 
+> **Estado histórico:** este documento conserva la propuesta detallada de pantallas que guio el
+> MVP. La interfaz evolucionó a un chat continuo con compositor persistente, cuenta, biblioteca de
+> archivos, dashboards y Taskmasters conversacionales. La experiencia vigente está en
+> [`24_EXPERIENCIA_CHAT_Y_TASKMASTER.md`](24_EXPERIENCIA_CHAT_Y_TASKMASTER.md) y el recorrido actual
+> en [`28_VALIDACION_Y_DEMO_ACTUAL.md`](28_VALIDACION_Y_DEMO_ACTUAL.md).
+
 ## 1. Propósito
 
 Este documento define cómo una persona utilizará Collaborative Taskmaster Studio desde una idea inicial hasta obtener un agente Taskmaster generado y evaluado.

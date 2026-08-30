@@ -1,5 +1,11 @@
 # Pendientes antes de iniciar H9 — Firestore
 
+> **Documento histórico y cerrado.** Las decisiones enumeradas aquí fueron necesarias antes de la
+> activación cloud. Firestore, presupuesto, identidad, Cloud Run y persistencia durable ya cuentan
+> con implementación y evidencia posterior. No utilice esta lista como backlog vigente; consulte
+> [`23_ESTADO_ACTUAL_PRODUCTO.md`](23_ESTADO_ACTUAL_PRODUCTO.md) y
+> [`26_IDENTIDAD_PERSISTENCIA_Y_CICLO_DE_DATOS.md`](26_IDENTIDAD_PERSISTENCIA_Y_CICLO_DE_DATOS.md).
+
 El alcance implementado, las garantías y la evidencia completa de H9 están consolidados en
 [`08_HITO_H9_FIRESTORE.md`](08_HITO_H9_FIRESTORE.md). Este documento conserva únicamente las
 decisiones y acciones cloud todavía pendientes.

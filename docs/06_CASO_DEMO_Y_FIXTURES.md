@@ -40,7 +40,7 @@ Si la implementación necesita cambiar un dato funcional del caso, se debe actua
 | Idioma | `es-CO` |
 | Framework generado | Google ADK |
 | Lenguaje | Python |
-| Modelo | Gemini 3.5 Flash mediante Vertex AI |
+| Modelo | Gemini 3.7 Flash mediante Vertex AI |
 | Tipo de datos | Completamente ficticios |
 | Acciones externas | Ninguna |
 | Revisión aprobada | 2 |

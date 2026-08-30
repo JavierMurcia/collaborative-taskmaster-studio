@@ -1,5 +1,11 @@
 # Documento 05 — Plan de implementación del MVP
 
+> **Estado histórico cerrado:** este archivo conserva el backlog ejecutado H0–H11 y sus entradas
+> cronológicas. Las frases “Siguiente historia” registran el estado de aquel momento, no pendientes
+> actuales. La implementación posterior se resume en
+> [`23_ESTADO_ACTUAL_PRODUCTO.md`](23_ESTADO_ACTUAL_PRODUCTO.md) y se valida con
+> [`28_VALIDACION_Y_DEMO_ACTUAL.md`](28_VALIDACION_Y_DEMO_ACTUAL.md).
+
 ## 1. Propósito
 
 Este documento convierte los cuatro documentos anteriores en un plan de construcción ejecutable para Collaborative Taskmaster Studio.
@@ -1680,4 +1686,12 @@ Siguiente historia: **H11-05 — añadir un botón y una operación de reinicio 
 - el evento administrativo queda fuera de la trayectoria visible restaurada;
 - las pruebas demuestran que ningún otro proyecto resulta afectado.
 
-Siguiente historia: **H11-06 — preparar el guion cronometrado del video de demostración**.
+Registro histórico siguiente en aquel corte: **H11-06 — preparar el guion cronometrado del video de
+demostración**. H11 quedó cerrado posteriormente; no es un pendiente vigente.
+
+## 72. Capacidades posteriores al MVP
+
+Después del cierre de H11 se incorporaron identidad multiusuario, conexiones personales de solo
+lectura, proyectos durables, Cloud Tasks, constructor Antigravity aislado, conversación universal
+de Taskmasters, archivos múltiples y dashboards. Estas capacidades no se agregan retroactivamente
+al backlog histórico; sus contratos están en los documentos `17` a `28`.

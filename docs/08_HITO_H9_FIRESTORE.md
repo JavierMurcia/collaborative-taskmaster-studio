@@ -8,6 +8,12 @@ datos, repositorio, concurrencia, retención, índices y pruebas de contrato.
 
 Este documento registra el resultado consolidado de H9 a fecha **2026-08-14**.
 
+> **Actualización posterior (2026-08-30):** las filas “pendiente” describen el corte de H9 y no el
+> producto actual. La base nombrada se activó, el runtime productivo usa Firestore y las capas
+> posteriores añadieron identidad multiusuario, conversaciones, catálogo y cola de construcción.
+> La situación vigente está consolidada en
+> [`26_IDENTIDAD_PERSISTENCIA_Y_CICLO_DE_DATOS.md`](26_IDENTIDAD_PERSISTENCIA_Y_CICLO_DE_DATOS.md).
+
 ## 2. Estado ejecutivo
 
 | Área | Estado | Evidencia |

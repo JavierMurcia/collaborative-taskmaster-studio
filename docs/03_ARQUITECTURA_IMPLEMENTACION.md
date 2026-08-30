@@ -2,7 +2,10 @@
 
 > **Estado:** este documento conserva el diseño técnico detallado y sus decisiones históricas. La
 > vista consolidada de la implementación realmente desplegada está en
-> [`12_DIAGRAMA_ARQUITECTURA_FINAL.md`](12_DIAGRAMA_ARQUITECTURA_FINAL.md).
+> [`12_DIAGRAMA_ARQUITECTURA_FINAL.md`](12_DIAGRAMA_ARQUITECTURA_FINAL.md). Las capacidades añadidas
+> después del diseño inicial se documentan en [`23_ESTADO_ACTUAL_PRODUCTO.md`](23_ESTADO_ACTUAL_PRODUCTO.md),
+> [`25_ARCHIVOS_DATASETS_Y_VISUALIZACIONES.md`](25_ARCHIVOS_DATASETS_Y_VISUALIZACIONES.md) y
+> [`27_OPERACION_PRODUCCION_Y_DIAGNOSTICO.md`](27_OPERACION_PRODUCCION_Y_DIAGNOSTICO.md).
 
 ## 1. Propósito
 
@@ -14,7 +17,7 @@ Define:
 - agentes Google ADK;
 - servicios de aplicación;
 - persistencia local y Firestore;
-- comunicación con Gemini 3.5 Flash en Vertex AI;
+- comunicación con Gemini 3.7 Flash en Vertex AI;
 - API e interfaz;
 - generación segura de proyectos;
 - sandbox y evaluación;
@@ -56,7 +59,7 @@ flowchart TB
     WEB --> API["API de aplicación"]
     API --> APP["Servicios de casos de uso"]
     APP --> MODEL_GATEWAY["VertexModelGateway"]
-    MODEL_GATEWAY --> GEMINI["Gemini 3.5 Flash\nVertex AI"]
+    MODEL_GATEWAY --> GEMINI["Gemini 3.7 Flash\nVertex AI"]
     APP -. contrato compartido .-> ORCH["Entrada Google ADK independiente"]
     ORCH --> INTERVIEWER["Agente entrevistador"]
     ORCH --> DESIGNER["Agente diseñador"]
@@ -812,18 +815,20 @@ El proceso debe:
 min-instances: 0
 max-instances: 1
 concurrency: 1
-memory: 512Mi
+memory: 2Gi
 cpu: 1
 ```
 
-El límite de concurrencia se revisará después de probar el manejo de sesiones y generación.
+La memoria se elevó desde los 512 MiB del despliegue inicial para permitir la inspección acotada de
+datasets grandes. El límite de concurrencia sigue siendo deliberado mientras las cargas parciales
+usen disco temporal de la instancia.
 
 ## 29. Topología de nube
 
 ```mermaid
 flowchart LR
     BROWSER["Navegador"] --> RUN["Cloud Run\nTaskmaster Studio"]
-    RUN --> VERTEX["Vertex AI\nGemini 3.5 Flash"]
+    RUN --> VERTEX["Vertex AI\nGemini 3.7 Flash"]
     RUN --> FS["Firestore"]
     RUN --> LOGS["Cloud Logging"]
     BUILD["Cloud Build"] --> AR["Artifact Registry"]
@@ -1087,7 +1092,7 @@ La demo debe mostrar:
 - generación de archivos;
 - pruebas en sandbox;
 - Taskmaster exportado;
-- evento que identifica Gemini 3.5 Flash en Vertex AI;
+- evento que identifica Gemini 3.7 Flash en Vertex AI;
 - proyecto persistido en Firestore;
 - servicio ejecutándose en Cloud Run;
 - arquitectura en el repositorio.

@@ -64,7 +64,7 @@ Declarados pero pendientes de conexión:
 
 Cada paquete contiene `plugins.json` y `studio_plugin_gateway.py`. El gateway falla de forma cerrada
 si el plugin no fue declarado, necesita conexión, carece de adaptador o intenta escribir sin
-aprobación humana. Las credenciales nunca se incorporan al ZIP.
+aprobación humana. Las credenciales nunca se incorporan al árbol durable del proyecto.
 
 ## Catálogo de agentes
 
@@ -77,18 +77,17 @@ La barra lateral obtiene las fichas desde `GET /api/v1/collaborative/agents`. El
 abrir la descripción del agente dentro del mismo chat o archivarlo. La ejecución con efectos reales
 continúa bloqueada hasta conectar y aprobar los plugins correspondientes.
 
-## Límites externos pendientes
+## Dependencias externas y estado
 
-La implementación local está completa y verificable. Estas capacidades dependen de estado externo
-y no pueden activarse de manera honesta solo escribiendo código:
+Antigravity está instalado en un entorno aislado y puede ser el constructor efectivo cuando
+`STUDIO_AGENT_BUILDER=antigravity` y el intérprete configurado superan la comprobación de arranque.
+Cloud Tasks e IAM entregan las fases de construcción y prueba. Drive, Gmail y Calendar disponen de
+OAuth de solo lectura por usuario. GitHub y cualquier plataforma de publicación adicional siguen
+marcados como `setup_required` o `connection_required` hasta que exista un adaptador, autorización
+y credencial administrada.
 
-1. instalar y configurar Google Agents CLI en un entorno compatible;
-2. instalar el SDK Antigravity en su entorno aislado y declarar su intérprete absoluto;
-3. completar OAuth para Drive, GitHub, Gmail o Calendar;
-4. otorgar IAM y desplegar en Gemini Enterprise Agent Platform.
-
-Cada una permanece marcada como `setup_required` o `connection_required` hasta que exista la
-autorización y la credencial administrada correspondiente.
+La interfaz siempre publica el estado efectivo. Disponer del código de un adaptador no equivale a
+tener conectada una cuenta ni a contar con permiso para escribir.
 
 La primera integración del SDK trabaja con un solo ingeniero y herramientas confinadas. La
 delegación a subagentes especializados, la ejecución de terminal y la publicación automática no

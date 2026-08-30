@@ -57,4 +57,6 @@ La evidencia estructurada está en
 
 ## Siguiente historia
 
-H11-06 debe preparar y ensayar el guion cronometrado del video de demostración.
+En el corte histórico, H11-06 debía preparar el guion cronometrado del video de demostración. H11
+quedó cerrado posteriormente; el recorrido funcional vigente está en
+[`28_VALIDACION_Y_DEMO_ACTUAL.md`](28_VALIDACION_Y_DEMO_ACTUAL.md).

@@ -6,7 +6,13 @@
 - **Categoría:** Collaborative Partner
 - **Evento:** All Things Agentic Hackathon
 - **Objetivo:** crear un socio colaborativo que entrevista y guía al usuario para transformar una tarea compleja en un agente Taskmaster ejecutable, verificable y controlado.
-- **Estado:** definición inicial
+- **Estado:** visión original implementada y ampliada; consolidación vigente al 2026-08-30
+
+> **Lectura actual:** este plan conserva la intención y las decisiones fundacionales. El estado
+> realmente disponible, incluidas identidad, Cloud Tasks, Antigravity, archivos, datasets y
+> Taskmasters conversacionales, se encuentra en
+> [`23_ESTADO_ACTUAL_PRODUCTO.md`](23_ESTADO_ACTUAL_PRODUCTO.md). Los tiempos futuros de este
+> documento expresan el plan original y no implican que la capacidad continúe pendiente.
 
 ## 2. Visión del producto
 
@@ -34,7 +40,7 @@ El sistema reduce estas dificultades:
 
 El proyecto debe cumplir como mínimo con lo siguiente:
 
-1. Utilizar **Gemini 3.5 Flash o una versión superior** mediante Gemini API o Vertex AI.
+1. Utilizar **Gemini 3.7 Flash** mediante Vertex AI.
 2. Utilizar al menos un framework de agentes de Google.
 3. Utilizar al menos un servicio de infraestructura de Google Cloud.
 4. Operar más allá de un ciclo convencional de chat.
@@ -57,7 +63,7 @@ El MVP se construirá primero con ADK y Gen AI SDK. GenKit y Antigravity se inco
 
 ## 6. Servicios de Google Cloud
 
-- **Vertex AI:** acceso a Gemini 3.5 Flash.
+- **Vertex AI:** acceso a Gemini 3.7 Flash.
 - **Cloud Run:** despliegue del backend y la interfaz.
 - **Firestore:** persistencia de proyectos, entrevistas, feedback y versiones aprobadas.
 
@@ -115,7 +121,7 @@ flowchart LR
     GENERATOR --> SANDBOX["Simulador y pruebas"]
     SANDBOX --> EXPORT["Proyecto exportable"]
     MEMORY --> FIRESTORE["Firestore"]
-    INTERVIEW --> GEMINI["Gemini 3.5 Flash / Vertex AI"]
+    INTERVIEW --> GEMINI["Gemini 3.7 Flash / Vertex AI"]
     DESIGNER --> GEMINI
     GENERATOR --> GEMINI
 ```
@@ -239,7 +245,7 @@ collaborative-taskmaster-studio/
 
 - persistir proyectos y versiones en Firestore;
 - desplegar la aplicación en Cloud Run;
-- activar Gemini 3.5 Flash mediante Vertex AI;
+- activar Gemini 3.7 Flash mediante Vertex AI;
 - comprobar costos, permisos y manejo de errores.
 
 **Resultado:** demostración funcional en Google Cloud.
@@ -320,7 +326,7 @@ El MVP estará listo cuando pueda demostrarse, sin editar manualmente los archiv
 7. las pruebas del Taskmaster generado pasan;
 8. la trayectoria identifica las intervenciones de Gemini y del usuario;
 9. el backend se ejecuta en Cloud Run;
-10. la sesión usa Gemini 3.5 Flash mediante Vertex AI.
+10. la sesión usa Gemini 3.7 Flash mediante Vertex AI.
 
 ## 18. Demostración objetivo
 
@@ -707,7 +713,7 @@ No se registrarán secretos, tokens, contenido sensible completo ni cadenas priv
 
 - Cloud Run con `min-instances=0`;
 - límite bajo de instancias y concurrencia durante la demo;
-- Gemini 3.5 Flash con salidas acotadas;
+- Gemini 3.7 Flash con salidas acotadas;
 - briefing estructurado para reducir contexto repetido;
 - caché de revisiones que no hayan cambiado;
 - Firestore con lecturas enfocadas por proyecto;
@@ -766,7 +772,7 @@ No se comenzará un adaptador adicional hasta completar H5 con pruebas exitosas.
 - **Lenguaje del núcleo:** Python 3.13.
 - **Framework principal:** Google ADK.
 - **Acceso directo al modelo:** Google Gen AI SDK.
-- **Modelo:** Gemini 3.5 Flash mediante Vertex AI.
+- **Modelo:** Gemini 3.7 Flash mediante Vertex AI.
 - **Backend:** API Python preparada para Cloud Run.
 - **Frontend:** interfaz web ligera y responsive.
 - **Persistencia:** repositorio local durante desarrollo y Firestore para la versión final.
@@ -794,7 +800,7 @@ El proyecto completo se considera terminado cuando satisface todos los criterios
 - repositorio del estudio;
 - aplicación web funcional;
 - agente colaborativo basado en ADK;
-- integración Gemini 3.5 Flash en Vertex AI;
+- integración Gemini 3.7 Flash en Vertex AI;
 - persistencia en Firestore;
 - generador de Taskmasters ADK;
 - Taskmaster de ejemplo generado;

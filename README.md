@@ -28,11 +28,15 @@ personales ni información confidencial.
 
 ## Estado
 
-- H0–H10 completados: producto vertical, Gemini, Google ADK, Firestore y Cloud Run.
-- H11 en curso: pulido, reproducibilidad final, accesibilidad, seguridad, video y entrega Devpost.
-- Última revisión validada: `collaborative-taskmaster-studio-00027-9qq`.
-- Recorrido desplegado: 13 pasos HTTP, revisión humana 2, artefacto ADK válido y laboratorio `ready`.
-- Calidad local: suite automatizada completa y análisis estático aprobados.
+- H0–H11 completados: producto vertical, Gemini, Google ADK, Firestore, Cloud Run y entrega
+  reproducible.
+- Capacidades posteriores activas: identidad multiusuario, construcción durable con Cloud Tasks,
+  Antigravity aislado, catálogo conversacional, archivos múltiples y dashboards de datasets.
+- Última revisión funcional registrada: `collaborative-taskmaster-studio-00056-mrx`.
+- Recorrido desplegado: diseño, doble aprobación, construcción durable, laboratorio, catálogo y
+  ejecución conversacional.
+- Calidad local: suite automatizada y análisis estático forman parte de la puerta de publicación.
+- Estado consolidado: [`docs/23_ESTADO_ACTUAL_PRODUCTO.md`](docs/23_ESTADO_ACTUAL_PRODUCTO.md).
 
 ## Qué problema resuelve
 
@@ -201,7 +205,7 @@ son necesarias y el usuario proporciona el contexto correspondiente:
   recientes incluyen la fecha y el año actuales; una respuesta sin fuentes verificables se
   descarta. No inicia sesión, completa formularios ni ejecuta acciones en sitios externos.
 - **Lectura de documentos:** carga explícita de TXT, Markdown, CSV, JSON, YAML, XML, PDF, DOCX,
-  XLSX o PPTX.
+  XLSX, PPTX o imágenes PNG, JPG y WEBP.
   Se extrae únicamente texto y el original nunca se ejecuta. La carga directa admite 25 MiB;
   CSV y XLSX admiten hasta 600 MiB mediante bloques de 8 MiB, se inspeccionan de forma acotada y
   solo quedan disponibles en la sesión que los adjuntó.
@@ -582,7 +586,9 @@ generated/           salida heredada de exportación ignorada por Git
 
 ## Documentación
 
-- [Identidad multiusuario y conexiones externas](docs/18_IDENTIDAD_MULTIUSUARIO_Y_CONEXIONES.md)
+El punto de entrada recomendado es
+[`23_ESTADO_ACTUAL_PRODUCTO.md`](docs/23_ESTADO_ACTUAL_PRODUCTO.md). Los documentos anteriores
+conservan el contrato, las decisiones y la evidencia cronológica del desarrollo.
 
 | Documento | Contenido |
 | --- | --- |
@@ -602,8 +608,17 @@ generated/           salida heredada de exportación ignorada por Git
 | [`15_HITO_H11_REINICIO_SEGURO_DEMO.md`](docs/15_HITO_H11_REINICIO_SEGURO_DEMO.md) | Reinicio aislado, confirmado e idempotente de la demo. |
 | [`16_HITO_H11_CONTENEDOR_AGENTES.md`](docs/16_HITO_H11_CONTENEDOR_AGENTES.md) | Recorrido vertical, biblioteca visual y proyectos ejecutables persistentes. |
 | [`17_ARQUITECTURA_INGENIERO_PLUGINS.md`](docs/17_ARQUITECTURA_INGENIERO_PLUGINS.md) | Relevo Gemini/Ingeniero, selector, plugins, catálogo y límites externos. |
+| [`18_IDENTIDAD_MULTIUSUARIO_Y_CONEXIONES.md`](docs/18_IDENTIDAD_MULTIUSUARIO_Y_CONEXIONES.md) | Identidad verificada, aislamiento y conexiones personales. |
+| [`19_VALIDACION_IDENTITY_PLATFORM_DRIVE.md`](docs/19_VALIDACION_IDENTITY_PLATFORM_DRIVE.md) | Validación de Identity Platform y Drive. |
 | [`20_PERSISTENCIA_DURABLE_PROYECTOS.md`](docs/20_PERSISTENCIA_DURABLE_PROYECTOS.md) | Catálogo Firestore y proyectos durables en Cloud Storage. |
 | [`21_COLA_CONSTRUCCION_AISLADA.md`](docs/21_COLA_CONSTRUCCION_AISLADA.md) | Cola durable, recuperación y trabajador de construcción sin credenciales. |
+| [`22_WORKER_CLOUD_TASKS.md`](docs/22_WORKER_CLOUD_TASKS.md) | Entrega autenticada e idempotente del trabajador. |
+| [`23_ESTADO_ACTUAL_PRODUCTO.md`](docs/23_ESTADO_ACTUAL_PRODUCTO.md) | Estado autoritativo y mapa de la implementación vigente. |
+| [`24_EXPERIENCIA_CHAT_Y_TASKMASTER.md`](docs/24_EXPERIENCIA_CHAT_Y_TASKMASTER.md) | Chat actual, construcción visible y conversación con Taskmasters. |
+| [`25_ARCHIVOS_DATASETS_Y_VISUALIZACIONES.md`](docs/25_ARCHIVOS_DATASETS_Y_VISUALIZACIONES.md) | Cargas, límites, datasets y gráficos renderizados. |
+| [`26_IDENTIDAD_PERSISTENCIA_Y_CICLO_DE_DATOS.md`](docs/26_IDENTIDAD_PERSISTENCIA_Y_CICLO_DE_DATOS.md) | Propiedad, almacenamiento, eliminación y retención. |
+| [`27_OPERACION_PRODUCCION_Y_DIAGNOSTICO.md`](docs/27_OPERACION_PRODUCCION_Y_DIAGNOSTICO.md) | Runbook de producción y resolución de fallos. |
+| [`28_VALIDACION_Y_DEMO_ACTUAL.md`](docs/28_VALIDACION_Y_DEMO_ACTUAL.md) | Recorrido vigente, casos negativos y evidencia. |
 
 ## Licencia
 

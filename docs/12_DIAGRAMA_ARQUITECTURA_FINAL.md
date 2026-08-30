@@ -7,6 +7,38 @@ Taskmaster Studio. Separa las responsabilidades del socio colaborativo, el model
 la generación de código y la verificación. Los diagramas muestran resultados y eventos auditables;
 no representan cadenas privadas de razonamiento.
 
+Actualización consolidada: **2026-08-30**. La evidencia numérica de H10 que aparece más adelante se
+conserva como registro de aquel despliegue; no representa la revisión pública más reciente.
+
+## 0. Vista consolidada vigente
+
+```mermaid
+flowchart LR
+    USER[Usuario] --> UI[Chat y taller web]
+    UI --> API[FastAPI]
+    API --> ID[Identity Platform]
+    API --> CHAT[Conversaciones y memoria]
+    API --> DOCS[Documentos y datasets]
+    DOCS --> CHARTS[Artefactos Google Charts]
+    API --> DESIGN[Diseño y aprobaciones]
+    DESIGN --> VERTEX[Gemini 3.7 Flash · Vertex AI]
+    DESIGN --> QUEUE[Cloud Tasks]
+    QUEUE --> WORKER[Worker OIDC]
+    WORKER --> BUILDER[Antigravity aislado o respaldo controlado]
+    BUILDER --> LAB[Laboratorio sin red ni credenciales]
+    LAB --> PROJECTS[projects/]
+    PROJECTS --> STORAGE[Cloud Storage privado]
+    CHAT --> FIRESTORE[Firestore]
+    DESIGN --> FIRESTORE
+    QUEUE --> FIRESTORE
+    PROJECTS --> CATALOG[Catálogo y Taskmaster Runtime]
+    CATALOG --> CHAT
+```
+
+Los documentos y cargas parciales utilizan almacenamiento acotado por sesión; los proyectos
+terminados sí se replican de forma durable. Los gráficos son contratos de datos producidos por el
+servidor y renderizados por el navegador, no código generado y ejecutado por el modelo.
+
 ## 1. Sistema desplegado
 
 ```mermaid
@@ -39,7 +71,7 @@ flowchart TB
     APP --> AUDIT
     DOMAIN --> AUDIT
 
-    GATEWAY -->|ADC + API v1| GEMINI["Gemini 3.5 Flash<br/>Vertex AI"]
+    GATEWAY -->|ADC + API v1| GEMINI["Gemini 3.7 Flash<br/>Vertex AI"]
     ADK -. entrada ADK independiente .-> GEMINI
     REPO --> FIRESTORE["Firestore<br/>base collaborative-taskmaster<br/>revisiones y eventos"]
     REPO -. modo local .-> LOCAL["Repositorio JSON local"]
@@ -74,7 +106,7 @@ flowchart LR
     L -->|failed_safe| F
     L -->|ready| M["13 · Artefacto + trayectoria auditable"]
 
-    GEMINI["Gemini 3.5 Flash"] -. propone preguntas y estructuras .-> B
+    GEMINI["Gemini 3.7 Flash"] -. propone preguntas y estructuras .-> B
     GEMINI -. propone especificaciones y revisiones .-> E
     POLICY["Esquemas y políticas deterministas"] -. validan .-> C
     POLICY -. validan .-> G
@@ -104,7 +136,7 @@ flowchart TB
     end
 
     INPUT --> NORMALIZE --> PROMPT
-    PROMPT --> MODEL["Gemini 3.5 Flash<br/>Vertex AI"]
+    PROMPT --> MODEL["Gemini 3.7 Flash<br/>Vertex AI"]
     MODEL --> OUTPUT --> SCHEMA --> SEMANTIC
     SEMANTIC --> APPROVAL
     APPROVAL -->|aprobado| TEMPLATE --> SANDBOX --> EVENT
@@ -175,7 +207,7 @@ flowchart LR
 | Evaluación | `sandbox/` | tres escenarios y decisión `ready` o `failed_safe` |
 | Nube | `infrastructure/cloud_run/` | build, digest, IAM, despliegue, rollback y presupuesto |
 
-## 6. Estado verificado de la entrega
+## 6. Evidencia histórica de H10
 
 | Evidencia | Valor |
 | --- | --- |
@@ -187,6 +219,11 @@ flowchart LR
 | Escalado | mínimo 0, máximo 1, concurrencia 1 |
 | Recorrido | 13 pasos HTTP, revisión humana 2, laboratorio `ready` |
 | Trazabilidad | 27 eventos, 3 generaciones Gemini y 5 fallbacks seguros |
+
+El estado funcional posterior utiliza Gemini 3.7 Flash e incorpora Cloud Tasks, Antigravity,
+identidad multiusuario, archivos, datasets y catálogo conversacional. Consulte
+[`23_ESTADO_ACTUAL_PRODUCTO.md`](23_ESTADO_ACTUAL_PRODUCTO.md) para no interpretar esta tabla
+histórica como inventario vigente.
 
 La evidencia detallada se conserva en
 [`09_HITO_H10_CLOUD_RUN.md`](09_HITO_H10_CLOUD_RUN.md) y
