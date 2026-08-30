@@ -608,7 +608,10 @@ function reconcileOrphanBuilds() {
   }
 }
 function renderConversationHistory() {
-  $("#conversation-history").innerHTML = state.partnerConversations.map((item) => `<div class="history-entry ${item.id === state.activeConversationId ? "active" : ""}"><button class="history-select" type="button" data-conversation-id="${escapeHtml(item.id)}" title="${escapeHtml(item.title)}"><span>◌</span><strong>${escapeHtml(item.title)}</strong></button><button class="history-delete" type="button" data-delete-conversation="${escapeHtml(item.id)}" aria-label="Eliminar ${escapeHtml(item.title)}">×</button></div>`).join("");
+  $("#conversation-history").innerHTML = state.partnerConversations.map((item) => {
+    const active = item.id === state.activeConversationId;
+    return `<div class="history-entry ${active ? "active" : ""}"><button class="history-select" type="button" data-conversation-id="${escapeHtml(item.id)}" title="${escapeHtml(item.title)}"><span aria-hidden="true">${active ? "●" : "◌"}</span><strong>${escapeHtml(item.title)}</strong></button><button class="history-delete" type="button" data-delete-conversation="${escapeHtml(item.id)}" aria-label="Eliminar ${escapeHtml(item.title)}">×</button></div>`;
+  }).join("");
   $("#history-empty").hidden = state.partnerConversations.length > 0;
 }
 
