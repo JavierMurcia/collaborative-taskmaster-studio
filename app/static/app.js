@@ -7,6 +7,7 @@ const PARTNER_CONVERSATIONS_KEY = "taskmaster_studio_conversations";
 const ID_TOKEN_KEY = "taskmaster_studio_id_token";
 const REFRESH_TOKEN_KEY = "taskmaster_studio_refresh_token";
 const LANGUAGE_KEY = "taskmaster_studio_language";
+const ORIGINAL_CHAT_LANGUAGE = "es";
 const MAX_SESSION_DOCUMENTS = 12;
 const MAX_DOCUMENT_UPLOAD_BYTES = 25 * 1024 * 1024;
 const MAX_LARGE_DOCUMENT_UPLOAD_BYTES = 600 * 1024 * 1024;
@@ -124,21 +125,21 @@ function localizedArtifact(artifact, sourceLanguage = "es") {
     })),
   };
 }
-function conversationTranslationTargets() {
+function conversationTranslationTargets(targetLanguage) {
   const targets = [];
   state.partnerMessages.forEach((message) => {
     const sourceLanguage = message.sourceLanguage || "es";
-    if (sourceLanguage === state.language) return;
-    if (message.content && !message.translations?.[state.language]) {
+    if (sourceLanguage === targetLanguage) return;
+    if (message.content && !message.translations?.[targetLanguage]) {
       targets.push({
         text: message.content,
-        apply(value) { message.translations = { ...(message.translations || {}), [state.language]: value }; },
+        apply(value) { message.translations = { ...(message.translations || {}), [targetLanguage]: value }; },
       });
     }
     (message.artifacts || []).forEach((artifact) => {
       if (artifact?.type !== "chart") return;
       artifact.translations ||= {};
-      const translated = artifact.translations[state.language] ||= { columns: [], insights: [], metricLabels: [] };
+      const translated = artifact.translations[targetLanguage] ||= { columns: [], insights: [], metricLabels: [] };
       const add = (text, current, apply) => { if (text && !current) targets.push({ text, apply }); };
       add(artifact.title, translated.title, (value) => { translated.title = value; });
       add(artifact.description, translated.description, (value) => { translated.description = value; });
@@ -149,22 +150,38 @@ function conversationTranslationTargets() {
   });
   return targets;
 }
-async function translateCurrentConversation() {
-  const targets = conversationTranslationTargets();
-  if (!targets.length || state.languageTranslating) return;
+let conversationTranslationQueue = Promise.resolve();
+function translateCurrentConversation() {
+  conversationTranslationQueue = conversationTranslationQueue
+    .catch(() => undefined)
+    .then(() => translateCurrentConversationNow());
+  return conversationTranslationQueue;
+}
+async function translateCurrentConversationNow() {
+  const activeMessages = state.partnerMessages;
+  const targetLanguage = state.language;
+  const targets = conversationTranslationTargets(targetLanguage);
+  if (!targets.length) return;
   state.languageTranslating = true; localizeInterface();
   try {
     for (let index = 0; index < targets.length; index += 8) {
       const batch = targets.slice(index, index + 8);
       const payload = await api("/api/v1/collaborative/translations", {
         method: "POST", background: true,
-        body: JSON.stringify({ texts: batch.map((target) => target.text), target_language: state.language }),
+        body: JSON.stringify({ texts: batch.map((target) => target.text), target_language: targetLanguage }),
       });
+      if (state.partnerMessages !== activeMessages) return;
       batch.forEach((target, offset) => target.apply(payload.translations[offset]));
     }
-    persistPartnerHistory(); renderPartnerConversation();
+    if (state.partnerMessages === activeMessages && state.language === targetLanguage) {
+      persistPartnerHistory(); renderPartnerConversation();
+    }
   } catch (error) { handle(error); }
-  finally { state.languageTranslating = false; localizeInterface(); }
+  finally {
+    const conversationChanged = state.partnerMessages !== activeMessages;
+    state.languageTranslating = false; localizeInterface();
+    if (conversationChanged && state.language !== ORIGINAL_CHAT_LANGUAGE) void translateCurrentConversation();
+  }
 }
 async function toggleLanguage() {
   state.language = state.language === "es" ? "en" : "es";
@@ -409,13 +426,16 @@ async function sendPartnerMessage(message) {
     ? `Quiero diseñar y construir un agente Taskmaster en Taskmaster Studio. Mi solicitud es: ${message}`
     : message;
   const history = state.partnerMessages.filter((item) => ["user", "assistant"].includes(item.role)).slice(-16).map(({ role, content, toolActivity }) => ({ role, content, evidence: Array.isArray(toolActivity) ? toolActivity.slice(0, 8).map((entry) => `${entry.capability || "unknown"} | ${entry.status || "unknown"} | ${entry.path || "."} | ${entry.query || ""}`.slice(0, 500)) : [] }));
-  state.partnerMessages.push({ role: "user", content: message, sourceLanguage: state.language });
+  state.partnerMessages.push({ role: "user", content: message, sourceLanguage: ORIGINAL_CHAT_LANGUAGE });
   state.partnerPending = true;
   state.partnerTypingVisible = !firstConversationTurn;
   persistPartnerHistory();
   showPartnerChat();
   if (firstConversationTurn) $("#partner-chat-view").classList.add("first-turn-lifting");
   renderPartnerConversation();
+  const userTranslation = state.language === ORIGINAL_CHAT_LANGUAGE
+    ? Promise.resolve()
+    : translateCurrentConversation();
   if (firstConversationTurn) {
     await transitionDelay(560);
     $("#partner-chat-view").classList.remove("first-turn-lifting");
@@ -426,11 +446,14 @@ async function sendPartnerMessage(message) {
     const payload = await api("/api/v1/collaborative/messages", {
       method: "POST",
       background: true,
-      body: JSON.stringify({ message: requestMessage, history, conversation_id: state.activeConversationId, document_ids: state.attachedDocumentIds, language: state.language }),
+      body: JSON.stringify({ message: requestMessage, history, conversation_id: state.activeConversationId, document_ids: state.attachedDocumentIds, language: ORIGINAL_CHAT_LANGUAGE }),
     });
-    state.partnerMessages.push({ role: "assistant", content: payload.reply, sourceLanguage: state.language, model: payload.model, provider: payload.provider, intent: payload.intent, agentDraft: payload.agent_draft, toolActivity: payload.tool_activity, connectionOffers: payload.connection_offers || [], artifacts: payload.artifacts || [], revealResponse: true });
+    await userTranslation;
+    state.partnerTypingVisible = false;
+    state.partnerMessages.push({ role: "assistant", content: payload.reply, sourceLanguage: ORIGINAL_CHAT_LANGUAGE, model: payload.model, provider: payload.provider, intent: payload.intent, agentDraft: payload.agent_draft, toolActivity: payload.tool_activity, connectionOffers: payload.connection_offers || [], artifacts: payload.artifacts || [], revealResponse: true });
     state.partnerPhase = payload.phase;
     persistPartnerHistory();
+    if (state.language !== ORIGINAL_CHAT_LANGUAGE) await translateCurrentConversation();
   } catch (error) {
     handle(error);
   } finally {
@@ -444,32 +467,38 @@ async function sendPartnerMessage(message) {
 async function sendCatalogAgentMessage(message) {
   if (!message.trim() || state.partnerPending || !state.activeCatalogAgent) return;
   const agent = state.activeCatalogAgent;
-  state.partnerMessages.push({ role: "user", content: message, sourceLanguage: state.language });
+  state.partnerMessages.push({ role: "user", content: message, sourceLanguage: ORIGINAL_CHAT_LANGUAGE });
   state.partnerPending = true;
   state.partnerTypingVisible = true;
   persistPartnerHistory();
   showPartnerChat();
   renderPartnerConversation();
+  const userTranslation = state.language === ORIGINAL_CHAT_LANGUAGE
+    ? Promise.resolve()
+    : translateCurrentConversation();
   try {
     const payload = await api(`/api/v1/collaborative/agents/${encodeURIComponent(agent.id)}/messages`, {
       method: "POST",
       idempotent: "catalog-agent-run",
-      body: JSON.stringify({ message, document_ids: state.attachedDocumentIds, language: state.language }),
+      body: JSON.stringify({ message, document_ids: state.attachedDocumentIds, language: ORIGINAL_CHAT_LANGUAGE }),
     });
     const stepSummary = Array.isArray(payload.steps) && payload.steps.length
-      ? `\n\n**${state.language === "en" ? "Controlled execution" : "Ejecución controlada"}**\n${payload.steps.map((step) => `- ${step.name}: ${step.detail}`).join("\n")}`
+      ? `\n\n**Ejecución controlada**\n${payload.steps.map((step) => `- ${step.name}: ${step.detail}`).join("\n")}`
       : "";
+    await userTranslation;
+    state.partnerTypingVisible = false;
     state.partnerMessages.push({
       role: "assistant",
       sourceLabel: agent.name,
       content: `${payload.reply}${stepSummary}`,
-      sourceLanguage: state.language,
+      sourceLanguage: ORIGINAL_CHAT_LANGUAGE,
       model: payload.model,
       provider: "Taskmaster Runtime",
       artifacts: payload.artifacts || [],
       revealResponse: true,
     });
     persistPartnerHistory();
+    if (state.language !== ORIGINAL_CHAT_LANGUAGE) await translateCurrentConversation();
   } catch (error) {
     handle(error);
   } finally {

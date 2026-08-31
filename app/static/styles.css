@@ -124,6 +124,7 @@ body.chat-active .typing-turn{margin-bottom:12px}
 body.chat-active .partner-composer{position:static;bottom:auto}
 body.chat-active .partner-chat-view>.trust-line{margin:9px 0 0}
 body.chat-active>footer{display:none}
+.legal-footer{display:flex;align-items:center;justify-content:center;gap:18px;flex-wrap:wrap}.legal-footer nav{display:flex;gap:14px}.legal-footer a{color:#8f83ec;text-decoration:none}.legal-footer a:hover{text-decoration:underline}
 @media(max-width:700px){body.chat-active .partner-chat-view:not([hidden]){padding:14px 0 8px}body.chat-active .partner-conversation{padding-bottom:18px}}
 
 /* Historial LLM y desplazamiento principal en el extremo derecho. */

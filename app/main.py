@@ -805,6 +805,20 @@ def create_app(
             headers={"Cache-Control": "no-cache, must-revalidate"},
         )
 
+    @app.get("/privacy", include_in_schema=False)
+    async def privacy_policy() -> FileResponse:
+        return FileResponse(
+            STATIC / "privacy.html",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+
+    @app.get("/terms", include_in_schema=False)
+    async def terms_of_service() -> FileResponse:
+        return FileResponse(
+            STATIC / "terms.html",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
+
     return app
 
 

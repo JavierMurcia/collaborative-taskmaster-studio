@@ -35,8 +35,8 @@ def test_home_serves_the_chat_only_experience() -> None:
     assert "Ejecutar 3 escenarios" not in response.text
     assert 'id="taskmaster-studio-access"' in response.text
     assert "Taskmaster Studio" in response.text
-    assert "/static/styles.css?v=20260830-bilingual-release-v31" in response.text
-    assert "/static/app.js?v=20260830-bilingual-release-v31" in response.text
+    assert "/static/styles.css?v=20260830-translation-queue-v33" in response.text
+    assert "/static/app.js?v=20260830-translation-queue-v33" in response.text
     assert "body.chat-active:not(.taskmaster-studio-mode) #main-content" in styles_response.text
     assert "https://www.gstatic.com/charts/loader.js" in response.text
     assert 'id="document-inspector"' in response.text
@@ -54,6 +54,22 @@ def test_home_serves_the_chat_only_experience() -> None:
     assert 'class="builder-grid-preview"' not in response.text
     assert 'id="builder-live-board"' not in response.text
     assert response.headers["cache-control"] == "no-cache, must-revalidate"
+
+
+def test_public_oauth_legal_pages_are_available_and_linked_from_home() -> None:
+    home = client.get("/")
+    privacy = client.get("/privacy")
+    terms = client.get("/terms")
+
+    assert home.status_code == 200
+    assert 'href="/privacy"' in home.text
+    assert 'href="/terms"' in home.text
+    assert privacy.status_code == 200
+    assert "Política de privacidad" in privacy.text
+    assert "API de Google" in privacy.text
+    assert terms.status_code == 200
+    assert "Condiciones del servicio" in terms.text
+    assert "acciones con efectos externos" in terms.text
 
 
 def test_identity_uses_same_origin_server_oauth_instead_of_firebase_iframe() -> None:
@@ -75,7 +91,7 @@ def test_document_tray_reports_progress_and_supports_inspection_and_deletion() -
     assert 'data-inspect-document="${escapeHtml(item.id)}"' in script
     assert 'data-delete-document="${escapeHtml(item.id)}"' in script
     assert "/api/v1/collaborative/documents/${encodeURIComponent(documentId)}" in script
-    assert "JSON.stringify({ message, document_ids: state.attachedDocumentIds, language: state.language })" in script
+    assert "JSON.stringify({ message, document_ids: state.attachedDocumentIds, language: ORIGINAL_CHAT_LANGUAGE })" in script
     assert "agent_id: conversation.agentId || null" in script
 
 
@@ -123,13 +139,20 @@ def test_account_language_switch_translates_interface_and_conversation_content()
 
     assert "Translate page and conversations" in html
     assert 'const LANGUAGE_KEY = "taskmaster_studio_language"' in script
+    assert 'const ORIGINAL_CHAT_LANGUAGE = "es"' in script
     assert "function toggleLanguage()" in script
     assert "function localizeInterface" in script
     assert "function localizedMessageContent" in script
     assert "function localizedArtifact" in script
     assert 'api("/api/v1/collaborative/translations"' in script
-    assert "language: state.language" in script
+    assert "language: ORIGINAL_CHAT_LANGUAGE" in script
     assert '"sourceLanguage", "translations"' in script
+    assert 'sourceLanguage: ORIGINAL_CHAT_LANGUAGE' in script
+    assert "if (state.partnerMessages !== activeMessages) return" in script
+    assert "if (conversationChanged && state.language !== ORIGINAL_CHAT_LANGUAGE)" in script
+    assert "let conversationTranslationQueue = Promise.resolve()" in script
+    assert ".then(() => translateCurrentConversationNow())" in script
+    assert "conversationTranslationTargets(targetLanguage)" in script
 
 
 def test_taskmaster_results_render_markdown_sections_and_comparison_tables() -> None:

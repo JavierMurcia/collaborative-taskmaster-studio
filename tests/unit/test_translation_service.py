@@ -37,6 +37,8 @@ def test_translation_preserves_order_and_uses_a_non_executing_prompt() -> None:
     assert gateway.request.purpose == "conversation_translation"
     assert "Do not answer" in gateway.request.system_instruction
     assert "Return exactly one translation" in gateway.request.system_instruction
+    assert "Translate short greetings" in gateway.request.system_instruction
+    assert "Never leave ordinary source-language prose untranslated" in gateway.request.system_instruction
     assert gateway.request.response_schema["properties"]["translations"]["minItems"] == 2
 
 
