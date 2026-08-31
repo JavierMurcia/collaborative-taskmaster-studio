@@ -159,43 +159,79 @@ connected until OAuth and the required adapter are actually available.
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    PERSON["User"] --> WEB["Chat-first web UI"]
+### System architecture
 
-    subgraph RUN["Cloud Run · FastAPI"]
-        API["Versioned API"]
-        CHAT["Collaborative chat service"]
-        DESIGN["Design and approval services"]
-        FILES["Document and dataset inspection"]
-        CHARTS["Deterministic chart artifacts"]
-        MEMORY["Conversation memory"]
-        CATALOG["Agent catalog and runtime"]
-    end
+![Collaborative Taskmaster Studio system architecture](assets/architecture/system-architecture.png)
 
-    WEB --> API
-    API --> CHAT
-    API --> DESIGN
-    API --> FILES
-    FILES --> CHARTS --> WEB
-    CHAT --> VERTEX["Gemini 3.7 Flash · Vertex AI"]
-    CHAT --> MEMORY
-    DESIGN --> FIRESTORE["Firestore"]
-    MEMORY --> FIRESTORE
-    CATALOG --> FIRESTORE
+The system is organized into four visible layers plus a least-privilege integration boundary:
 
-    DESIGN --> TASKS["Cloud Tasks"]
-    TASKS --> WORKER["OIDC-authenticated worker"]
-    WORKER --> BUILDER["Antigravity or controlled builder"]
-    BUILDER --> LAB["Isolated laboratory"]
-    LAB --> PROJECTS["projects/ tree"]
-    PROJECTS --> STORAGE["Private Cloud Storage"]
-    PROJECTS --> CATALOG
+- **Frontend / user:** a chat-first interface for discovery, file inspection, agent design,
+  approvals, build tracking, and specialized Taskmaster conversations.
+- **Application layer:** a versioned FastAPI surface on Cloud Run coordinates chat, design,
+  document analysis, deterministic charts, conversation memory, and the agent catalog.
+- **AI and orchestration:** Gemini 3.7 Flash performs conversation and structured synthesis through
+  Vertex AI. Cloud Tasks dispatches long-running work to an OIDC-authenticated worker; the builder
+  and isolated laboratory never run inside the user's web request.
+- **Data and storage:** Firestore persists owner-scoped state and immutable revisions. Completed
+  project trees are stored file by file in private Cloud Storage rather than distributed as
+  archives.
+- **External context:** Identity Platform establishes the verified owner. Drive, Gmail, Calendar,
+  GitHub, and public-web adapters provide bounded read-only context through encrypted,
+  account-scoped grants.
 
-    ID["Identity Platform"] -. verified owner .-> API
-    OAUTH["Encrypted read-only grants"] -. scoped context .-> CHAT
-    HUMAN["Human approval gates"] -. contract and test approval .-> DESIGN
-```
+The key separation is intentional: Gemini can propose and synthesize, but it cannot approve a
+contract, dispatch itself, write outside the project boundary, inherit production credentials, or
+publish a failed build. Human approval gates connect the design and test decisions to durable audit
+records.
+
+### End-to-end workflow
+
+![Collaborative Taskmaster Studio end-to-end workflow](assets/architecture/end-to-end-workflow.png)
+
+The lifecycle moves through twelve explicit stages:
+
+1. The user provides an incomplete or ambiguous request.
+2. The Studio asks adaptive questions about mission, users, inputs, outputs, constraints, tools,
+   approvals, and failure policy.
+3. Each answer updates a visible structured design with missing decisions and a framework
+   recommendation.
+4. The person reviews and approves the design contract.
+5. The Studio selects the smallest suitable framework and capability set.
+6. Cloud Tasks durably dispatches the build to an authenticated worker.
+7. Antigravity—or the controlled deterministic builder—creates the project and manifest under
+   `projects/<agent-name>/`.
+8. A second human gate authorizes isolated testing after the artifacts are visible.
+9. The laboratory evaluates expected, incomplete, and adversarial scenarios without network or
+   inherited credentials.
+10. Only successful builds reach `ready`; failures return to revision instead of being published.
+11. The result becomes a reusable catalog entry with a conversational layer and controlled tools.
+12. Future requests are classified as conversation, clarification, execution, or approval.
+
+Across the entire path, revisions are immutable, approved contracts receive SHA-256 digests,
+optional integrations have deterministic fallbacks, and every external action remains scoped by
+roles, tools, and guardrails.
+
+### Repository components
+
+![Collaborative Taskmaster Studio repository components](assets/architecture/repository-components.png)
+
+The repository mirrors the runtime boundaries:
+
+| Area | Responsibility |
+| --- | --- |
+| `app/` | FastAPI composition, versioned routes, middleware, and the chat-first web client |
+| `studio/` | Application services, domain contracts, capabilities, security, framework selection, and agent runtime behavior |
+| `adapters/` | Antigravity, Google ADK, framework generators, controlled construction, and external implementations behind ports |
+| `infrastructure/` | Cloud Run, Cloud Tasks, Firestore, Cloud Storage, Vertex AI, build, IAM, and deployment configuration |
+| `agents/` | Versioned generated-agent specifications, manifests, checksums, and validation evidence |
+| `projects/` | Durable, navigable Taskmaster project trees produced by approved builds |
+| `generated/` | Reproducible intermediate artifacts and build outputs |
+| `examples/` | Demonstration workflows, fixtures, and sample agents |
+
+For presentation clarity, the diagram groups user-facing application behavior around `app/`. In
+the implementation, the HTTP composition remains in `app/`, while the core application and domain
+logic is deliberately isolated in `studio/`. This keeps cloud and provider dependencies behind
+ports and adapters and makes local deterministic fallbacks testable.
 
 ### Architectural boundaries
 
